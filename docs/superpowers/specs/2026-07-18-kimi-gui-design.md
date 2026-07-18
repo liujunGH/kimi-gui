@@ -37,6 +37,8 @@
 | 10 | 分工:用户定需求与验收,ZCode 改代码 | 用户前端不熟(Vue/React 都不熟) |
 | 11 | 退路:Vue 不够丝滑再考虑 React(不并行) | 用户策略 |
 | 12 | **新增高优痛点:运行中的引导(steer)和任务排队**,官方有功能但体验差(详见 6.6) | 用户反馈,代码实证确认 |
+| 13 | **对标对象明确为 Codex 桌面 App**(Electron,2026-02 发布,后并入 ChatGPT 桌面),不是 CLI/IDE 扩展 | 用户澄清,第 2 轮调研确认 |
+| 14 | **per-hunk stage/revert 砍掉**(事后 git 操作也砍)—— 用户姿势是"整体重做",不需要逐块保留/撤销 | 用户确认(基于桌面 App Review pane 调研) |
 
 ### 排除的方案及原因
 
@@ -314,142 +316,159 @@ kimi-gui/                          项目根
    - agent 运行时,输入框默认动作从"发送"变为明确的"排队"或"引导"(可切换)
    - 不再让用户在不知情情况下"发送"变"入队"
 
-### 6.7 Codex 完整交互清单 → Kimi 可实现性对照(基于 4 轮调研汇总)
+### 6.7 Codex 桌面端完整交互清单 → Kimi 可实现性对照(第 2 轮,基于桌面 App)
 
-> 来源:4 个子 agent 调研(审批/diff、思考展示、输入/对话流、子代理/系统集成)+ 主进程补查思考展示。
-> 方法论:按用户要求"先梳理 Codex 完整交互 → 对照 Kimi 能不能实现 → 排优先级清单"。
-> 三道筛子:① Kimi daemon 协议是否支持 ② Tauri 壳层是否能实现 ③ 优先级(频率 × 严重度)。
+> **重要修正**:第 1 版(基于 CLI 调研)已废弃。本版基于**第 2 轮调研,专注 Codex 桌面 App**(2026-02-02 macOS 发布,后并入 ChatGPT 桌面应用的 Codex/Work 模式,**技术栈是 Electron**)。
+> **方法论**:按用户要求"先梳理 Codex 完整交互 → 对照 Kimi 能不能实现 → 排优先级清单"。
+> **三道筛子**:① Kimi daemon 协议是否支持 ② Tauri 壳层是否能实现 ③ 优先级(频率 × 严重度)。
+> **来源**:3 个子 agent 桌面 App 专研(思考+对话流 / 多 agent+系统 / 输入+审批+diff),官方文档 + Macaron 博客 + GitHub Issues + 社区评测。
 
-#### 6.7.1 已确认的 Codex 设计点(46 项,分 7 类)
+#### 6.7.0 关键背景(影响所有判断)
+
+- **对标对象是 Codex 桌面 App**(Electron),不是 CLI(终端 TUI)、不是 IDE 扩展(VS Code 插件)
+- **桌面 App 的核心定位**:"command center for agents",多 agent 并行 + 长任务是灵魂
+- **桌面 App 在思考展示上其实很弱**(默认折叠、不实时流式、无全局开关、社区广泛批评)—— Kimi 有机会做得比它好
+- **桌面 App 用 Electron**(为跨平台);Kimi 用 **Tauri** 在内存/启动上可反超
+
+#### 6.7.1 Codex 桌面 App 设计点 × Kimi 可实现性(48 项,7 类)
 
 **图例**:
-- 协议/Tauri:🟢 现成支持 | 🟡 部分支持需补 | 🔴 不支持需造轮子 | ➖ 不依赖(N/A)
-- 优先级:**P0** 高频核心 | **P1** 体验提升 | **P2** 锦上添花 | **⭐ 超越 Codex 的点**
-- 工作量:**S** 小(<1天) | **M** 中(1-3天) | **L** 大(>3天)
+- Kimi 协议:🟢 现成支持 | 🟡 部分支持需补 | 🔴 不支持需造轮子 | ➖ 不依赖
+- Tauri:✅ 原生/插件 | ⚠️ 需 Rust 侧开发
+- 优先级:**P0** 高频核心 | **P1** 体验提升 | **P2** 锦上添花
+- 超越点:⭐ 表示 Kimi 可做得比 Codex 桌面 App 更好
+- 工作量:**S** 小 | **M** 中 | **L** 大
 
 ##### A. 思考链路展示(你的核心需求,看 AI 推理对不对)
 
-| # | Codex 设计点 | Kimi daemon | Tauri | 优先级 | 量 | 备注 |
-|---|------------|------------|-------|-------|---|------|
-| A1 | **思考可见性两档**(完全静默 none / 显示 experimental) | 🟢 `thinking.delta` 事件现成 | ➖ | P0 | M | Kimi 现在只有显示/折叠,补"完全隐藏"档 |
-| A2 | **思考详细程度四档**(auto/concise/detailed/none) | 🟡 daemon 是否支持客户端指定待验证 | ➖ | P0 | M | 这是 Codex 的 verbosity 维度,Kimi 缺 |
-| A3 | **"Steps Only"中间档**(只显示步骤标题不显示长文,#5476 社区诉求) | 🟡 基于 `turn.step.*` 事件 + 隐藏 thinking 长文 | ➖ | P0 | M | Codex 自己还没做,Kimi 抢先做即 ⭐ 超越 |
-| A4 | 思考绑定 turn 活动流(灰色显示,不渲染 markdown) | 🟢 `thinking` 事件 + ThinkingBlock 现有 | ➖ | P1 | S | 官方已做,微调即可 |
-| A5 | 按 turn 分组折叠 | 🟢 现有 | ➖ | P1 | S | 官方已做 |
-| A6 | ⭐ **思考流式稳定性优于 Codex CLI** | 🟢 `thinking.delta` 协议干净 | ➖ | P0 | M | Codex CLI 有多个未修 bug(#5339/#16801/#31216),Kimi 协议层更干净 |
+> **Codex 桌面 App 在思考展示上其实很弱**:默认折叠成单行摘要、不实时流式、无全局展开开关、无长思考导航(社区广泛批评 #10472/#10723/#16415/#22334)。Kimi 的 `thinking.delta` 协议天生支持流式,**有机会做得比 Codex 桌面 App 好**。
+
+| # | Codex 桌面 App 设计点 | Kimi 协议 | Tauri | 优先级 | 量 | 备注 |
+|---|---------------------|---------|-------|-------|---|------|
+| A1 | 思考块**内联在对话流**,收拢在"Working"区段内,与正文/命令/工具调用按时间线混排 | 🟢 `thinking`/`turn.*` 事件 | ➖ | P0 | M | 抄骨架 |
+| A2 | 思考**默认折叠成单行摘要**(类似 "Thought for Ns"),点击 disclosure 展开 | 🟢 `thinking.close` 后 UI 折叠 | ➖ | P0 | S | 抄交互 |
+| A3 | ⭐ **思考实时流式**(thinking.delta) | 🟢 协议现成 | ➖ | P0 | M | **桌面 App 没有,只有 CLI 有 Ctrl-T**;Kimi 抢先做即超越 |
+| A4 | ⭐ **"是否显示思考"全局开关**(展开全部 / 隐藏全部) | 🟢 纯 UI | ➖ | P0 | S | 桌面 App 社区在求(#10472),没做;Kimi 补上即超越 |
+| A5 | ⭐ **长思考导航**(搜索/大纲/虚拟滚动) | 🟢 纯 UI | ➖ | P1 | M | 桌面 App 没有;Kimi 可做 |
+| A6 | **reasoning effort 档位**(composer 下方下拉,Light/Medium/...,底层 none/minimal/low/medium/high/xhigh) | 🟡 daemon 是否支持 effort 参数待验证 | ➖ | P1 | M | UI 位置直接抄 |
+| A7 | Esc 中断当前 turn,中断后思考块按已结束折叠 | 🟢 `turn.cancel` | ➖ | P0 | S | 注意规避 CJK 输入法误触 Esc(#20767) |
+| A8 | 多段思考按 Turn 内时间线内联(无全局时间线/Tab) | 🟢 `turn.*` 天然分轮 | ➖ | P1 | S | 抄 |
 
 ##### B. Steer + 任务队列(你的核心需求,运行中插话/排队)
 
-| # | Codex 设计点 | Kimi daemon | Tauri | 优先级 | 量 | 备注 |
-|---|------------|------------|-------|-------|---|------|
-| B1 | ⭐ **steer 显式化**(Codex 没有 steer 概念,Kimi 有 `/prompts:steer` 专属端点) | 🟢 现成 | ➖ | P0 | M | Kimi 协议层独有优势,见 6.6 |
-| B2 | 任务队列可见化(数量/顺序/内容)+ 重排 | 🟢 `QueuedPromptView` 现成 + 客户端补重排 | ➖ | P0 | M | 见 6.6 |
-| B3 | steer vs queue 模式 UI 区分 | 🟢 协议支持两个动作 | ➖ | P0 | S | 见 6.6 |
-| B4 | ⭐ **steer 后清晰反馈**(Codex 没有 steer,无对标) | 🟢 协议可加状态反馈 | ➖ | P0 | S | 超越点 |
+> **桌面 App 确认有 steer/queue 双模**(Tab 排队下一轮 / Enter 注入当前轮 steer),Settings 可切默认。Kimi 有 `/prompts:steer` 独有端点,协议层天然支持。
 
-##### C. 输入框与对话流
+| # | Codex 桌面 App 设计点 | Kimi 协议 | Tauri | 优先级 | 量 | 备注 |
+|---|---------------------|---------|-------|-------|---|------|
+| B1 | **运行态 steer/queue 双模**(Tab 排队 / Enter steer,Settings 切默认) | 🟢 `prompts:steer` + `prompts` | ➖ | P0 | M | 协议天生支持,见 6.6 |
+| B2 | 任务队列可见化(数量/顺序/内容)+ 重排 | 🟢 `QueuedPromptView` + 客户端补重排 | ➖ | P0 | M | 见 6.6 |
+| B3 | steer vs queue 模式 UI 区分 | 🟢 协议支持两动作 | ➖ | P0 | S | 见 6.6 |
+| B4 | ⭐ **steer 后清晰反馈** | 🟢 协议可加状态反馈 | ➖ | P0 | S | 超越点 |
 
-| # | Codex 设计点 | Kimi daemon | Tauri | 优先级 | 量 | 备注 |
-|---|------------|------------|-------|-------|---|------|
-| C1 | Ctrl+J 换行 + Enter 发送 | ➖ 纯 UI | ➖ | P1 | S | Composer 已有 |
-| C2 | ⭐ **Shift+Enter 换行可靠**(Codex CLI 终端不可靠) | ➖ 纯 UI | ➖ | P1 | S | Kimi 桌面 WebView 天然优势 |
-| C3 | `/` 斜杠命令面板(fuzzy 过滤) | 🟡 部分命令有协议对应 | ➖ | P1 | M | SlashMenu 已有,补命令清单 |
-| C4 | `@` 文件提及(fuzzy 搜索) | 🟢 `workspaces` 拿文件树 | ➖ | P1 | S | MentionMenu 已有 |
-| C5 | ⭐ **@符号级提及**(Codex 只到文件级) | 🔴 需 LSP 集成 | ➖ | P2 | L | 超越点,但工作量大,二期 |
-| C6 | ↑↓ 历史 + Ctrl+R 反向搜索 | ➖ 客户端 localStorage | ➖ | P1 | S | ↑↓ 已有,补 Ctrl+R |
-| C7 | Esc 中断流式 | 🟢 `/prompts/{pid}:abort` | ➖ | P1 | S | 协议现成 |
-| C8 | ⭐ **编辑历史 + fork**(Codex IDE 扩展不支持,#2948/#7414) | 🔴 fork 端点待验证 | ➖ | P2 | L | 超越点,但需解决工具副作用重放难题 |
-| C9 | `?` 快捷键帮助面板 | ➖ 纯 UI | ➖ | P1 | S | Codex CLI 有,Kimi 官方无 |
-| C10 | `!` shell 透传(输出喂回模型) | 🔴 无直接支持,有争议 | ➖ | P3 | M | Codex 社区也批评(#24811),谨慎做 |
+##### C. 多 Agent 并行(桌面 App 灵魂,比 CLI 重要得多)
 
-##### D. 审批流
+> **桌面 App 核心 = 多 Thread + Git Worktree 隔离 + Pets 状态指示器 + 父子 Subagent**。这是第 1 轮我没当重点的,实际是桌面 App 最大卖点。
 
-| # | Codex 设计点 | Kimi daemon | Tauri | 优先级 | 量 | 备注 |
-|---|------------|------------|-------|-------|---|------|
-| D1 | **单键快捷审批 y/n/p/a**(瞬时,无需回车,#11762) | 🟢 `permission.approval.*` 事件 | ➖ | P0 | S | UI 层绑定,高价值 |
-| D2 | **`acceptForSession` 会话级白名单**(不做永久) | 🟢 approval response 加 scope 字段 | ➖ | P0 | S | 比 always allow 安全,照搬 |
-| D3 | **Sandbox 和 Approval 解耦**(两个独立维度) | 🟡 协议是否分两参数待验证 | ➖ | P1 | M | 照搬,别混成一个 mode |
-| D4 | 审批卡内联显示 diff/命令 | 🟢 `fs:diff` + approval payload | ➖ | P1 | S | ApprovalCard 已有,增强 |
-| D5 | 三档权限模式(Auto/Read-only/YOLO) | 🟡 是否有 `permission.set_mode` 待验证 | ➖ | P1 | M | |
-| D6 | `/approvals` 模式切换 | 同 D5 | ➖ | P1 | S | |
-| D7 | 网络审批按目的地合并(同 host 合一个) | 🟡 daemon 端去重 | ➖ | P2 | M | 照搬 |
+| # | Codex 桌面 App 设计点 | Kimi 协议 | Tauri | 优先级 | 量 | 备注 |
+|---|---------------------|---------|-------|-------|---|------|
+| C1 | **多 Thread 并行 + 卡片化侧边栏**(每 agent 一张卡,显示标题/状态/所属 project) | 🟢 `subagent.spawned/started/completed/failed/suspended` + `task.*` | ✅ | P0 | L | 协议零改动可直接落地 |
+| C2 | **Project 作为顶层分组**(thread 归属 project,共享文件/instructions) | 🟢 `/workspaces` 对应 project | ✅ 侧边栏树 | P0 | M | 复用 workspaces |
+| C3 | **侧边栏 Pinned + 状态过滤 + 搜索** | 🟢 `/sessions` + 状态过滤 | ✅ | P1 | M | 易实现 |
+| C4 | **线程自动标题生成** | 🟡 `task.created` 时触发 LLM 生成 | ✅ | P1 | S | 低成本高体验 |
+| C5 | **⭐ Pets 像素宠物状态指示器**(5 态:Running/Needs input/Ready/Blocked/Docked) | 🟢 状态由 `subagent.*`+`task.*` 推导 | ⚠️ 需透明置顶窗口 | P1 | L | **最有辨识度的差异化卖点**,协议天生支撑 |
+| C6 | **父子 Subagent 可视化**(父 spawn 子,子用父工具,结果汇总) | 🟢 `subagent.spawned` 由父触发 | ✅ UI 父子树 | P0 | M | Kimi 协议比 Codex 更原生 |
+| C7 | **macOS 系统通知**(Needs input / Ready 触发) | 🟢 `subagent.suspended`/`completed` 映射 | ✅ `tauri-plugin-notification` | P0 | S | 低成本必做 |
+| C8 | **Git Worktree 隔离并行 agent**(防多 agent 互改代码) | 🟡 需 Kimi 在 session 加 worktree 语义 | ✅ Rust 调 `git worktree` | P1 | L | 多 agent 必备 |
+| C9 | **失败 agent 置顶/红色高亮** | 🟢 `subagent.failed` 事件 | ✅ | P1 | S | |
+| C10 | **Auto-reviewer 自动评审**(独立 reviewer agent,99% 自动批准) | 🟡 需扩展 review 状态机 | ✅ | P2 | L | 工程复杂,二期 |
 
-##### E. Diff 展示
+##### D. 输入框(Composer)
 
-| # | Codex 设计点 | Kimi daemon | Tauri | 优先级 | 量 | 备注 |
-|---|------------|------------|-------|-------|---|------|
-| E1 | Unified diff + 语法高亮(syntect) | 🟢 `fs:diff` 拿文本 + Shiki 渲染 | ➖ | P0 | M | DiffLines 现纯文本,接 Shiki |
-| E2 | 文件树聚合(点文件名展开/折叠) | 🟢 `fs:git_status` + DiffView 已有 | ➖ | P1 | S | 官方已做 |
-| E3 | `/diff` 主动查看 + `/review` 独立 turn | 🟢 协议支持 | ➖ | P1 | M | 补 slash 命令 |
-| E4 | per-hunk stage/revert(事后 git 操作,非审批时) | 🟡 是否有 `git.apply_patch` 待验证 | ➖ | P2 | M | 用户已说不需要 per-hunk,低优 |
-| E5 | Codex 也没有词级 diff(确认无) | — | — | P3 | M | 不是差距,不做 |
+| # | Codex 桌面 App 设计点 | Kimi 协议 | Tauri | 优先级 | 量 | 备注 |
+|---|---------------------|---------|-------|-------|---|------|
+| D1 | Cmd+Enter 发送 + Shift+Enter 换行 | ➖ 纯 UI | ➖ | P0 | S | 桌面 App 原生支持(非超越点,纠正第 1 版错误) |
+| D2 | **斜杠命令菜单**(`/feedback /goal /init /mcp /plan /review /status` + 自定义 .md) | 🟡 客户端实现 | ➖ | P1 | M | SlashMenu 已有,补命令 |
+| D3 | **`@` 模糊文件搜索 attach** + `/auto-context` 自动喂最近文件 | 🟢 `/workspaces` 拿文件树 | ➖ | P1 | S | MentionMenu 已有 |
+| D4 | **附件上传**(图片客户端压缩 + 文件) | 🟡 `/files` 端点 | ✅ | P1 | S | |
+| D5 | **Appshots**(双 Cmd 截当前 App 窗口发 agent) | ➖ | ✅ OS 截屏 | P2 | M | 桌面 App 特色,选抄 |
+| D6 | **Context Window 指示条**(70%/90% 变色) | 🟡 需 daemon token 用量 | ➖ | P1 | S | 配合 `/compact` |
+| D7 | **运行态输入框自适应**(steer/queue 模式切换提示) | 🟢 同 B1 | ➖ | P0 | S | 见 6.6 |
 
-##### F. 子代理 / 任务管理
+##### E. 审批流
 
-| # | Codex 设计点 | Kimi daemon | Tauri | 优先级 | 量 | 备注 |
-|---|------------|------------|-------|-------|---|------|
-| F1 | **并行子代理**(spawn_agent + max_threads 默认 6 + agents/*.toml) | 🟢 `subagent.*` 事件现成 | ➖ | P0 | M | 对标 Codex 子代理体系 |
-| F2 | Cloud Tasks 云端异步执行 + IDE 内流式进度 + 就地 review | 🟢 `task.*` + `background.task.*` 事件 | ➖ | P1 | L | 天然适配,工作量大 |
-| F3 | 多并行会话(parallel-by-default,侧边列表) | 🟢 协议支持多 task id | ✅ Tauri 多 webview | P1 | M | |
-| F4 | Ctrl+C 软中断 + 双击退出 | 🟡 需 `task.cancel/interrupt` 事件(待补) | ✅ | P1 | M | |
-| F5 | 转写历史(JSONL)+ resume + 翻 turn | 🟢 `task.*` 历史持久化 | ➖ | P1 | M | |
-| F6 | notify shell 回调(turn 完成发系统通知) | 🟡 `background.task.*` 桥接 shell | ✅ Tauri 原生通知 | P1 | S | |
-| F7 | Codex 也没有:ETA、进度百分比、retry 按钮 | — | — | — | — | 不是差距 |
+| # | Codex 桌面 App 设计点 | Kimi 协议 | Tauri | 优先级 | 量 | 备注 |
+|---|---------------------|---------|-------|-------|---|------|
+| E1 | **对话流内联审批卡**(显示命令/patch mini diff) | 🟢 `permission.approval.*` + `fs:diff` | ➖ | P0 | S | ApprovalCard 已有,增强 |
+| E2 | **单键快捷审批 y/n/p/a**(无需回车,#11762) | 🟢 事件直接映射 | ➖ | P0 | S | 注意防误触 |
+| E3 | **三档权限**(read-only / ask 默认 / full-auto YOLO)+ `/permissions` 切换 | 🟡 是否有 set_mode 待验证 | ➖ | P1 | M | |
+| E4 | **审批卡 mini diff 预览** | 🟢 `fs:diff` | ➖ | P1 | S | |
+| E5 | Windows toast 通知带 Approve 按钮 | ➖ | ✅ | P2 | S | Mac 无原生,选抄 |
+
+##### F. Diff 展示(注意:per-hunk 已被用户砍掉)
+
+| # | Codex 桌面 App 设计点 | Kimi 协议 | Tauri | 优先级 | 量 | 备注 |
+|---|---------------------|---------|-------|-------|---|------|
+| F1 | **右侧 Review pane**(Cmd+Option+B 打开,持久 git-integrated 工作区) | 🟢 `fs:diff` + `fs:git_status` | ✅ | P1 | L | 桌面 App 杀手锏 |
+| F2 | Unified diff + 语法高亮 | 🟢 Shiki 渲染 | ➖ | P0 | M | DiffLines 接 Shiki |
+| F3 | 文件列表聚合(点文件名展开/折叠) | 🟢 `fs:git_status` | ➖ | P1 | S | DiffView 已有 |
+| F4 | 大 diff 折叠("Large diff — one file at a time") | ➖ 纯 UI | ➖ | P1 | S | 性能必需 |
+| F5 | ~~per-hunk stage/revert~~ | — | — | **不做** | — | **用户已确认砍掉**(整体重做姿势) |
+| F6 | ⭐ **split 视图**(左右并排) | 🟢 纯 UI | ➖ | P2 | M | 桌面 App 没有(社区在求),Kimi 可反超 |
+| F7 | ⭐ **词级 diff** | 🟢 纯 UI | ➖ | P2 | M | 桌面 App 没有,Kimi 可反超 |
+| F8 | `/review` 独立 turn | 🟢 协议支持 | ➖ | P1 | M | 补 slash 命令 |
 
 ##### G. 系统集成与快捷键
 
-| # | Codex 设计点 | Kimi daemon | Tauri | 优先级 | 量 | 备注 |
-|---|------------|------------|-------|-------|---|------|
-| G1 | **全局快捷键 Quick chat**(Cmd+Opt+N) | ➖ 纯客户端 | ✅ `global-shortcut` 插件 | P0 | M | 高价值 |
-| G2 | **Command Palette**(Cmd+Shift+P,注意不是 Cmd+K) | ➖ 纯客户端 | ➖ | P1 | M | |
-| G3 | **`codex://` URL scheme 深链** | ➖ | ✅ `deep-link` 插件 | P1 | S | |
-| G4 | 菜单栏/menubar 入口 | ➖ | ✅ | P1 | S | |
-| G5 | 系统通知(完成时)+ 点击跳转 | 🟡 完成事件桥接 | ✅ 原生通知 | P1 | S | Codex CLI 自己也没有(#4998) |
-| G6 | 图片拖放/粘贴作为上下文 | 🟡 协议需支持 image 输入 | ✅ webview 原生 | P1 | S | |
-| G7 | CLI `/ide` 命令注入 IDE 上下文 | 🔴 需新增输入源 | ➖ | P3 | L | Kimi 是独立 app,无宿主 IDE |
+| # | Codex 桌面 App 设计点 | Kimi 协议 | Tauri | 优先级 | 量 | 备注 |
+|---|---------------------|---------|-------|-------|---|------|
+| G1 | **全局快捷键 Cmd+Option+N Quick chat 唤起** | ➖ | ✅ `global-shortcut` | P0 | M | 高频入口 |
+| G2 | **Cmd+K Command Palette**(不是 Cmd+Shift+P!纠正第 1 版错误) | ➖ 纯 UI | ➖ | P1 | M | |
+| G3 | **Dock 集成**(Pet Docked 态 / 未读提示) | 🟢 事件驱动 | ✅ Dock badge | P1 | S | |
+| G4 | **/side 临时分支会话**(从当前 thread fork,transcript 分离) | 🔴 需 session fork | ✅ | P2 | L | 桌面 App 特色 |
+| G5 | **Background tasks / Automations** | 🟢 `background.task.*` | ✅ Rust 定时器 | P1 | M | ⭐ Kimi 可超越:daemon 常驻,Codex 必须开 App |
+| G6 | **⭐ Electron → Tauri 反超**(更轻量、启动快、Rust 原生 git 集成) | — | ✅ | — | — | 架构层面优势 |
 
-#### 6.7.2 ⭐ Kimi 可超越 Codex 的点(项目差异化亮点)
-
-汇总调研中发现的"Kimi 不仅追平,还能超过 Codex"的点:
+#### 6.7.2 ⭐ Kimi 可超越 Codex 桌面 App 的点(项目差异化亮点)
 
 | 超越点 | 依据 | 优先级 |
 |--------|------|-------|
-| **steer 显式化** | Codex 根本没有 steer 概念(靠排队 + Esc),Kimi 有 `/prompts:steer` 独有端点 | P0 |
-| **思考流式稳定性** | Codex CLI 有多个未修 bug(#5339/#16801/#31216),Kimi `thinking.delta` 协议更干净 | P0 |
-| **"Steps Only" 思考档** | Codex 社区在求(#5476),还没做,Kimi 抢先做 | P0 |
-| **编辑历史 + fork** | Codex IDE 扩展明确不支持(#2948/#7414 活跃请求) | P2(协议复杂) |
-| **@符号级提及** | Codex 只到文件级 | P2(LSP 成本高) |
-| **Shift+Enter 换行** | Codex CLI 终端不可靠,Kimi 桌面天然可靠 | P1(几乎免费) |
+| **思考实时流式** | 桌面 App 没有(只有 CLI 有 Ctrl-T),社区在求;Kimi `thinking.delta` 天生支持 | P0 |
+| **"是否显示思考"全局开关** | 桌面 App 没有(#10472/#10723 活跃请求);Kimi 纯 UI 即可 | P0 |
+| **steer 显式化 + 反馈** | Codex 用 Tab/Enter 隐式,Kimi 有 `/prompts:steer` 独有端点 | P0 |
+| **长思考导航**(搜索/大纲/虚拟滚动) | 桌面 App 没有,Kimi 纯 UI 可做 | P1 |
+| **Tauri 比 Electron 更轻** | 桌面 App 用 Electron(重);Kimi 用 Tauri(内存/启动/原生 git) | 架构优势 |
+| **Background task 不依赖 App 开着** | Codex 本地 automations 必须 App 开着;Kimi daemon 常驻天然解决 | P1 |
+| **多线程原生 + 协议开放** | Codex 是闭源一体化;Kimi 协议开放,subagent.* 事件天生支撑 | P0 |
+| **split diff / 词级 diff** | 桌面 App 没有(社区在求),Kimi 可做 | P2 |
+| **线程时间分组/置顶/搜索** | 桌面 App 只有 project 分组,社区在求更多组织方式 | P1 |
 
-#### 6.7.3 待验证的 Kimi 协议盲点(实施前必须实测)
-
-以下 5 个协议问题决定多个设计点能否落地,M0 阶段优先验证:
+#### 6.7.3 待验证的 Kimi 协议盲点(M0 阶段优先验证)
 
 | 盲点 | 影响的设计点 | 验证方式 |
 |------|------------|---------|
-| `permission.set_mode` 端点是否存在 | D5/D6 三档权限切换 | 抓 daemon 路由 |
-| `thread.rollback` / `git.apply_patch` | E4 per-hunk 回滚、C8 fork | 抓 daemon 路由 |
-| `permission.approval.*` 是请求-响应还是单向 | D1 单键审批回传 | 读 wire.ts |
-| client 能否主动触发 `context.spliced`(compact) | `/compact` 主动压缩 | 读 client.ts |
-| `turn.completed` 的 usage 字段完整性 | token 用量显示 | 抓事件 payload |
+| daemon 是否支持 reasoning `effort` 参数 | A6 effort 档位 | 读 client.ts + 抓 turn payload |
+| `permission.set_mode` 端点是否存在 | E3 三档权限切换 | 抓 daemon 路由 |
+| client 能否主动触发 `context.spliced`(compact) | D6 Context 指示 + `/compact` | 读 client.ts |
+| `turn.completed` 的 usage 字段完整性 | D6 token 用量 | 抓事件 payload |
+| session fork 端点是否存在 | G4 /side 临时分支 | 抓 daemon 路由 |
+| Git Worktree 操作端点 | C8 多 agent 隔离 | 抓 daemon 路由 |
 
-#### 6.7.4 按优先级排序的实施清单(P0 共 13 项)
+#### 6.7.4 按优先级排序的实施清单(P0 共 19 项)
 
-这是 writing-plans 阶段的直接输入。P0 全部完成后即达成"像 Codex"+"超越 Codex"的 MVP。
+**P0(19 项,MVP 必做,完成后即达成"像 Codex 桌面 App + 超越点")**:
+- **A1+A2+A3+A4+A7**:思考内联/折叠摘要/实时流式/全局开关/Esc 中断
+- **B1+B2+B3+B4**:steer 显式化/队列可见/模式区分/反馈
+- **C1+C2+C6+C7**:多 Thread 卡片/Project 分组/父子 Subagent/系统通知
+- **D1+D7**:Cmd+Enter 发送/运行态输入框自适应
+- **E1+E2**:审批卡内联/单键 y/n/p/a
+- **F2**:diff 语法高亮
+- **G1**:全局快捷键唤起
 
-**P0(13 项,MVP 必做)**:
-- A1 思考可见性两档 + A2 详细程度四档 + A3 Steps Only 中间档 + A6 流式稳定性
-- B1 steer 显式化 + B2 队列可见化 + B3 steer/queue 区分 + B4 steer 反馈
-- D1 单键审批 + D2 会话级白名单
-- E1 diff 语法高亮
-- F1 并行子代理展示
-- G1 全局快捷键
+**P1(20 项,体验提升)**:见上表标 P1 的项(含 A5/A6/A8、C3/C4/C5/C8/C9、D2-D6、E3/E4、F1/F3/F4/F8、G2/G3/G5 等)
 
-**P1(15 项,体验提升)**:见上表 C/D/E/F/G 各类标 P1 的项
+**P2(6 项,锦上添花)**:C10 Auto-review、D5 Appshots、E5 Windows toast、F6 split、F7 词级、G4 /side
 
-**P2(4 项,锦上添花)**:C5 @符号、C8 fork、D7 网络审批合并、E4 per-hunk
-
-**P3(2 项,暂不做)**:C10 !shell、G7 /ide 注入
+**已排除(用户决策)**:F5 per-hunk stage/revert —— 用户姿势是"整体重做",不需要逐块保留/撤销
 
 ---
 
@@ -503,12 +522,14 @@ web/src/lib/diffEnhancements.ts              ← 新增,词级 diff/语法高亮
 
 ## 9. 里程碑(粗略,实施计划阶段细化;共 6 个 M0–M5)
 
-1. **M0 项目骨架 + 实物反馈**:`kimi-gui` 初始化,Tauri 壳搭起来,vendor `apps/kimi-web`,跑通"启动 → 连 daemon → 看到官方 UI";**用户实际跑 agent 任务,验证 steer/queue/diff/子代理的现状痛点,反馈具体期望**,作为后续打磨依据
-2. **M1 基础丝滑**:Tauri 系统集成(快捷键/托盘/通知),滚动爬屏修复,丢弃 MutationObserver
-3. **M2 steer 与队列改造**(高频痛点优先):steer 显式化 + 队列可见化与管理(详见 6.6)
-4. **M3 展示打磨**:基于 M0 反馈,做 diff 展示 + 子代理展示的丝滑打磨(具体点见 6.3/6.4)
-5. **M4 输入与命令体系**:快捷键、命令面板
-6. **M5 视觉打磨 + P2**:向 Codex 视觉克制靠拢,状态/主题
+> 基于第 2 轮调研(对标 Codex 桌面 App),里程碑重新排序:思考展示/steer/多 agent 是桌面 App 的三大灵魂,优先做。
+
+1. **M0 项目骨架 + 协议验证 + 实物反馈**:`kimi-gui` 初始化,Tauri 壳搭起来,vendor `apps/kimi-web`,跑通"启动 → 连 daemon → 看到官方 UI";**验证 6.7.3 的 6 个协议盲点**(effort/set_mode/compact/usage/fork/worktree);用户实际跑 agent 任务反馈痛点
+2. **M1 基础丝滑 + 系统集成**:全局快捷键唤起(G1)、系统通知(C7)、Dock 集成(G3)、滚动爬屏修复、丢弃 MutationObserver
+3. **M2 思考 + steer 改造**(桌面 App 弱项,Kimi 超越点):思考实时流式 + 全局开关(A3/A4)、steer 显式化 + 队列可见(B1-B4,见 6.6)
+4. **M3 多 agent 并行**(桌面 App 灵魂):多 Thread 卡片 + Project 分组 + 父子 Subagent 可视化(C1/C2/C6)、Pets 状态指示器(C5,差异化卖点)
+5. **M4 审批 + diff + 输入**:单键审批(E1/E2)、diff 语法高亮(F2)、Cmd+K 命令面板(G2)、斜杠命令(D2)、@提及增强(D3)
+6. **M5 视觉打磨 + P2**:向 Codex 视觉克制靠拢、split/词级 diff(F6/F7)、Auto-review(C10)、Appshots(D5)
 
 ---
 
