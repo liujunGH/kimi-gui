@@ -36,6 +36,7 @@
 | 9 | **方案:fork 官方 `apps/kimi-web`(Vue 3)+ Tauri 壳** | 基于源码调研 + 痛点拆解 |
 | 10 | 分工:用户定需求与验收,ZCode 改代码 | 用户前端不熟(Vue/React 都不熟) |
 | 11 | 退路:Vue 不够丝滑再考虑 React(不并行) | 用户策略 |
+| 12 | **新增高优痛点:运行中的引导(steer)和任务排队**,官方有功能但体验差(详见 6.6) | 用户反馈,代码实证确认 |
 
 ### 排除的方案及原因
 
@@ -212,12 +213,16 @@ kimi-gui/                          项目根
 
 | # | 改造点 | 涉及文件 | 工作量 |
 |---|--------|---------|-------|
-| 1 | **diff 展示打磨**(高亮/词级/折叠/跳转) | `DiffLines.vue` + 可能新增 `useDiffEnhancements.ts` | 中 |
-| 2 | **子代理展示打磨** | `SwarmTool.vue`/`AgentDetailPanel.vue`/`TasksPane.vue` | 中(待 M0 后细化) |
-| 3 | Tauri 系统集成(全局快捷键/托盘/多窗口) | `src-tauri/src/main.rs` + Vue 调 Tauri API | 大 |
-| 4 | 滚动爬屏修复 | `ConversationPane.vue`(1864 行,定位爬屏逻辑) | 中 |
+| 1 | **steer(中途引导)改造**:加显式按钮 + 换掉反人类的 Ctrl+S + steer 后清晰反馈 + 运行时输入框明确提示"插话/排队" | `Composer.vue` + 可能新增 `useSteerFeedback.ts` | 中 |
+| 2 | **任务队列改造**:队列可见化(数量/顺序/内容)、加重排、steer vs queue 模式区分清楚 | `ConversationPane.vue`(队列渲染处)+ 可能新增 `QueuePanel.vue` | 中 |
+| 3 | **diff 展示打磨**(高亮/词级/折叠/跳转) | `DiffLines.vue` + 可能新增 `useDiffEnhancements.ts` | 中 |
+| 4 | **子代理展示打磨** | `SwarmTool.vue`/`AgentDetailPanel.vue`/`TasksPane.vue` | 中(待 M0 后细化) |
+| 5 | Tauri 系统集成(全局快捷键/托盘/多窗口) | `src-tauri/src/main.rs` + Vue 调 Tauri API | 大 |
+| 6 | 滚动爬屏修复 | `ConversationPane.vue`(1864 行,定位爬屏逻辑) | 中 |
 
-**重要**:P0-1 和 P0-2 的**具体打磨点待 M0 跑起来后用户看实物反馈**。前期不预设,避免再次误判(如 per-hunk 教训)。
+**重要**:P0-1/P0-2(steer/queue)基于代码实证已确认痛点(见 6.6);P0-3/P0-4(diff/子代理)的具体打磨点待 M0 跑起来后用户看实物反馈,前期不预设,避免再次误判(如 per-hunk 教训)。
+
+**P0 排序理由**:steer/queue 是**每次用 agent 都遇到**的高频痛点(运行中插话/追加),diff/子代理是特定场景痛点,系统集成/爬屏是基础体验。按"痛点频率 × 严重度"排。
 
 **🟡 P1(决定"丝不丝滑")**
 
@@ -263,12 +268,50 @@ kimi-gui/                          项目根
 
 | 改造点 | 验收行为 |
 |--------|---------|
+| steer 改造 | 运行时输入框有明显"插话"按钮;steer 后有可见反馈(如临时气泡"已引导");不再依赖 Ctrl+S |
+| 任务队列改造 | 队列条数/内容/顺序随时可见;能重排;能区分"立即引导"vs"排队下轮" |
 | diff 展示打磨 | M0 后用户从候选点中挑出的真痛点被解决 |
 | 子代理展示打磨 | 同上 |
 | 系统集成 | Cmd+Shift+K 全局唤起;关窗后台;托盘图标 |
 | 滚动爬屏 | 思考流输出时主对话视口不上下跳动 |
 | 输入快捷键 | Cmd+Enter 发送、↑↓ 历史、Esc 清空、Cmd+K 命令面板 |
 | 视觉克制 | 截图和 Codex 并排,信息密度/留白接近 |
+
+### 6.6 steer 与任务队列(基于代码实证,已确认痛点)
+
+**用户反馈**:运行过程中的引导(steer)和排队很重要,官方不好用。这是**每次用 agent 都遇到**的高频痛点,优先级高于 diff/子代理。
+
+**官方现状(代码实证)**:
+- steer 功能存在:`Composer.vue:494` 的 Ctrl+S/Cmd+S 快捷键;`handleSteer()`(370-397 行)发 `steer` 事件
+- queue 功能存在:`QueuedPromptView` 类型(`types.ts:333`);运行时发送自动入队(`Composer.vue:550` 注释:"Send is always send — while running it enqueues")
+- queue 管理有限:`ConversationPane.vue` 只有 `unqueue`(取消)和 `editQueued`(编辑),**无重排**
+
+**实证的"不好用"根因**:
+
+| 痛点 | 代码证据 | 影响 |
+|------|---------|------|
+| steer 唯一入口是 Ctrl+S,无按钮 | `Composer.vue:494` 只有快捷键 | 用户不知道有这功能;Ctrl+S 与浏览器保存冲突,易误触 |
+| steer 后反馈不清晰 | `handleSteer()` 只 emit + 清空输入 | 不知道"插话进没进""agent 收到没" |
+| 运行时输入框没区分提示 | 注释"Send is always send — while running it enqueues" | 用户以为发送会引导,结果默默入队,无提示 |
+| 队列可见性差 | `queued` props 在 ConversationPane 某处渲染 | 不知道"排了几条""下一条是什么" |
+| 队列不能重排 | 只有 unqueue/editQueued | 想插队/改优先级做不到 |
+| steer 与 queue 混淆 | steer 会"合并队列"一起塞 | 分不清"立即引导"vs"排队下轮" |
+
+**改造方向**(具体设计待实施计划阶段):
+
+1. **steer 显式化**:
+   - 运行时输入框旁加显式"插话/引导"按钮(不依赖快捷键)
+   - 换掉 Ctrl+S(改成不冲突的键,如 Cmd+J 或 Cmd+Enter 在运行态变 steer)
+   - steer 成功后有可见反馈(临时气泡/输入框高亮/agent 状态指示"已收到引导")
+
+2. **队列可见化与管理**:
+   - 输入框附近常驻队列指示器(如"3 条排队中",点击展开)
+   - 队列面板显示每条内容 + 顺序,支持拖拽重排
+   - 明确区分两个动作:**"立即引导当前轮"(steer)** vs **"排队等下轮"(queue)**,UI 上颜色/图标/位置区分
+
+3. **运行态输入框自适应**:
+   - agent 运行时,输入框默认动作从"发送"变为明确的"排队"或"引导"(可切换)
+   - 不再让用户在不知情情况下"发送"变"入队"
 
 ---
 
@@ -322,12 +365,12 @@ web/src/lib/diffEnhancements.ts              ← 新增,词级 diff/语法高亮
 
 ## 9. 里程碑(粗略,实施计划阶段细化;共 6 个 M0–M5)
 
-1. **M0 项目骨架 + 实物反馈**:`kimi-gui` 初始化,Tauri 壳搭起来,vendor `apps/kimi-web`,跑通"启动 → 连 daemon → 看到官方 UI";**用户实际跑 agent 任务,看 diff 和子代理,反馈具体痛点**,作为 P0-1/P0-2 细化依据
+1. **M0 项目骨架 + 实物反馈**:`kimi-gui` 初始化,Tauri 壳搭起来,vendor `apps/kimi-web`,跑通"启动 → 连 daemon → 看到官方 UI";**用户实际跑 agent 任务,验证 steer/queue/diff/子代理的现状痛点,反馈具体期望**,作为后续打磨依据
 2. **M1 基础丝滑**:Tauri 系统集成(快捷键/托盘/通知),滚动爬屏修复,丢弃 MutationObserver
-3. **M2 展示打磨**:基于 M0 反馈,做 diff 展示 + 子代理展示的丝滑打磨(具体点见 6.3/6.4)
-4. **M3 输入与命令体系**:快捷键、命令面板
-5. **M4 视觉打磨**:向 Codex 视觉克制靠拢
-6. **M5 P2 项**:状态/主题
+3. **M2 steer 与队列改造**(高频痛点优先):steer 显式化 + 队列可见化与管理(详见 6.6)
+4. **M3 展示打磨**:基于 M0 反馈,做 diff 展示 + 子代理展示的丝滑打磨(具体点见 6.3/6.4)
+5. **M4 输入与命令体系**:快捷键、命令面板
+6. **M5 视觉打磨 + P2**:向 Codex 视觉克制靠拢,状态/主题
 
 ---
 
