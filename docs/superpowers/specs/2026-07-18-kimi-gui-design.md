@@ -213,16 +213,17 @@ kimi-gui/                          项目根
 
 | # | 改造点 | 涉及文件 | 工作量 |
 |---|--------|---------|-------|
-| 1 | **steer(中途引导)改造**:加显式按钮 + 换掉反人类的 Ctrl+S + steer 后清晰反馈 + 运行时输入框明确提示"插话/排队" | `Composer.vue` + 可能新增 `useSteerFeedback.ts` | 中 |
-| 2 | **任务队列改造**:队列可见化(数量/顺序/内容)、加重排、steer vs queue 模式区分清楚 | `ConversationPane.vue`(队列渲染处)+ 可能新增 `QueuePanel.vue` | 中 |
-| 3 | **diff 展示打磨**(高亮/词级/折叠/跳转) | `DiffLines.vue` + 可能新增 `useDiffEnhancements.ts` | 中 |
-| 4 | **子代理展示打磨** | `SwarmTool.vue`/`AgentDetailPanel.vue`/`TasksPane.vue` | 中(待 M0 后细化) |
-| 5 | Tauri 系统集成(全局快捷键/托盘/多窗口) | `src-tauri/src/main.rs` + Vue 调 Tauri API | 大 |
-| 6 | 滚动爬屏修复 | `ConversationPane.vue`(1864 行,定位爬屏逻辑) | 中 |
+| 1 | **思考链路展示改造**(看 AI 思考对不对,与 steer 联动) | `ThinkingBlock.vue`/`ThinkingPanel.vue` + 可能新增组件 | 中(待 Codex 对照回填) |
+| 2 | **steer(中途引导)改造**:加显式按钮 + 换掉反人类的 Ctrl+S + steer 后清晰反馈 + 运行时输入框明确提示"插话/排队" | `Composer.vue` + 可能新增 `useSteerFeedback.ts` | 中 |
+| 3 | **任务队列改造**:队列可见化(数量/顺序/内容)、加重排、steer vs queue 模式区分清楚 | `ConversationPane.vue`(队列渲染处)+ 可能新增 `QueuePanel.vue` | 中 |
+| 4 | **diff 展示打磨**(高亮/词级/折叠/跳转) | `DiffLines.vue` + 可能新增 `useDiffEnhancements.ts` | 中 |
+| 5 | **子代理展示打磨** | `SwarmTool.vue`/`AgentDetailPanel.vue`/`TasksPane.vue` | 中(待 M0 后细化) |
+| 6 | Tauri 系统集成(全局快捷键/托盘/多窗口) | `src-tauri/src/main.rs` + Vue 调 Tauri API | 大 |
+| 7 | 滚动爬屏修复 | `ConversationPane.vue`(1864 行,定位爬屏逻辑) | 中 |
 
-**重要**:P0-1/P0-2(steer/queue)基于代码实证已确认痛点(见 6.6);P0-3/P0-4(diff/子代理)的具体打磨点待 M0 跑起来后用户看实物反馈,前期不预设,避免再次误判(如 per-hunk 教训)。
+**P0 排序理由**:思考展示/steer/queue 是"看着 agent 做"姿势的核心链路 —— **看思考(过程)→ 发现问题 → steer 纠正 → 看输出 → 看对比(结果)**。这条链路的体验必须一起打磨,不能割裂。diff/子代理是特定场景痛点,系统集成/爬屏是基础体验。
 
-**P0 排序理由**:steer/queue 是**每次用 agent 都遇到**的高频痛点(运行中插话/追加),diff/子代理是特定场景痛点,系统集成/爬屏是基础体验。按"痛点频率 × 严重度"排。
+**核心链路说明(用户反馈澄清)**:用户"看 AI 输出"不只是看 diff(结果),更是看**思考链路(过程)**,验证 AI 推理对不对。结果错了要重做,过程错了要立即 steer 纠正。所以思考展示(P0-1)与 steer(P0-2)是紧耦合的,必须联动设计。
 
 **🟡 P1(决定"丝不丝滑")**
 
