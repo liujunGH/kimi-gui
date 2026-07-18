@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+target/
+src-tauri/target/
+
+# Tauri
+src-tauri/gen/
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+
+# Env
+.env
+.env.local
+
+# Upstream sync temp
+.upstream/tmp/
