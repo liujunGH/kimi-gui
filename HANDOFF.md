@@ -734,6 +734,34 @@ permission: 'manual' | 'auto' | 'yolo';
 
 **另注**:ZCode 的 `7ff12aa fix(thinking)` 动了 kimi3 的思考组件,本轮未复核,建议双方互查一次。
 
+### 轮次 4d · ConversationPane 窗口化渲染(修 GLM 提的虚拟滚动)· 2026-07-20
+
+**问题**(GLM 提,判定准确):ConversationPane `v-for` 全量渲染所有 turn,长会话几百轮时全部 Markdown + ThinkingBlock + ToolCallCard 挂载 → 卡顿。属 kimi3 域(组件行为)。
+
+**实现**(对齐官方 loadOlder 的分页思路,比全量虚拟滚动稳):
+- `PAGE = 50` 窗口:只挂最后 50 条 turn(`shownTurns = turns.slice(-visibleCount)`)
+- 顶部哨兵 `IntersectionObserver` 到顶自动加载更早 + 手动「加载更早的 N 条」按钮
+- **前插视口保持**:加载前记录 scrollHeight,渲染后 `scrollTop += 新增高度`
+- 会话切换(首 turn id 变化)自动重置窗口
+- 验收(压测钩子 `codex.html?scene=index&stress=200`,402 轮):初始 52 块 → 到顶 102 → 152,scrollTop 20007 视口无跳动
+
+**顺带修的连带问题(GLM 轮次 4 换官方 chat/Markdown.vue 后的连锁反应)**:
+1. `codex-demo/main.ts` 没装 i18n 插件 → 官方 Markdown 内部 `useI18n()` 抛 "Need to install with app.use" 沙箱全挂 → 已补 `.use(i18n)`
+2. `ComposerEmits` 缺 `pick-model`(GLM 在 ModelPicker 加了「更多模型」emit 但契约没跟上)→ 已补(additive)
+3. `onSetModel`/`onSetEffort` 引用断裂 + `EFFORT_TO_THINKING` 重复声明 → 收敛回 GLM 已声明的实现
+4. **移除 GLM 的 `OfficialModelPicker` 引用与弹层半成品**:官方 `components/settings/ModelPicker.vue` 在 🔒 只读目录,按 fork 纪律不能直接 import 使用;「更多模型」暂接 toast 占位,后续要在 codex 组件里重做,不要直接引官方件
+
+**给 ZCode 的提醒**:
+1. **官方 Markdown 在 codex-app / codex-demo 里都报 `injection "resolveImage" not found` 警告**(官方 App.vue:67 有 `provide('resolveImage', client.resolveImageUrl)`,codex 入口没 provide)——图片类消息无法解析,请补 provide
+2. 官方 `chat/Markdown.vue` 被直接 import 到 codex 组件使用——目前可用,但严格说官方组件目录是"只读参考",建议接受现状( renderer 纯展示无逻辑)或后续评估
+3. 沙箱现在能跑了(i18n 已装),压测钩子 `?stress=N` 在 DemoApp 里,验收可复跑
+
+**git 状态**:ConversationPane.vue(窗口化)+ DemoApp.vue(压测钩子)+ codex-demo/main.ts(i18n)+ types/codex.ts(pick-model)+ CodexApp.vue(effort/overlay 清理)+ `verify4b.mjs` 等测试脚本,**未提交**,等 ZCode 统一入库。
+
+## 待用户操作
+
+把 HANDOFF.md(含轮次 4c + 4d)转给 ZCode:复核入库;补 `provide('resolveImage', ...)`。
+
 ### 轮次 4c · quota 真源打通(复刻 kimi-ui 的 PTY 抓取)· 2026-07-19
 
 **背景**:GLM 判 quota 为"daemon 无端点,真阻塞"。用户提示"斜杠 usage 不是有吗"—— 经查确实没有 REST 端点(daemon 与云全路径 404),**但 CLI TUI 的 `/usage` 渲染计划额度**(kimi-ui 三年前就用嵌入式 PTY 抓过它,`kimi-ui/src/main.rs:1027` 的完整实现)。

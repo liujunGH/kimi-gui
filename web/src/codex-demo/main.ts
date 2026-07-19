@@ -8,6 +8,7 @@
  *   (浏览器开发测试环境会返回 'no-tauri',沙箱继续用 mock 数据)
  */
 import { createApp } from 'vue';
+import i18n from '../i18n';
 import DemoApp from './DemoApp.vue';
 import '../composables/codex/useTheme'; // 触发模块级 apply(data-theme)
 import { useTauriDaemon } from '../composables/codex/useTauriDaemon';
@@ -24,6 +25,9 @@ import '../styles/detail.css';
 import '../styles/settings.css';
 
 const app = createApp(DemoApp);
+// i18n 必须装:官方 chat/Markdown.vue 内部 useI18n(),不装会抛
+// "Need to install with `app.use` function"(GLM 轮次 4 换官方 Markdown 后沙箱挂掉的根因)
+app.use(i18n);
 app.mount('#app');
 
 // 挂载后异步拉 daemon 信息(Tauri 环境生效;浏览器环境静默 no-tauri)
