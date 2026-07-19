@@ -521,6 +521,52 @@ permission: 'manual' | 'auto' | 'yolo';
 2. 验收方式(HANDOFF 5.2):`cd web && pnpm dev` → `localhost:5175/codex.html?scene=X` 与 prototype 并排对比
 3. 轮次 1.2 的应修 6–8(notification 权限 / Tauri 模块 / App.vue provide)即轮次 3 内容,别忘了
 
+### 轮次 2.1 · ZCode 全量验收 · 2026-07-19
+
+**验收方法**(ZCode 自定的五件套,这次没盲信 kimi3 自报):
+
+1. ✅ **vue-tsc 全绿**(实测,不是看日志)
+2. ✅ **fork 卫生**:`diff -rq .upstream/.../apps/kimi-web web` 显示**唯一官方改动仍是 vite.config.ts**(已记 PATCHES),kimi3 没污染官方代码
+3. ✅ **沙箱 7 场景 + 浅/深主题 + 快捷键实测渲染**:
+   - `codex.html?scene=index|running|approval|diff|multi-agent|settings` 全部 HTTP 200,Vue 完整挂载
+   - `?theme=dark` 深色生效
+   - `⌘I` 打开 DetailPane 实测工作(useHotkeys + useUIState 都对)
+   - **0 console error**(原型 v1 时代连 daemon 报 401,沙箱没这问题)
+4. ✅ **冻点完全干净**:
+   - `types/codex.ts`:`git diff HEAD` 一行没改
+   - 4 个 composables(`useUIState/useHotkeys/useTheme/useKimiClient`):全部 0 行 diff
+   - useUIState 的 `escCloseImpl` 模块级实现没被退回 `this`
+   - **kimi3 严格守住了 5.1 并行条款**
+5. ✅ **契约外补充全 additive**:抽检 Composer + ApprovalCard,新增 props 全是 `?` 可选 + `withDefaults` 给默认值,**不破坏轮次 1 的契约调用方**。ApprovalCard 用 `ApprovalRequestSummary & { cwd?: string }` 交叉类型,完美兼容
+6. ✅ **kimi3 自报 6 问题全部属实**(抽查 3 个证实):
+   - 问题 1:`DiffViewProps.hunks` 单数组 vs ReviewPane 实际用 `hunksByFile` Map —— 真的契约缺陷
+   - 问题 3:`useTheme` 只有 `light | dark`,无 `system` 档 —— 真的限制(我原 useTheme 的债)
+   - 问题 4:`.ap-head` 在 conversation.css 和 settings.css 都定义且样式不同 —— 真的冲突
+
+**结论**:轮次 2 **验收通过**,质量高。
+
+**追认**:
+- kimi3 契约外补充(Composer/ThinkingBlock/ApprovalCard/DiffLines/FileMenu/AgentPanel/AgentTranscript/Sidebar/WorkspaceGroup/ThreadMenu/SubagentCard/ContextMeter)**全部追认**(全 additive,符合边界)
+- kimi3 已知类型修正:`types/codex.ts` 里 `PermissionMode` 是 import 未 re-export(组件从 `../types` 直接引)—— 接受,kimi3 处理对
+
+**git 状态处理**:kimi3 轮次 2 代码**未自己 commit**,我(ZCode)按语义分 2 个 commit 入库:
+- `58530b5 feat(codex): kimi3 轮次 2 组件实现 + 视觉`(32 组件 + 10 CSS)
+- `495da9e feat(codex-demo): 验收沙箱 + HANDOFF 轮次 2 日志`(codex.html + codex-demo/)
+
+**轮次 3 待处理清单**(汇总 kimi3 提的 6 问题 + 轮次 1.2 应修 6-8):
+1. `DiffViewProps.hunks` 改 `hunksByFile: Record<string, DiffHunk[]>`(契约修正)
+2. `Subagent` 加 `elapsed?: string`
+3. `useTheme` 加 `'system'` 档
+4. `.ap-head` 类名冲突:重命名其中一个(conversation.css 的 `.ap-head` → `.tc-head` 或类似)
+5. `App.vue` provide `KIMI_CLIENT_KEY`(wire-up)
+6. useHotkeys capture 相 vs SlashMenu bubble 相 Esc 分层顺序
+7. 弹层持久化从 localStorage 迁到 client 数据源
+8. 应修 6:`capabilities/default.json` 加 `notification:default`
+9. 应修 7:src-tauri 加 `window.rs/shortcut.rs/tray.rs` + `tauri-plugin-global-shortcut` + connect_daemon 异步化 + objc2 启用(set_dock_badge)
+10. 应修 8:App.vue provide(同 5)
+
+**下一步**:ZCode 开始轮次 3(协议 wire-up + Tauri 系统集成 + 上述 10 项)
+
 ## 待用户操作
 
-把 `HANDOFF.md`(含轮次 2 日志)转给 ZCode:追认契约外补充,处理「留给 ZCode 的问题」,开始轮次 3(协议 wire-up + Tauri 系统集成)。
+确认轮次 2 验收通过,ZCode 开始轮次 3。
