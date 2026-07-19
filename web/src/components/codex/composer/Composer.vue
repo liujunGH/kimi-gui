@@ -75,8 +75,8 @@ function onSlashSelect(cmd: BuiltinCommand | Skill) {
   if ((cmd as BuiltinCommand).acceptsInput) {
     text.value = '/' + name + ' ';
   } else {
-    /* 无参命令:原型期直接作为一条消息发出,模拟"直接执行" */
-    emit('send', '/' + name, 'queue');
+    /* 无参命令:emit command 让父级执行(不走 send,避免当普通消息发) */
+    emit('command', '/' + name);
     text.value = '';
   }
 }

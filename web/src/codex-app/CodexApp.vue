@@ -318,6 +318,74 @@ const EFFORT_TO_THINKING: Record<EffortLevel, string> = {
   Max: 'xhigh',
 };
 
+/**
+ * 斜杠命令处理(从官方 App.vue handleCommand 移植)
+ * 处理所有无参命令(acceptsInput 命令在输入框留参,用户发消息时走 onSend)
+ */
+function handleCommand(cmd: string): void {
+  // 带参命令:从消息文本里解析(command 可能含参数,如 "/compact 只保留 API 相关")
+  if (cmd.startsWith('/compact')) {
+    void client.compact(cmd.slice('/compact'.length).trim() || undefined);
+    return;
+  }
+  if (cmd.startsWith('/swarm')) {
+    const arg = cmd.slice('/swarm'.length).trim();
+    if (arg === 'on') client.setSwarmMode(true);
+    else if (arg === 'off') client.setSwarmMode(false);
+    else if (arg) { client.setSwarmMode(true); void client.sendPrompt(arg); }
+    else void client.toggleSwarmMode();
+    return;
+  }
+  if (cmd.startsWith('/goal')) {
+    const arg = cmd.slice('/goal'.length).trim();
+    if (arg === 'pause' || arg === 'resume' || arg === 'cancel') client.controlGoal(arg);
+    else if (arg) void client.createGoal(arg);
+    else client.toggleGoalMode();
+    return;
+  }
+  if (cmd.startsWith('/btw')) {
+    const arg = cmd.slice('/btw'.length).trim();
+    if (arg) void client.openSideChat(arg);
+    else client.closeSideChat();
+    return;
+  }
+  switch (cmd) {
+    case '/new':
+    case '/clear':
+      client.clearActiveSession();
+      break;
+    case '/fork':
+      void client.forkSession();
+      break;
+    case '/export':
+      void client.exportSession();
+      break;
+    case '/undo':
+      void client.undo();
+      break;
+    case '/plan':
+      client.togglePlanMode();
+      break;
+    case '/auto':
+      client.setPermission('auto');
+      break;
+    case '/yolo':
+      client.setPermission('yolo');
+      break;
+    case '/thinking':
+      client.setThinking('high');
+      break;
+    case '/status':
+      ui.openDetail('tasks');
+      break;
+    default: {
+      // 未匹配 → 当 skill 激活
+      const stripped = cmd.slice(1).split(' ')[0];
+      if (stripped) void client.activateSkill(stripped);
+    }
+  }
+}
+
 /** 切模型:setModel + 设 daemon 默认(fire-and-forget) */
 async function onSetModel(id: string) {
   const switched = await client.setModel(id);
@@ -588,7 +656,8 @@ async function searchFiles(q: string) {
           @set-permission="(p: PermissionMode) => client.setPermission(p)"
           @set-model="onSetModel"
           @set-effort="onSetEffort"
-          @pick-model="toast('模型管理页待做')"
+          @pick-model="showModelPicker = true"
+          @command="handleCommand"
         />
       </div>
     </div>

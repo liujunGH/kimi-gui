@@ -214,7 +214,7 @@ export interface ComposerEmits {
   (e: 'set-permission', p: PermissionMode): void;
   (e: 'pick-model'): void;
   (e: 'open-context-detail'): void;
-  (e: 'pick-model'): void;
+  (e: 'command', cmd: string): void; // 斜杠命令执行(如 /compact /goal /fork)
 }
 
 /** 模型元信息:daemon 返回(不同账号能用的模型不同,不写死)。 */
