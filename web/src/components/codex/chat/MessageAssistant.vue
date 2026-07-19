@@ -2,12 +2,17 @@
 /**
  * MessageAssistant —— 助手消息(按 ChatTurn.blocks 有序渲染:思考/正文/工具卡)
  *
- * - 文本块做极简行内渲染:段落分段 + `code` + **bold**(先转义,防注入)
- * - streaming = true 时,最后一个思考块呈流式态(光标)
- * - todos 非空时尾部挂 TodoCard;a-foot 显示用时 + 复制
+ * 文本块用官方 Markdown.vue(markstream-vue)渲染:
+ * - 流式 markdown + 代码高亮 + KaTeX + Mermaid
+ * - streaming = true 时 markstream 做平滑流式动画
+ * - 跟官方 ChatPane.vue:640 一致(<Markdown :text :streaming :open-file>)
+ *
+ * 替代了 codex-demo 时代的极简 renderRich(正则替换),
+ * 现在产品入口用真 markdown 渲染。
  */
 import { computed } from 'vue';
 import type { ChatTurn, TodoView } from '../../../types';
+import Markdown from '../../chat/Markdown.vue';
 import CodexIcon from '../layout/CodexIcon.vue';
 import ThinkingBlock from './ThinkingBlock.vue';
 import ToolCallCard from './ToolCallCard.vue';
@@ -34,43 +39,14 @@ const lastThinkingIdx = computed(() => {
   return -1;
 });
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-function inlineMd(s: string): string {
-  return escapeHtml(s)
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-}
-/** 极简渲染:转义后 `code` → <code>,**bold** → <strong>;按空行分段,连续 "- " 行包成 <ul><li> */
-function renderRich(text: string): string {
-  return text
-    .split(/\n\n+/)
-    .map((para) => {
-      const out: string[] = [];
-      let inList = false;
-      for (const line of para.split('\n')) {
-        const m = line.match(/^[-•]\s+(.*)$/);
-        if (m) {
-          if (!inList) {
-            out.push('<ul>');
-            inList = true;
-          }
-          out.push(`<li>${inlineMd(m[1] ?? '')}</li>`);
-        } else {
-          if (inList) {
-            out.push('</ul>');
-            inList = false;
-          }
-          if (line.trim()) out.push(inlineMd(line), '<br>');
-        }
-      }
-      if (inList) out.push('</ul>');
-      const body = out.join('').replace(/(<br>)+$/, '');
-      return body ? `<p>${body}</p>` : '';
-    })
-    .join('');
-}
+/** 最后一个 text block 是否流式中(传给 Markdown.vue 的 streaming prop) */
+const lastTextIdx = computed(() => {
+  for (let i = blocks.value.length - 1; i >= 0; i--) {
+    const b = blocks.value[i];
+    if (b && b.kind === 'text') return i;
+  }
+  return -1;
+});
 
 const duration = computed(() => {
   const ms = props.turn.durationMs;
@@ -86,7 +62,7 @@ function copyAll() {
   try {
     if (navigator.clipboard) navigator.clipboard.writeText(text);
   } catch {
-    /* 原型期忽略 */
+    /* 忽略 */
   }
 }
 </script>
@@ -101,8 +77,13 @@ function copyAll() {
         :global-show="globalThinking"
         @inspect="emit('inspect', 'thinking')"
       />
-      <div v-else-if="b.kind === 'text'" class="a-content" v-html="renderRich(b.text)"></div>
-      <ToolCallCard v-else :call="b.tool" @inspect="emit('inspect', 'tools')" />
+      <div v-else-if="b.kind === 'text' && b.text" class="a-content">
+        <Markdown
+          :text="b.text"
+          :streaming="props.running && i === lastTextIdx"
+        />
+      </div>
+      <ToolCallCard v-else-if="b.kind === 'tool'" :call="b.tool" @inspect="emit('inspect', 'tools')" />
     </template>
 
     <TodoCard v-if="props.todos.length" :todos="props.todos" />

@@ -4,6 +4,7 @@ mod daemon;
 mod dock_badge;
 mod shortcut;
 mod tray;
+mod usage;
 
 use daemon::{connect_daemon, Launch};
 use std::sync::Mutex;
@@ -79,6 +80,9 @@ pub fn run() {
                 eprintln!("[kimi-gui] 托盘装配失败: {e}");
             }
 
+            // 3. 额度缓存预热(后台 PTY 抓取 /usage,不阻塞启动)
+            usage::warm_cache();
+
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -92,7 +96,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             daemon_info,
-            dock_badge::set_dock_badge
+            dock_badge::set_dock_badge,
+            usage::plan_usage
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
