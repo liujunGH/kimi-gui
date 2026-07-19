@@ -11,10 +11,12 @@
  */
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import type { ConversationPaneProps, ConversationPaneEmits } from '../../../types/codex';
+import type { ChatTurn } from '../../../types';
 import CodexIcon from '../layout/CodexIcon.vue';
 import MessageUser from './MessageUser.vue';
 import MessageAssistant from './MessageAssistant.vue';
 import TurnProgress from './TurnProgress.vue';
+import ConversationToc, { type ConversationTocItem } from '../../chat/ConversationToc.vue';
 
 const props = defineProps<ConversationPaneProps>();
 const emit = defineEmits<ConversationPaneEmits & { (e: 'inspect', tab: 'thinking' | 'tools'): void }>();
@@ -30,6 +32,44 @@ const shownTurns = computed(() => props.turns.slice(Math.max(0, total.value - vi
 const hiddenCount = computed(() => total.value - shownTurns.value.length);
 const lastTurnId = computed(() => props.turns[props.turns.length - 1]?.id);
 
+// ConversationToc:每轮 user query 一条竖条(hover 展开 label)
+function tocTitle(turn: ChatTurn): string {
+  const text = turn.text?.trim();
+  if (text) return text.length > 60 ? text.slice(0, 60) + '…' : text;
+  if ((turn.tools?.length ?? 0) > 0) return `${turn.tools!.length} tools`;
+  return 'kimi';
+}
+const tocItems = computed<ConversationTocItem[]>(() =>
+  props.turns
+    .filter((t) => t.role === 'user')
+    .map((t, i) => ({ id: t.id, role: t.role as 'user', no: i + 1, title: tocTitle(t) })),
+);
+const activeTurnId = ref<string | null>(null);
+function updateActiveToc() {
+  const el = scrollEl.value;
+  if (!el) return;
+  const mid = el.scrollTop + el.clientHeight / 2;
+  // 找到最接近视口中部的 user turn 元素
+  const items = el.querySelectorAll<HTMLElement>('[data-turn-id]');
+  let best: string | null = null;
+  let bestDist = Infinity;
+  for (const item of items) {
+    const top = item.offsetTop - el.offsetTop;
+    const dist = Math.abs(top + item.offsetHeight / 2 - mid);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = item.dataset.turnId ?? null;
+    }
+  }
+  activeTurnId.value = best;
+}
+function onTocSelect(turnId: string) {
+  const el = scrollEl.value;
+  if (!el) return;
+  const target = el.querySelector<HTMLElement>(`[data-turn-id="${turnId}"]`);
+  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 // 会话切换(turns 引用变化且不是单纯增长)时重置窗口
 watch(
   () => props.turns[0]?.id,
@@ -42,6 +82,7 @@ function onScroll() {
   const el = scrollEl.value;
   if (!el) return;
   nearBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+  updateActiveToc();
 }
 
 async function loadMore() {
@@ -98,7 +139,9 @@ void emit;
       </div>
 
       <template v-for="t in shownTurns" :key="t.id">
-        <MessageUser v-if="t.role === 'user'" :turn="t" />
+        <div v-if="t.role === 'user'" :data-turn-id="t.id">
+          <MessageUser :turn="t" />
+        </div>
         <MessageAssistant
           v-else-if="t.role === 'assistant'"
           :turn="t"
@@ -114,6 +157,14 @@ void emit;
 
       <TurnProgress v-if="props.turnProgress" v-bind="props.turnProgress" />
     </div>
+
+    <!-- 对话目录竖条(右侧,hover 展开 label) -->
+    <ConversationToc
+      v-if="tocItems.length > 1"
+      :items="tocItems"
+      :active-turn-id="activeTurnId"
+      @select="onTocSelect"
+    />
   </div>
 </template>
 
