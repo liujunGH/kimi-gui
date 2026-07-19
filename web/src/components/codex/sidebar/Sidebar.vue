@@ -16,7 +16,10 @@ import StatusFilter from './StatusFilter.vue';
 import { sessionToThreadStatus } from './threadStatus';
 
 const props = defineProps<SidebarProps & { pinnedIds?: string[] }>();
-const emit = defineEmits<SidebarEmits & { (e: 'open-settings'): void }>();
+const emit = defineEmits<SidebarEmits & {
+  (e: 'open-settings'): void;
+  (e: 'select-workspace', name: string): void;
+}>();
 
 /** 工作区排序模式(每组独立,组件内 UI 状态;轮次 3 可挪 daemon 持久化) */
 const sortModes = ref<Record<string, WorkspaceSortMode>>({});
@@ -51,10 +54,12 @@ function sessionsOf(wsName: string): Session[] {
     </div>
 
     <div class="sidebar-new">
-      <button class="new-task" @click="emit('new-task')">
-        <CodexIcon name="plus" />
-        新建任务
-      </button>
+      <slot name="new-task">
+        <button class="new-task" @click="emit('new-task')">
+          <CodexIcon name="plus" />
+          新建任务
+        </button>
+      </slot>
     </div>
 
     <div class="sidebar-search">
@@ -95,9 +100,11 @@ function sessionsOf(wsName: string): Session[] {
         :current-session-id="props.currentSessionId"
         :sort-mode="sortOf(ws.name)"
         :pinned-ids="props.pinnedIds"
+        :active-workspace="ws.name === props.currentWorkspaceId"
         @select-session="(id) => emit('select-session', id)"
         @toggle-pin="(id) => emit('toggle-pin', id)"
         @set-sort="(m) => (sortModes[ws.name] = m)"
+        @select-workspace="emit('select-workspace', ws.name)"
       />
     </div>
 

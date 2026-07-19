@@ -38,9 +38,10 @@ function topApprovalCard(): ApprovalCardEntry | undefined {
  * - emit('minimize'):本阶段无内部触发源(最小化发生在动作处理后,等轮次 3
  *   动作接线时由卡片发出),签名按契约保留
  */
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { computed, inject, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import type { ApprovalCardEmits, ApprovalRequestSummary } from '../../../types/codex';
 import { useHotkeys } from '../../../composables/codex/useHotkeys';
+import { KIMI_CLIENT_KEY } from '../../../composables/codex/useKimiClient';
 import CodexIcon from '../layout/CodexIcon.vue';
 import DiffLines from '../diff/DiffLines.vue';
 
@@ -53,6 +54,12 @@ const props = withDefaults(defineProps<ApprovalRequestSummary & { cwd?: string }
   cwd: '',
 });
 const emit = defineEmits<ApprovalCardEmits>();
+
+/**
+ * 真实审批动作:codex-app 里 client 已由 App provide,直接 client.respondApproval;
+ * 验收沙箱无 provide(inject 为 null),退化为纯按压动效。
+ */
+const client = inject(KIMI_CLIENT_KEY, null);
 
 // ---------------------------------------------------------------------------
 // head
@@ -129,7 +136,27 @@ function act(key: ApprovalActKey) {
   pressed.value = key;
   clearTimeout(pressTimer);
   pressTimer = setTimeout(() => (pressed.value = null), 120);
-  if (key === 'feedback') toggleFeedback();
+  if (key === 'feedback') {
+    toggleFeedback();
+    return;
+  }
+  if (client && props.approvalId) {
+    void client.respondApproval(props.approvalId, {
+      decision: key === 'reject' ? 'rejected' : 'approved',
+      scope: key === 'session' ? 'session' : undefined,
+    });
+  }
+}
+
+/** 反馈提交:拒绝 + 附言(⌘+Enter 或点提交) */
+function submitFeedback() {
+  const text = feedbackText.value.trim();
+  if (!text) return;
+  if (client && props.approvalId) {
+    void client.respondApproval(props.approvalId, { decision: 'rejected', feedback: text });
+  }
+  feedbackOpen.value = false;
+  feedbackText.value = '';
 }
 
 // ---------------------------------------------------------------------------
@@ -226,7 +253,9 @@ useHotkeys([
       <textarea
         ref="feedbackEl"
         v-model="feedbackText"
-        placeholder="告诉 Kimi 应该怎么调整…"
+        placeholder="告诉 Kimi 应该怎么调整…(⌘+Enter 提交,即拒绝并附言)"
+        @keydown.meta.enter.prevent="submitFeedback"
+        @keydown.ctrl.enter.prevent="submitFeedback"
       ></textarea>
     </div>
   </div>

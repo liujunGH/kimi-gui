@@ -12,6 +12,8 @@ import CodexIcon from '../layout/CodexIcon.vue';
 import ThinkingBlock from './ThinkingBlock.vue';
 import ToolCallCard from './ToolCallCard.vue';
 import TodoCard from './TodoCard.vue';
+import ApprovalCard from '../approval/ApprovalCard.vue';
+import { fromApprovalBlock } from '../approval/approvalMapper';
 import { useUIState } from '../../../composables/codex/useUIState';
 
 const ui = useUIState();
@@ -21,7 +23,7 @@ const props = withDefaults(
   defineProps<{ turn: ChatTurn; todos?: TodoView[]; running?: boolean }>(),
   { todos: () => [], running: false },
 );
-const emit = defineEmits<{ (e: 'inspect-tools'): void }>();
+const emit = defineEmits<{ (e: 'inspect', tab: 'thinking' | 'tools'): void }>();
 
 const blocks = computed(() => props.turn.blocks ?? []);
 const lastThinkingIdx = computed(() => {
@@ -97,12 +99,19 @@ function copyAll() {
         :text="b.thinking"
         :streaming="props.running && i === lastThinkingIdx"
         :global-show="globalThinking"
+        @inspect="emit('inspect', 'thinking')"
       />
       <div v-else-if="b.kind === 'text'" class="a-content" v-html="renderRich(b.text)"></div>
-      <ToolCallCard v-else :call="b.tool" @inspect="emit('inspect-tools')" />
+      <ToolCallCard v-else :call="b.tool" @inspect="emit('inspect', 'tools')" />
     </template>
 
     <TodoCard v-if="props.todos.length" :todos="props.todos" />
+
+    <!-- 审批卡:turn.approval 内联渲染(批准/拒绝经 inject client 回 daemon) -->
+    <ApprovalCard
+      v-if="props.turn.approval"
+      v-bind="fromApprovalBlock(props.turn.approval, props.turn.approvalId ?? '')"
+    />
 
     <div class="a-foot">
       <span v-if="duration">{{ duration }}</span>

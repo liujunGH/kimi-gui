@@ -13,11 +13,12 @@ import CodexIcon from '../layout/CodexIcon.vue';
 import ThreadRow from './ThreadRow.vue';
 import { sessionToThreadStatus } from './threadStatus';
 
-const props = defineProps<WorkspaceGroupProps & { pinnedIds?: string[] }>();
+const props = defineProps<WorkspaceGroupProps & { pinnedIds?: string[]; activeWorkspace?: boolean }>();
 const emit = defineEmits<{
   (e: 'select-session', id: string): void;
   (e: 'toggle-pin', id: string): void;
   (e: 'set-sort', mode: WorkspaceSortMode): void;
+  (e: 'select-workspace'): void;
 }>();
 
 const SORTS: { id: WorkspaceSortMode; label: string }[] = [
@@ -57,7 +58,14 @@ onUnmounted(() => document.removeEventListener('click', onDocClick));
       <button class="ws-toggle" :title="closed ? '展开分组' : '折叠分组'" @click="closed = !closed">
         <CodexIcon name="chevron-down" />
       </button>
-      <span class="ws-name">{{ props.workspace.name }}</span>
+      <button
+        class="ws-name"
+        :class="{ 'ws-active': props.activeWorkspace }"
+        :title="props.activeWorkspace ? '活跃工作区' : '设为活跃工作区'"
+        @click.stop="emit('select-workspace')"
+      >
+        {{ props.workspace.name }}
+      </button>
       <button class="ws-action" title="更多" @click.stop="menuOpen = !menuOpen">
         <CodexIcon name="more" />
       </button>
@@ -94,3 +102,17 @@ onUnmounted(() => document.removeEventListener('click', onDocClick));
     </div>
   </section>
 </template>
+
+<style scoped>
+.ws-name {
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.ws-name:hover {
+  color: var(--text);
+}
+.ws-name.ws-active {
+  color: var(--accent);
+}
+</style>

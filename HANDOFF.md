@@ -665,3 +665,40 @@ permission: 'manual' | 'auto' | 'yolo';
 ## 待用户操作
 
 把 HANDOFF.md(含轮次 3.1 核验)转给 ZCode。
+
+### 轮次 4a · kimi3 codex-app 装配 + 新建任务工作区选择器 · 2026-07-19
+
+**背景**:GLM 限额停手半小时,用户让 kimi3 先做自己这部分。轮次 4(协议数据流)仍归 ZCode,本次只做「装配 + 组件侧」。
+
+**已交付**(vue-tsc 全绿 + 真数据验收 `verify4a.mjs` 18 断言全绿):
+
+1. **新建任务工作区选择器**:新组件 `layout/WorkspacePicker.vue`(工作区列表 + shortPath + 当前活跃打勾),选中 → `client.openWorkspace(id)` 切到该工作区(官方行为:有最近会话则激活,无则空会话起新对话);侧栏工作区组 `ws-name` 可点设为活跃(accent 高亮)
+2. **装配补齐**(此前 codex-app 只有 Sidebar/Conversation/Composer 主链路):
+   - `DetailPane`(⌘I,数据真:workspace/model(status)/permission/ctx(status)/思考全文/工具记录/todos)
+   - `SideTask`(⌥⌘S,真分栏)
+   - `ThreadMenu`(标题 ⋯,pin 本地 + 打开侧边任务)
+   - `AgentPanel` + 子智能体钻取:`client.tasks`(kind:'subagent')→ Subagent 映射(state→working/completed/failed,timing→elapsed),钻取到 SideTask 看详情/输出
+   - `SettingsPage` 覆盖层(footer 设置进,工具栏返回)
+   - `QueuePanel`:接 `client.queued`(活跃会话),引导 → steerPrompt + unqueue(index),删除 → unqueue
+3. **审批闭环**:MessageAssistant 按 `turn.approval` 内联渲染审批卡(`approvalMapper.fromApprovalBlock`);ApprovalCard 容错 inject client,**y=批准/a=本会话/n=拒绝真走 `client.respondApproval`**(无 client 的沙箱退化为动效);反馈框 ⌘+Enter 提交=拒绝+附言;顶栏"等待批准 · N 项"pill 接 `client.pendingApprovals`
+4. **Composer 数据**:skills ← `client.skills`(真,带 skill tag);builtin ← 官方 `lib/slashCommands.ts` + `i18n.global.t` 翻译;模型/权限/模式沿用;**context ← `client.status`(ctxUsed/ctxMax 真 usage)**;quota 仍为 0(轮次 4)
+5. **顺手清掉**:codex-app 的 diag 调试 pill 已移除(连接 pill 保留)
+
+**契约外补充(均 additive,待 ZCode 追认)**:
+- `WorkspaceGroup.activeWorkspace?` + `(e:'select-workspace')` emit;`Sidebar` 新增 `#new-task` slot + `(e:'select-workspace', name)` emit
+- `MessageAssistant`/`ConversationPane` 新增 `(e:'inspect', tab)` 事件链;`MessageAssistant` 内嵌渲染 turn.approval(经 approvalMapper)
+- `approvalMapper.ts`(新):`toApprovalSummary`(AppApprovalRequest→)+ `fromApprovalBlock`(ApprovalBlock→)
+- `ApprovalCard`:`inject(KIMI_CLIENT_KEY, null)` 容错 + respondApproval/submitFeedback;`WorkspacePicker.vue` 新组件
+
+**留给 ZCode 轮次 4(数据流,未动)**:
+1. `@` 文件提及的文件树(端点缺失,`files=[]` 占位)
+2. quota(5h/每周额度)真实来源;`sessionCost` 已可用于详情卡(顺手)
+3. diff/ReviewPane 数据流(`gitStatusBySession` + `fileDiffLines`),轮次 4a 未挂
+4. `editQueued`(队列编辑回填);thinking effort 档位映射(`client.thinking` → Low/High/Max)
+5. 首启竞态:token 注入完成前 client.load() 会首轮 401(后续自愈);建议注入先序
+
+**git 状态**:本次改动(CodexApp 重写 + 上述组件)+ GLM 此前的 lib.rs/main.ts 未提交改动,**全部未提交**,等 ZCode 统一入库。
+
+## 待用户操作
+
+把 HANDOFF.md(含轮次 3.1 + 轮次 4a)转给 ZCode:复核入库,然后接轮次 4(上述 5 项数据流)。

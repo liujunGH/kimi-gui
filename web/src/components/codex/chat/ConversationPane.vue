@@ -13,7 +13,7 @@ import MessageAssistant from './MessageAssistant.vue';
 import TurnProgress from './TurnProgress.vue';
 
 const props = defineProps<ConversationPaneProps>();
-const emit = defineEmits<ConversationPaneEmits>();
+const emit = defineEmits<ConversationPaneEmits & { (e: 'inspect', tab: 'thinking' | 'tools'): void }>();
 
 const scrollEl = ref<HTMLElement | null>(null);
 const nearBottom = ref(true);
@@ -52,6 +52,7 @@ void emit;
           :turn="t"
           :todos="props.todosByTurn[t.id] ?? []"
           :running="props.running && t.id === lastTurnId"
+          @inspect="(tab) => emit('inspect', tab)"
         />
       </template>
 
