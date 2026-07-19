@@ -1,0 +1,41 @@
+[package]
+name = "kimi-gui"
+version = "0.1.0"
+description = "Kimi Code native desktop client"
+authors = ["kimi-gui"]
+edition = "2021"
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+name = "kimi_gui_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# custom-protocol: makes WebviewUrl::App resolve to embedded assets in release
+# builds too. macos-private-api: needed for transparent / pinned toast windows
+# (ARCHITECTURE §6 规划的通知浮窗等 P1+ 功能)。
+tauri = { version = "2", features = ["custom-protocol", "macos-private-api"] }
+tauri-plugin-opener = "2"
+tauri-plugin-notification = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# Dock badge (unread-notification count) via AppKit; Tauri 2.11 has no
+# cross-platform badge API on macOS。
+# 注:轮次 1 阶段尚未使用(等轮次 3 实现 set_dock_badge),先声明避免后续
+# 动 Cargo.toml 引起重编译。
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSString"] }
+objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSDockTile"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
+panic = "abort"
