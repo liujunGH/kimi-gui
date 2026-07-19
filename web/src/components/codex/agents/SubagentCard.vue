@@ -60,6 +60,7 @@ const pct = computed(() => {
       <span v-if="props.subagent.progress" class="sa-progress">
         {{ props.subagent.progress.current }}/{{ props.subagent.progress.total }}
       </span>
+      <span v-if="props.subagent.elapsed" class="sa-elapsed">· {{ props.subagent.elapsed }}</span>
     </div>
     <div v-if="props.subagent.summary" class="sa-body">{{ props.subagent.summary }}</div>
     <div class="sa-bar"><div class="sa-bar-fill" :style="{ width: pct + '%' }"></div></div>

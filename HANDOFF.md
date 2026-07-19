@@ -502,6 +502,7 @@ permission: 'manual' | 'auto' | 'yolo';
    - `detail/`(DetailPane)、`agents/`(AgentPanel / SubagentCard / AgentTranscript)、`settings/`(SettingsPage)
 3. **验收沙箱**:`web/codex.html` + `web/src/codex-demo/`(main.ts / DemoApp.vue / mock.ts),`?scene=index|running|steer|approval|multi-agent|diff|settings` + `?theme=dark|light`;快捷键全接(⌘B/⌘I/⌥⌘S/⌥⌘P/Esc/y/a/n/p);交互全部复刻 prototype(补全菜单键盘导航、队列引导、弹层互斥与持久化、分栏钻取、右键菜单、置顶、过滤、主题)
 4. **新增文件登记**:`web/codex.html` 与 `web/src/codex-demo/` 是验收沙箱(非产品),官方文件零改动(PATCHES.md 无需新增)
+5. **交互自核(57 断言全绿)**:`.zcode/e2e/interact.mjs`(playwright-core + headless Chromium,`node interact.mjs` 可复跑)——覆盖思考开关、斜杠/@菜单(弹出/过滤/键盘/选中/执行/Esc)、模型/权限/模式/上下文四个弹层(pill 更新 + 持久化)、⌘B/⌘I/⌥⌘S/⌥⌘P/Esc 分层、队列(展开/引导/删除/计数同步)、双模切换、审批 y/p 键、子智能体钻取、diff(折叠展开/Review 切换/右键菜单/自动换行/复制路径)、设置页导航与主题切换、深色主题。3 个失败均为测试脚本选择器问题,应用行为全部正确。
 
 **契约外补充(props/emit,均为 additive,请 ZCode 追认)**:
 - Composer:`builtin`/`skills`/`files`/`sessionTitle`/`placeholder`;ThinkingBlock:`duration?`;ApprovalCard:`cwd?`;DiffLines:`highlight?`;FileMenu:`workspaceRoot?`;AgentPanel:`open?` + `(e:'close')`;AgentTranscript:`ask?`;Sidebar:`pinnedIds?` + `(e:'open-settings')`;WorkspaceGroup emits(select-session/toggle-pin/set-sort);ThreadMenu emits(pin/open-side-task);SubagentCard 保留 `.sa-status` 文案;ContextMeter `open-detail` 触发时机=打开详情卡时

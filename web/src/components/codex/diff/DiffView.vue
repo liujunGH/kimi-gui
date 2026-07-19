@@ -7,10 +7,8 @@
  *   .rp-files/.rp-file 样式,单文件不显示)
  * - 行渲染委托 DiffLines;syntaxHighlight 透传(关闭时退化为纯文本)
  *
- * ⚠️ 契约缺口(已报备):DiffViewProps.hunks 是单一数组、无逐文件 hunks
- *   映射(对比 ReviewPane 的 hunksByFile),也没有 select-file emit。
- *   因此 chip 切换目前只换头部显示的路径/统计,hunks 始终按 props 原样渲染;
- *   轮次 3 建议把 hunks 改为 Record<string, DiffHunk[]> 或补 emit。
+ * 轮次 3 契约修正:`hunks` 单数组 → `hunksByFile: Record<string, DiffHunk[]>`,
+ * 跟 ReviewPane 统一数据形状。chip 切换真正切 hunks(原来只换头部)。
  */
 import { computed, ref, watch } from 'vue';
 import type { DiffViewProps } from '../../../types/codex';
@@ -29,6 +27,11 @@ watch(
 
 const currentFile = computed(
   () => props.files.find((f) => f.path === selected.value) ?? props.files[0],
+);
+
+// 当前选中文件的 hunks(从 hunksByFile 取,空时退化为空数组)
+const currentHunks = computed(
+  () => (currentFile.value ? (props.hunksByFile[currentFile.value.path] ?? []) : []),
 );
 </script>
 
@@ -60,6 +63,6 @@ const currentFile = computed(
       >
     </div>
 
-    <DiffLines :hunks="props.hunks" :highlight="props.syntaxHighlight" />
+    <DiffLines :hunks="currentHunks" :highlight="props.syntaxHighlight" />
   </div>
 </template>

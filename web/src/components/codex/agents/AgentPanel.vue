@@ -62,50 +62,50 @@ onUnmounted(() => document.removeEventListener('keydown', onDocKeydown));
 
 <template>
   <aside class="agent-panel" :class="{ open: props.open }">
-    <div class="ap-head">
+    <div class="aph-head">
       <CodexIcon name="bot" />
-      <span class="ap-title">子智能体</span>
+      <span class="aph-title">子智能体</span>
       <button class="icon-btn ap-close" title="关闭 Esc" @click="emit('close')">
         <CodexIcon name="x" size="sm" />
       </button>
     </div>
 
-    <div class="ap-body">
-      <div class="ap-label">已开启 · {{ props.active.length }}</div>
-      <div v-if="!props.active.length" class="ap-empty">暂无进行中的子智能体</div>
+    <div class="aph-body">
+      <div class="aph-label">已开启 · {{ props.active.length }}</div>
+      <div v-if="!props.active.length" class="aph-empty">暂无进行中的子智能体</div>
       <div
         v-for="a in props.active"
         :key="a.id"
-        class="ap-row"
+        class="aph-row"
         @click="emit('inspect', a.id)"
       >
-        <span class="ap-icon" :class="iconVariant(a, 0)">{{ letterOf(a) }}</span>
-        <span class="ap-main">
-          <span class="ap-name">
+        <span class="aph-icon" :class="iconVariant(a, 0)">{{ letterOf(a) }}</span>
+        <span class="aph-main">
+          <span class="aph-name">
             <span v-if="dotOf(a)" class="dot" :class="dotOf(a)"></span>{{ a.name }}
           </span>
-          <span class="ap-sum">{{ sumOf(a) }}</span>
-          <span v-if="a.progress" class="ap-bar">
-            <span class="ap-bar-fill" :style="{ width: pctOf(a) + '%' }"></span>
+          <span class="aph-sum">{{ sumOf(a) }}</span>
+          <span v-if="a.progress" class="aph-bar">
+            <span class="aph-bar-fill" :style="{ width: pctOf(a) + '%' }"></span>
           </span>
         </span>
       </div>
 
-      <div class="ap-label">完成 · {{ props.completed.length }}</div>
-      <div v-if="!props.completed.length" class="ap-empty">暂无已完成的子智能体</div>
+      <div class="aph-label">完成 · {{ props.completed.length }}</div>
+      <div v-if="!props.completed.length" class="aph-empty">暂无已完成的子智能体</div>
       <div
         v-for="(a, i) in completedShown"
         :key="a.id"
-        class="ap-row"
+        class="aph-row"
         @click="emit('inspect', a.id)"
       >
-        <span class="ap-icon" :class="iconVariant(a, i)">{{ letterOf(a) }}</span>
-        <span class="ap-main">
-          <span class="ap-name">{{ a.name }}</span>
-          <span class="ap-sum">{{ sumOf(a) }}</span>
+        <span class="aph-icon" :class="iconVariant(a, i)">{{ letterOf(a) }}</span>
+        <span class="aph-main">
+          <span class="aph-name">{{ a.name }}</span>
+          <span class="aph-sum">{{ sumOf(a) }}</span>
         </span>
       </div>
-      <button v-if="hasMore" class="ap-more" @click="shown += 10">再显示 10 个</button>
+      <button v-if="hasMore" class="aph-more" @click="shown += 10">再显示 10 个</button>
     </div>
   </aside>
 </template>

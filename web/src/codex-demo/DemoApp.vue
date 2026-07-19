@@ -559,14 +559,14 @@ function openFM(e: MouseEvent, file: string) {
             <div @contextmenu.prevent="openFM($event, 'DiffView.vue')">
               <DiffView
                 :files="[M.diffFiles[0]!]"
-                :hunks="M.hunksByFile['DiffView.vue']!"
+                :hunks-by-file="{ 'DiffView.vue': M.hunksByFile['DiffView.vue']! }"
                 :syntax-highlight="true"
               />
             </div>
             <div @contextmenu.prevent="openFM($event, 'diffHighlight.ts')">
               <DiffView
                 :files="[M.diffFiles[1]!]"
-                :hunks="M.hunksByFile['diffHighlight.ts']!"
+                :hunks-by-file="{ 'diffHighlight.ts': M.hunksByFile['diffHighlight.ts']! }"
                 :syntax-highlight="true"
               />
             </div>

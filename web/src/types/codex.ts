@@ -314,7 +314,12 @@ export interface ChangedFile {
 
 export interface DiffViewProps {
   files: ChangedFile[];
-  hunks: DiffHunk[];
+  /**
+   * 按文件路径分组的 hunks(轮次 3 修正:原 `hunks: DiffHunk[]` 单数组撑不起多文件)。
+   * 跟 ReviewPane 的 `hunksByFile` 形状一致,DiffView/ReviewPane 数据源统一。
+   * key = ChangedFile.path,value = 该文件的 hunks。
+   */
+  hunksByFile: Record<string, DiffHunk[]>;
   syntaxHighlight: boolean;
 }
 
@@ -359,6 +364,8 @@ export interface Subagent {
   status: SubagentStatus;
   progress?: { current: number; total: number };
   summary?: string;
+  /** 已运行时长(已完成 agent 的耗时,如 "12s" "1m 3s");kimi3 报的契约缺字段 */
+  elapsed?: string;
 }
 
 export interface AgentPanelProps {

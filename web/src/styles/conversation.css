@@ -157,33 +157,33 @@
   transition: transform var(--dur-3) var(--ease);
 }
 .agent-panel.open { transform: none; }
-.ap-head {
+.aph-head {
   flex: none; height: 44px;
   display: flex; align-items: center; gap: 8px;
   padding: 0 12px;
   border-bottom: 1px solid var(--border-soft);
 }
-.ap-head > .ic { color: var(--text-2); }
-.ap-title { flex: 1; min-width: 0; font-size: var(--text-md); font-weight: 600; }
-.ap-body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; }
-.ap-label {
+.aph-head > .ic { color: var(--text-2); }
+.aph-title { flex: 1; min-width: 0; font-size: var(--text-md); font-weight: 600; }
+.aph-body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; }
+.aph-label {
   padding: 4px 2px 8px;
   font-size: 10.5px; font-weight: 700;
   letter-spacing: 0.05em; text-transform: uppercase;
   color: var(--text-3);
 }
-.ap-empty { padding: 8px 2px 14px; font-size: var(--text-sm); color: var(--text-3); }
-.ap-row { display: flex; gap: 10px; padding: 9px 8px; border-radius: var(--r-md); cursor: pointer; }
-.ap-row:hover { background: var(--hover); }
-.ap-icon {
+.aph-empty { padding: 8px 2px 14px; font-size: var(--text-sm); color: var(--text-3); }
+.aph-row { display: flex; gap: 10px; padding: 9px 8px; border-radius: var(--r-md); cursor: pointer; }
+.aph-row:hover { background: var(--hover); }
+.aph-icon {
   width: 22px; height: 22px; flex: none;
   display: grid; place-items: center;
   border-radius: 7px;
   font-size: 11px; font-weight: 700;
 }
-.ap-icon.v1 { background: var(--accent-soft); color: var(--accent); }
-.ap-icon.v2 { background: var(--success-soft); color: var(--success); }
-.ap-icon.v3 { background: var(--warning-soft); color: var(--warning); }
+.aph-icon.v1 { background: var(--accent-soft); color: var(--accent); }
+.aph-icon.v2 { background: var(--success-soft); color: var(--success); }
+.aph-icon.v3 { background: var(--warning-soft); color: var(--warning); }
 .ap-main { flex: 1; min-width: 0; }
 .ap-name { display: flex; align-items: center; gap: 7px; font-size: var(--text-md); font-weight: 550; }
 .ap-sum { margin-top: 2px; font-size: var(--text-sm); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
