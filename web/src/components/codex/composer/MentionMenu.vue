@@ -14,19 +14,48 @@
  * 按输入框文本派生,本组件不回写,故不 emit 该事件。
  */
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
-import type { MentionMenuProps, MentionMenuEmits } from '../../../types/codex';
+import type { FileEntry, MentionMenuProps, MentionMenuEmits } from '../../../types/codex';
 import CodexIcon from '../layout/CodexIcon.vue';
 
-const props = defineProps<MentionMenuProps>();
+const props = defineProps<MentionMenuProps & { search?: (q: string) => Promise<FileEntry[]> }>();
 const emit = defineEmits<MentionMenuEmits>();
 
 const rootEl = ref<HTMLElement | null>(null);
 const cursor = ref(0);
 
+/** 服务端搜索模式:search prop 存在时走 daemon searchFiles(防抖 250ms,序号防乱序) */
+const searchItems = ref<FileEntry[] | null>(null);
+const searching = ref(false);
+let searchTimer: ReturnType<typeof setTimeout> | undefined;
+let searchSeq = 0;
+
+watch(
+  () => props.query,
+  (q) => {
+    if (!props.search) return;
+    clearTimeout(searchTimer);
+    const seq = ++searchSeq;
+    searchTimer = setTimeout(async () => {
+      searching.value = true;
+      try {
+        const r = await props.search!(q);
+        if (seq === searchSeq) searchItems.value = r;
+      } catch {
+        if (seq === searchSeq) searchItems.value = [];
+      } finally {
+        if (seq === searchSeq) searching.value = false;
+      }
+    }, 250);
+  },
+  { immediate: true },
+);
+
 const filtered = computed(() => {
+  if (props.search) return searchItems.value ?? [];
   const q = props.query.toLowerCase();
   return props.files.filter((f) => f.path.toLowerCase().includes(q));
 });
+const loading = computed(() => props.filesLoading || searching.value);
 
 watch(filtered, () => {
   cursor.value = 0;
@@ -83,7 +112,7 @@ onUnmounted(() => {
   <div ref="rootEl" class="assist-pop open">
     <div class="as-label">文件</div>
     <div class="as-list">
-      <div v-if="props.filesLoading" class="as-empty">加载中…</div>
+      <div v-if="loading" class="as-empty">加载中…</div>
       <div v-else-if="!filtered.length" class="as-empty">无匹配文件</div>
       <button
         v-for="(f, i) in filtered"

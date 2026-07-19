@@ -40,7 +40,8 @@
 /* 展开体:max-height 过渡;流式中限高 240px 不爬屏 */
 .think-body { max-height: 0; overflow: hidden; transition: max-height var(--dur-3) var(--ease); }
 .think.open .think-body { max-height: 480px; overflow-y: auto; }
-.think.thinking .think-body { max-height: 240px; overflow-y: auto; }
+/* 流式中展开时限高 240px(不爬屏);折叠时 max-height:0 不受 thinking 影响 */
+.think.open.thinking .think-body { max-height: 240px; overflow-y: auto; }
 .think-content {
   padding: 8px 0 6px;
   font-size: var(--text-md); line-height: 1.65;

@@ -36,6 +36,8 @@ const props = withDefaults(
       builtin?: BuiltinCommand[];
       skills?: Skill[];
       files?: FileEntry[];
+      /** 服务端文件搜索(daemon searchFiles);提供后 @ 菜单走真搜索,不再过滤静态 files */
+      searchFiles?: (q: string) => Promise<FileEntry[]>;
       sessionTitle?: string;
       placeholder?: string;
     }
@@ -104,6 +106,14 @@ function onKeydown(e: KeyboardEvent) {
     submit();
   }
 }
+
+/** 供父组件回填文本(队列「编辑」→ 拉回输入框) */
+const taEl = ref<HTMLTextAreaElement | null>(null);
+function setText(t: string) {
+  text.value = t;
+  taEl.value?.focus();
+}
+defineExpose({ setText });
 </script>
 
 <template>
@@ -125,6 +135,7 @@ function onKeydown(e: KeyboardEvent) {
       :files="props.files"
       :query="assistVisible.query"
       :files-loading="false"
+      :search="props.searchFiles"
       @select="onAtSelect"
       @close="closeAssist"
     />
@@ -133,6 +144,7 @@ function onKeydown(e: KeyboardEvent) {
 
     <div class="composer-input">
       <textarea
+        ref="taEl"
         v-model="text"
         rows="1"
         :placeholder="placeholder"

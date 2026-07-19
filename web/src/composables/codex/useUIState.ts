@@ -22,7 +22,12 @@ const sideTaskOpen = ref(false);
 /** SideTask slot 内容类型:'thread'(侧边线程) | 'agent-transcript'(子 agent 钻取)。 */
 const sideTaskKind = ref<'thread' | 'agent-transcript'>('thread');
 const sideTaskSubagentId = ref<string | null>(null);
-/** 全局思考开关:关 = 全部折叠(含流式)。每个 ThinkingBlock 读这个 ref 决定显隐。 */
+/**
+ * 全局思考默认展开开关:
+ * - true(默认):新出现的思考块默认展开
+ * - false:新出现的思考块默认折叠
+ * 不影响已手动 toggle 过的思考块(ThinkingBlock 内部 open ref 独立)。
+ */
 const globalThinking = ref(true);
 
 /** 覆盖物 z 顺序:Review pane 最高 > Detail pane > SideTask(分栏,非覆盖)。 */
@@ -93,7 +98,7 @@ export function useUIState() {
       sideTaskOpen.value = true;
     },
     closeSideTask: closeSideTaskImpl,
-    /** 全局思考开关 toggle:关时强制所有 ThinkingBlock 折叠(含 streaming)。 */
+    /** 全局思考默认展开 toggle:只影响新出现的思考块,不影响已手动 toggle 的。 */
     toggleGlobalThinking() {
       globalThinking.value = !globalThinking.value;
     },
