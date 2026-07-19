@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>kimi-gui · codex 组件验收</title>
+    <script>
+      // 主题先置,避免闪烁;支持 ?theme=dark|light 直出(验收截图用,同步写 localStorage
+      // 让 useTheme 的初始化读到同一值)
+      var qs = new URLSearchParams(location.search).get('theme');
+      if (qs === 'dark' || qs === 'light') {
+        localStorage.setItem('kimi-theme', qs);
+      }
+      document.documentElement.dataset.theme = localStorage.getItem('kimi-theme') || 'light';
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/codex-demo/main.ts"></script>
+  </body>
+</html>

@@ -487,7 +487,40 @@ permission: 'manual' | 'auto' | 'yolo';
 4. **useHotkeys 现在要求 handler 显式 `return true` 才阻止默认**(原来 `preventDefault` 字段已删),你写 handler 时注意
 5. **应修 6-8(notification 权限 / Tauri 系统集成 / App.vue provide)是轮次 3 的事**,你现在用 mock + props,不调 useKimiClient
 
+### 轮次 2 · kimi3 填视觉 + 组件实现 · 2026-07-19
+
+**已交付**(vue-tsc 全绿;7 场景 × 浅/深主题截图验收通过):
+
+1. **样式**:`web/src/styles/` 10 个 CSS(prototype v2 原样搬运,验收沙箱 `codex.html` 全量挂载)
+2. **组件 32 个**(web/src/components/codex/):
+   - `AppShell.vue` + `layout/`(CodexIcon / SideTask / ThreadMenu / FileMenu / Toast)
+   - `sidebar/`(Sidebar / WorkspaceGroup / ThreadRow / StatusFilter + threadStatus.ts)
+   - `chat/`(ConversationPane / MessageUser / MessageAssistant / ThinkingBlock / ToolCallCard / TodoCard / TurnProgress,blocks 有序渲染 + 极简富文本(code/bold/列表)+ 滚锚)
+   - `composer/`(Composer / ComposerModes / QueuePanel / SlashMenu / MentionMenu / ModelPicker / PermPicker / ModePicker / ContextMeter)
+   - `approval/`(ApprovalCard,y/a/n/p 经 useHotkeys + 模块级卡栈只响应栈顶卡)
+   - `diff/`(DiffView / DiffLines / ReviewPane,折叠 hunk 可点展开)
+   - `detail/`(DetailPane)、`agents/`(AgentPanel / SubagentCard / AgentTranscript)、`settings/`(SettingsPage)
+3. **验收沙箱**:`web/codex.html` + `web/src/codex-demo/`(main.ts / DemoApp.vue / mock.ts),`?scene=index|running|steer|approval|multi-agent|diff|settings` + `?theme=dark|light`;快捷键全接(⌘B/⌘I/⌥⌘S/⌥⌘P/Esc/y/a/n/p);交互全部复刻 prototype(补全菜单键盘导航、队列引导、弹层互斥与持久化、分栏钻取、右键菜单、置顶、过滤、主题)
+4. **新增文件登记**:`web/codex.html` 与 `web/src/codex-demo/` 是验收沙箱(非产品),官方文件零改动(PATCHES.md 无需新增)
+
+**契约外补充(props/emit,均为 additive,请 ZCode 追认)**:
+- Composer:`builtin`/`skills`/`files`/`sessionTitle`/`placeholder`;ThinkingBlock:`duration?`;ApprovalCard:`cwd?`;DiffLines:`highlight?`;FileMenu:`workspaceRoot?`;AgentPanel:`open?` + `(e:'close')`;AgentTranscript:`ask?`;Sidebar:`pinnedIds?` + `(e:'open-settings')`;WorkspaceGroup emits(select-session/toggle-pin/set-sort);ThreadMenu emits(pin/open-side-task);SubagentCard 保留 `.sa-status` 文案;ContextMeter `open-detail` 触发时机=打开详情卡时
+- 已知类型修正:types/codex.ts 里 `PermissionMode` 是 import 未 re-export(组件从 `../types` 直接引)
+
+**留给 ZCode 的问题(轮次 3 前后处理)**:
+1. `DiffViewProps.hunks` 单数组撑不起多文件(ReviewPane 已有 hunksByFile),建议改 Record 或补 select-file emit
+2. `Subagent` 缺耗时字段(ap-time 未渲染),建议加 `elapsed?: string`
+3. `useTheme` 无 'system' 档(设置页「跟随系统」只能解析一次)
+4. `.ap-head` 类名在 conversation.css 与 settings.css 冲突(沿用自 prototype,暂未动)
+5. `App.vue` 仍待 provide `KIMI_CLIENT_KEY`;useHotkeys 是 capture 相,SlashMenu 等 bubble 相 Esc 可能被全局 Esc 抢先,轮次 3 定分层顺序
+6. 弹层的模型/权限持久化目前在组件内 localStorage,轮次 3 接 daemon 后替换为 client 数据源
+
+**下一步**:ZCode 轮次 3(协议 wire-up + Tauri 系统集成)
+**给 ZCode 的提醒**:
+1. 组件零 mock,验收沙箱数据全在 `codex-demo/mock.ts`;接真源时对照该文件的数据形状喂 props
+2. 验收方式(HANDOFF 5.2):`cd web && pnpm dev` → `localhost:5175/codex.html?scene=X` 与 prototype 并排对比
+3. 轮次 1.2 的应修 6–8(notification 权限 / Tauri 模块 / App.vue provide)即轮次 3 内容,别忘了
+
 ## 待用户操作
 
-把 `HANDOFF.md`(含轮次 1.2 日志)转给 kimi3,开始**轮次 2:填视觉 + 组件实现**。
-完成后追加「轮次 2 完成」日志,转回 ZCode 做轮次 3(协议 wire-up + Tauri 系统集成)。
+把 `HANDOFF.md`(含轮次 2 日志)转给 ZCode:追认契约外补充,处理「留给 ZCode 的问题」,开始轮次 3(协议 wire-up + Tauri 系统集成)。
