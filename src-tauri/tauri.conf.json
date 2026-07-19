@@ -5,7 +5,7 @@
   "identifier": "com.moonshot.kimigui",
   "build": {
     "beforeDevCommand": "pnpm --filter @moonshot-ai/kimi-web dev",
-    "devUrl": "http://localhost:5175/codex.html",
+    "devUrl": "http://localhost:5175/app.html",
     "beforeBuildCommand": "pnpm --filter @moonshot-ai/kimi-web build",
     "frontendDist": "../web/dist"
   },

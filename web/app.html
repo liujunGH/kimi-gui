@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="/favicon.ico" sizes="64x64" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)" />
+    <script>
+      // 主题先置,避免闪烁;跟随 localStorage 或系统偏好(useTheme 会同步)
+      var saved = localStorage.getItem('kimi-theme');
+      var theme = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      if (theme === 'system') {
+        theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      document.documentElement.dataset.theme = theme;
+    </script>
+    <title>Kimi Code</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/codex-app/main.ts"></script>
+  </body>
+</html>
