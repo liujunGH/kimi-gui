@@ -402,9 +402,10 @@ permission: 'manual' | 'auto' | 'yolo';
 
 - ✅ 轮次 0–0.3:文档建立 + 分工对齐 + 架构核对(Q1-Q5 全部定案)
 - ✅ 轮次 1:ZCode 搭骨架完成
-- ✅ 轮次 1.1:kimi3 审查(1 处 typo 已修,3 必修 + 5 应修 + 4 文档欠账)
-- ✅ **轮次 1.2:ZCode 修必修项完成**(必修 1-3 + 应修 4-5 + 文档欠账 9-10,12;应修 6-8 + 欠账 11 留轮次 3)
-- ⏳ **下一步**:kimi3 开始轮次 2(填视觉 + 组件实现,按域并行)
+- ✅ 轮次 1.1/1.2:kimi3 审查 + ZCode 修必修项
+- ✅ 轮次 2/2.1:kimi3 填视觉(32 组件)+ ZCode 全量验收通过
+- ✅ **轮次 3:ZCode 协议 wire-up + 系统集成**(5 阶段:契约债/daemon 桥/系统集成/Esc 分层/wire-up 显示)
+- ⏳ **下一步**:用户肉眼验证 Tauri 系统集成(托盘/快捷键/关窗/daemon pill),决定是否进轮次 4(C1 产品入口 + 数据流)
 
 ### 轮次 1.1 · kimi3 审查轮次 1 · 2026-07-19
 
@@ -568,6 +569,69 @@ permission: 'manual' | 'auto' | 'yolo';
 
 **下一步**:ZCode 开始轮次 3(协议 wire-up + Tauri 系统集成 + 上述 10 项)
 
+### 轮次 3 · ZCode 协议 wire-up + 系统集成 · 2026-07-19
+
+**分 5 阶段做,每阶段独立 commit + 自检**(commit hash 见 git log):
+
+**阶段 A:契约债修正(commit 2ab162f)**
+- A1 `DiffViewProps.hunks` 单数组 → `hunksByFile: Record<string, DiffHunk[]>`(跟 ReviewPane 统一)
+- A2 `Subagent` 加 `elapsed?: string` + SubagentCard 渲染耗时
+- A3 `useTheme` 加 `'system'` 档(我原债,kimi3 报的)+ matchMedia 监听器
+- A4 `.ap-head` 类名冲突重命名(AgentPanel 的 `.ap-*` → `.aph-*`,SettingsPage 的 `.ap-head` 保留)
+- 同步改 DiffView.vue / AgentPanel.vue / DemoApp.vue
+- 自检:vue-tsc 全绿 + fork 卫生 + 沙箱 diff/multi-agent/settings 实测正确
+
+**阶段 B:Tauri daemon 桥(commit 174cda5)**
+- B1 `web/package.json` 加 `@tauri-apps/api`(^2,记 PATCHES.md)
+- B2 新增 `composables/codex/useTauriDaemon.ts`:invoke('daemon_info') 包装 + isTauriEnv 检测 + 浏览器 fallback
+- B3 `codex-demo/main.ts` 升级:import useTheme(触发自动初始化)+ 挂载后 fetch daemon info
+- 自检:vue-tsc 全绿 + fork 卫生(仅 web/package.json 改)+ 浏览器实测走 no-tauri 分支
+
+**阶段 C0:daemon wire-up 状态显示(commit f0573c4)**
+- DemoApp.vue 加 daemon 状态 pill(3 态:已连/连接中/未连),验证 B+D 端到端通
+- **C1(留下一轮):写独立 codex-app/ 作为产品入口**(替代沙箱),挂 AppShell + 真 useKimiWebClient
+- 暂不动 App.vue(官方 UI 保留作对照基线)
+- 局限:真验证需 Tauri 窗口肉眼测(工具进不去 Tauri webview)
+
+**阶段 D:Tauri 系统集成(commit a80b294)**
+- D1 `capabilities/default.json` 加权限:notification:default / global-shortcut:allow-register/unregister
+- D2 + D3 加 3 个 Rust 模块 + global-shortcut 依赖:
+  - `tray.rs`:TrayIconBuilder + 菜单(显示/退出),点击托盘恢复主窗
+  - `shortcut.rs`:Builder + with_handler,Cmd+Option+N 唤起(被占用时退化空 plugin)
+  - `dock_badge.rs`:set_dock_badge 命令(objc2 + AppKit NSDockTile,复用 kimi-ui)
+  - Cargo.toml 加 tauri-plugin-global-shortcut + tray-icon feature
+- D4 `lib.rs` 改造:connect_daemon 异步化(thread::spawn)+ on_window_event 关窗隐藏到托盘
+- D5 objc2 启用(在 D2 的 dock_badge 里)
+- 自检:cargo check 0 警告 0 错误 + Tauri dev 启动无 panic + stderr 空(daemon/tray/shortcut 都无错)
+- **待肉眼验证**:托盘图标显示 / Cmd+Option+N 唤起 / 关窗到托盘
+
+**阶段 E:Esc 分层顺序(commit 8093602)**
+- kimi3 报的问题 5:useHotkeys capture 相 vs SlashMenu bubble 相,Esc 顺序乱
+- 修复:useHotkeys 改 bubble 相(false),跟所有组件级 handler 一致
+- 组件级 stopPropagation(SlashMenu.vue:82 等)能在 useHotkeys 之前拦截
+- 局限:同目标 window 上多个 listener 按注册顺序触发(useHotkeys 早注册);彻底解决要 kimi3 下一轮改组件 keydown 监听更具体的容器(不在阶段 E 范围)
+
+**轮次 3 自检总结**(全过):
+- cargo check 0 警告 0 错误
+- vue-tsc 全绿(每阶段都跑)
+- fork 卫生:官方文件仅 vite.config.ts + web/package.json 改动(都记 PATCHES.md)
+- 冻点状态:useUIState/useHotkeys/useKimiClient 一行未改;useTheme 加 system 档(additive);useTauriDaemon 是新文件
+
+**遗留(轮次 4 待办)**:
+1. **C1**:写 `web/src/codex-app/` 独立产品入口(替代官方 App.vue),挂 AppShell + 真 useKimiWebClient + provide KIMI_CLIENT_KEY
+2. **协议数据流**(原阶段 C 核心):Skills 动态拉取 / 模型动态 / 弹层持久化迁到 client
+3. **组件 keydown 精确化**(阶段 E 局限):kimi3 把组件级 keydown 从 window 改到具体容器
+4. **App.vue 真改造**:最终用 codex-app 替代官方 App.vue(或在 main.ts 路由分发)
+5. **真窗口端到端验证**:你肉眼跑 Tauri 应用,确认托盘/快捷键/daemon pill/Esc 分层都对
+
+**下一步**:用户肉眼验证 Tauri 系统集成(托盘/快捷键/关窗)+ 决定是否进轮次 4(C1 产品入口 + 数据流)。
+
 ## 待用户操作
 
-确认轮次 2 验收通过,ZCode 开始轮次 3。
+1. **肉眼验证**(工具测不到):
+   - `pnpm tauri dev` 启动,看托盘图标显示
+   - 按 `Cmd+Option+N`(先切到别的 App),应该唤起 Kimi Code 窗口
+   - 点窗口 ×,应该隐藏到托盘(不退出);从托盘点开恢复
+   - 打开 codex.html 沙箱(`http://localhost:5175/codex.html`),toolbar 应显示"daemon 已连"
+2. 反馈结果,确认轮次 3 验收
+3. 决定是否进轮次 4(C1 产品入口 + 数据流)
