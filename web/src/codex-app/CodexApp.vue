@@ -27,6 +27,18 @@ import Composer from '../components/codex/composer/Composer.vue';
 const client = useKimiWebClient();
 provide(KIMI_CLIENT_KEY, client);
 
+// 启动连接 + 首轮数据拉取:官方 App.vue 的 client.load()(web/src/App.vue:181)。
+// 不调用它,client 永远不发起 REST/WS —— 轮次 3 遗留「未连接」的根因。
+void client.load();
+
+// 诊断:Tauri 环境检测(排查 token 注入)
+const diagTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+const diagToken = ref<string | null>(null);
+// 监听 localStorage 变化(serverAuth setCredential 会写 localStorage)
+diagToken.value = localStorage.getItem('kimi-web.server-credential');
+// eslint-disable-next-line no-console
+console.info('[CodexApp] diag: tauri =', diagTauri, 'token in localStorage =', !!diagToken.value, 'connection =', client.connection.value);
+
 // 2. UI 状态
 const ui = useUIState();
 useTheme();
@@ -42,15 +54,29 @@ const composerMode = ref<ComposerMode>('queue');
 
 // --- 数据映射:client ref → 组件 props ---
 
-const sidebarWorkspaces = computed(() => client.workspaceGroups.value ?? []);
+// client.workspaceGroups 是 [{ workspace, sessions, hasMore, ... }] 分组包装,
+// 不能直接当 Workspace[] 传;Sidebar 要的是扁平 WorkspaceView + 扁平 sessions
+const sidebarWorkspaces = computed(() =>
+  (client.workspacesView.value ?? []).map((w) => ({ name: w.name, branch: '', id: w.id })),
+);
 const sidebarSessions = computed(() => client.sessionsForView.value ?? []);
-const sidebarCurrentWs = computed(() => client.activeWorkspaceId.value ?? '');
+const sidebarCurrentWs = computed(() => {
+  const id = client.activeWorkspaceId.value ?? '';
+  return (client.workspacesView.value ?? []).find((w) => w.id === id)?.name ?? id;
+});
 const sidebarCurrentSession = computed(() => client.activeSessionId.value ?? '');
 
 const conversationTurns = computed<ChatTurn[]>(() => client.turns.value ?? []);
 const conversationRunning = computed(() => client.working.value || client.turnActive.value);
 
 const composerPermission = computed(() => client.permission.value ?? 'manual');
+// client.models 形状是 { id, provider, model, displayName?, ... },映射到契约 ModelInfo
+const composerModels = computed(() =>
+  (client.models.value ?? []).map((m) => ({
+    id: m.id,
+    name: (m as { displayName?: string }).displayName ?? m.model ?? m.id,
+  })),
+);
 const composerCurrentModel = computed(() => {
   // client.backend 是 'v1' | 'v2',模型 ID 从 models 里取第一个 starred 或第一个
   const models = client.models.value;
@@ -122,6 +148,10 @@ watch(
         {{ sidebarCurrentWs || 'Kimi Code' }}
       </span>
       <span class="toolbar-spacer" />
+      <!-- 诊断(临时)-->
+      <span class="pill" style="font-size:10px;opacity:0.5">
+        diag: tauri={{ diagTauri }} token={{ !!diagToken }} conn={{ client.connection.value }}
+      </span>
       <span
         v-if="client.connection.value === 'connected'"
         class="pill pill-success"
@@ -160,7 +190,7 @@ watch(
         :mode="composerMode"
         :permission="composerPermission"
         :modes="{ plan: client.planMode.value || false, swarm: client.swarmMode.value || false, goal: client.goalMode.value || false }"
-        :models="[]"
+        :models="composerModels"
         :current-model="composerCurrentModel"
         :effort="null"
         :context="{ used: '0', total: '0', pct: 0 }"

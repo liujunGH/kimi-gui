@@ -635,3 +635,33 @@ permission: 'manual' | 'auto' | 'yolo';
    - 打开 codex.html 沙箱(`http://localhost:5175/codex.html`),toolbar 应显示"daemon 已连"
 2. 反馈结果,确认轮次 3 验收
 3. 决定是否进轮次 4(C1 产品入口 + 数据流)
+
+### 轮次 3.1 · kimi3 端到端核验 + 修 4 个真 bug · 2026-07-19
+
+**核验方式**:真跑 `pnpm tauri dev` + screencapture 窗口/菜单栏 + playwright 驱动浏览器(预置 token)+ 逐段源码定位。GLM 的「待肉眼验证」项全部由我实测。
+
+**发现并修复的 4 个真 bug(均在 codex-app,已验证生效,待 ZCode 追认/入库)**:
+1. **`CodexApp.vue` 漏调 `client.load()`** —— 「未连接」的真正根因。官方 App.vue:181 的启动调用没接,client 永远不发 REST/WS。补一行 `void client.load()` 后 conn=connected。
+2. **Sidebar 数据形状错配**:`client.workspaceGroups` 是 `[{workspace, sessions, hasMore, ...}]` 分组包装,被当扁平 `Workspace[]` 传 → 侧栏 51 个空名空组。改接 `workspacesView`(扁平)+ `sessionsForView`,侧栏 61 组 236 行真数据全部渲染。
+3. **models 形状错配**:官方 models 是 `{id, provider, model, displayName?}`,契约 ModelInfo 要 `{id, name}` → 加 `displayName ?? model` 映射(vue-tsc 因此报错,已清)。
+4. **WorkspaceGroup key 冲突**:61 个工作区里有重名(workspace/tmp 等),`:key="ws.name"` 触发 Vue duplicate key 警告 → 改为 `id ?? name`。
+
+**实测通过(GLM 的待肉眼验证项)**:
+- ✅ ⌘⌥N 全局唤起(TextEdit 前置 → 按后 kimi-gui 到最前;早前一次失败是 VMware 自己的 ⌘⌥N 菜单抢占,非 bug)
+- ✅ 关窗隐藏到托盘(⌘W 后窗口数 0、进程存活)
+- ✅ ⌘⌥N 从托盘恢复窗口(窗口数 0 → 1)
+- ✅ 端到端全链路:Tauri → vite → codex UI → daemon 真数据(侧栏 61 工作区/236 线程、真实思考块与 Bash/Edit 工具卡、模型 pill 显示 K2.7 Coding、模式 Swarm 跟随真状态)
+- ✅ 深色/浅色、vue-tsc 全绿
+
+**未解决/遗留**:
+1. **托盘图标不可见**:setup_tray 已调用、无报错、icon.png 正常(彩色 Tauri 图标),但菜单栏全宽扫描无图标。代码层面无问题,疑似本机菜单栏管理工具隐藏或 macOS 菜单栏溢出;建议换干净账户复测,或改用 `include_image!` 显式给模板 PNG。核心流程不受影响(⌘⌥N + 关窗到托盘均已验证)。
+2. **首启竞态**:token 注入(Rust eval)发生在 connect_daemon 完成后,client.load() 可能先于注入发请求 → 首轮 401;localStorage 已有凭据后后续启动正常。建议注入完成后再触发首次 load,或 client 侧 401 重试。
+3. **codex-app 诊断 pill**(`diag: tauri=… conn=…`)是调试残留,上线前删。
+4. Composer 的 context/quota 仍是硬编码 0(等 turn.completed usage,轮次 4 数据流);发送消息的端到端未验证(daemon 真发)。
+5. GLM 的两处未提交改动(lib.rs eval 注入 + main.ts initServerAuth)有效,与我的 4 个修复一起**全部未提交**,git 状态:M lib.rs / CodexApp.vue / main.ts。
+
+**下一步**:ZCode 复核本核验,统一入库(含它自己的未提交改动),处理遗留 1–4,然后轮次 4(数据流补全:skills/模型动态/usage/quota)。
+
+## 待用户操作
+
+把 HANDOFF.md(含轮次 3.1 核验)转给 ZCode。

@@ -9,7 +9,7 @@ import { createApp } from 'vue';
 import CodexApp from './CodexApp.vue';
 import i18n from '../i18n';
 import { installClientErrorCapture } from '../debug/trace';
-import { setCredential } from '../api/daemon/serverAuth';
+import { setCredential, initServerAuth } from '../api/daemon/serverAuth';
 import '../composables/codex/useTheme'; // 触发模块级 data-theme apply
 import '@fontsource-variable/inter/opsz.css';
 import '@fontsource-variable/inter/opsz-italic.css';
@@ -51,5 +51,9 @@ async function bootstrapTauriToken(): Promise<void> {
 }
 
 bootstrapTauriToken().finally(() => {
+  // 初始化 serverAuth(读 fragment 或 localStorage)
+  // bootstrapTauriToken 已经通过 setCredential 写了 localStorage,
+  // initServerAuth 会读到它;浏览器环境无 fragment 也能 fallback
+  initServerAuth();
   createApp(CodexApp).use(i18n).mount('#app');
 });

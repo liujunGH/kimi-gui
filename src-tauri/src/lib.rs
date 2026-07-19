@@ -41,7 +41,33 @@ pub fn run() {
             std::thread::spawn(move || match connect_daemon() {
                 Ok(launch) => {
                     let state: State<'_, SharedDaemon> = app_handle.state();
-                    *state.0.lock().unwrap() = Some(launch);
+                    *state.0.lock().unwrap() = Some(launch.clone());
+
+                    // 把 token 注入到 webview:用 eval 调前端的 setCredential
+                    // (serverAuth 的 setCredential 是全局函数,写 localStorage + memory)
+                    // 用 localStorage 直接写(serverAuth 的 initServerAuth 会读它)
+                    let token = &launch.token;
+                    let js = format!(
+                        r#"
+                        try {{
+                            var cred = JSON.stringify({{
+                                version: 1,
+                                credential: "{}",
+                                expiresAt: Date.now() + 7*24*60*60*1000
+                            }});
+                            localStorage.setItem('kimi-web.server-credential', cred);
+                            console.info('[kimi-gui] token injected via Rust eval');
+                        }} catch(e) {{
+                            console.error('[kimi-gui] token inject failed:', e);
+                        }}
+                        "#,
+                        token
+                    );
+                    if let Some(window) = app_handle.get_webview_window("main") {
+                        if let Err(e) = window.eval(&js) {
+                            eprintln!("[kimi-gui] eval 注入 token 失败: {e}");
+                        }
+                    }
                 }
                 Err(e) => {
                     eprintln!("[kimi-gui] daemon 连接失败: {e}");

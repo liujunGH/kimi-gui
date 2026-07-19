@@ -89,7 +89,7 @@ function sessionsOf(wsName: string): Session[] {
 
       <WorkspaceGroup
         v-for="ws in props.workspaces"
-        :key="ws.name"
+        :key="(ws as unknown as { id?: string }).id ?? ws.name"
         :workspace="ws"
         :sessions="sessionsOf(ws.name)"
         :current-session-id="props.currentSessionId"
