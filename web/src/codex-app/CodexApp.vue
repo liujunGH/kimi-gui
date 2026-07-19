@@ -11,12 +11,13 @@
  *
  * 数据边界:组件零 mock;context quota、文件树、diff/review 数据流等轮次 4(ZCode)。
  */
-import { computed, provide, ref, watch } from 'vue';
+import { computed, onUnmounted, provide, ref, watch } from 'vue';
 import { useKimiWebClient } from '../composables/useKimiWebClient';
 import { KIMI_CLIENT_KEY } from '../composables/codex/useKimiClient';
 import { useUIState } from '../composables/codex/useUIState';
 import { useHotkeys } from '../composables/codex/useHotkeys';
 import { useTheme } from '../composables/codex/useTheme';
+import { useTauriDaemon } from '../composables/codex/useTauriDaemon';
 import { SLASH_COMMANDS } from '../lib/slashCommands';
 import i18n from '../i18n';
 import type { ChatTurn, TodoView } from '../types';
@@ -28,6 +29,7 @@ import type {
   ComposerMode,
   ModeFlags,
   QueuedPrompt,
+  QuotaInfo,
   SessionFilter,
   Subagent,
 } from '../types/codex';
@@ -168,6 +170,10 @@ const composerModels = computed(() =>
   })),
 );
 const composerCurrentModel = computed(() => {
+  // 优先读 session 真实选中的 model（status.modelId 是 raw id）
+  const statusModelId = client.status.value?.modelId;
+  if (statusModelId) return statusModelId;
+  // 无 session 时用 starred 或第一个
   const models = client.models.value;
   if (!models || models.length === 0) return '';
   const starred = models.find((m) => client.starredModelIds.value?.includes(m.id));
@@ -205,6 +211,25 @@ const ctxInfo = computed<ContextInfo>(() => {
     pct: limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0,
   };
 });
+
+// ---------------------------------------------------------------- 计划额度(Tauri PTY 抓 /usage,浏览器为 0 占位)
+
+const quotaInfo = ref<QuotaInfo>({ q5h: 0, q5hReset: '', qWeek: 0, qWeekReset: '' });
+const { fetchPlanUsage } = useTauriDaemon();
+async function pollPlanUsage() {
+  const u = await fetchPlanUsage();
+  if (u && !u.loading) {
+    quotaInfo.value = {
+      q5h: u.hourly_pct,
+      q5hReset: u.hourly_reset,
+      qWeek: u.weekly_pct,
+      qWeekReset: u.weekly_reset,
+    };
+  }
+}
+void pollPlanUsage();
+const planUsageTimer = setInterval(pollPlanUsage, 60_000);
+onUnmounted(() => clearInterval(planUsageTimer));
 
 // thinking effort 映射:官方 ThinkingLevel('none'|'minimal'|'low'|'medium'|'high'|'xhigh')
 // → 契约 EffortLevel('Low'|'High'|'Max')
@@ -512,7 +537,7 @@ async function searchFiles(q: string) {
           :current-model="composerCurrentModel"
           :effort="composerEffort"
           :context="ctxInfo"
-          :quota="{ q5h: 0, q5hReset: '', qWeek: 0, qWeekReset: '' }"
+          :quota="quotaInfo"
           :builtin="builtinCommands"
           :skills="composerSkills"
           :files="[]"

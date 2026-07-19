@@ -58,6 +58,35 @@ async function fetchDaemonInfo(force = false): Promise<DaemonInfo | null> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// 计划额度(Rust PTY 抓取 CLI `/usage`,见 src-tauri/src/usage.rs)
+// ---------------------------------------------------------------------------
+
+/** 与 Rust PlanUsage 对齐;loading=true 表示后台正在抓,稍后重试。 */
+export interface PlanUsage {
+  weekly_pct: number;
+  weekly_reset: string;
+  hourly_pct: number;
+  hourly_reset: string;
+  fetched_at: number;
+  loading?: boolean;
+}
+
+/**
+ * 拉计划额度:invoke('plan_usage')。
+ * - Tauri:返回 Rust 缓存(过期自动后台刷新;loading=true 表示首次抓取中)
+ * - 浏览器:返回 null(调用方 fallback 到 sessionCost/占位)
+ */
+async function fetchPlanUsage(): Promise<PlanUsage | null> {
+  if (!isTauriEnv()) return null;
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return await invoke<PlanUsage>('plan_usage');
+  } catch {
+    return null;
+  }
+}
+
 export function useTauriDaemon() {
   return {
     /** 当前 daemon 信息(成功后非 null) */
@@ -70,5 +99,7 @@ export function useTauriDaemon() {
     isTauri: isTauriEnv,
     /** 拉取(幂等,可重复调) */
     fetch: fetchDaemonInfo,
+    /** 计划额度(PTY 抓 /usage;浏览器返回 null) */
+    fetchPlanUsage,
   };
 }
