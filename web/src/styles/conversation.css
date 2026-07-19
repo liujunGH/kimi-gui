@@ -1,0 +1,200 @@
+/* ============================================================
+   conversation.css · 对话流:用户气泡 / 助手消息 / 工具卡 / TodoCard / 子Agent卡
+   Codex 式:无头像,assistant 纯文本左对齐,user 中性灰气泡右对齐
+   ============================================================ */
+
+.msg-user { display: flex; flex-direction: column; align-items: flex-end; }
+.u-bubble {
+  max-width: 76%;
+  padding: 9px 14px;
+  border-radius: var(--r-xl);
+  background: var(--bubble);
+  font-size: var(--content-fs);
+  line-height: 1.6;
+}
+.u-meta { margin-top: 5px; font-size: 11px; color: var(--text-3); }
+
+.msg-assistant { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+/* 正文 */
+.a-content { font-size: var(--content-fs); line-height: 1.7; min-width: 0; }
+.a-content > * + * { margin-top: 10px; }
+.a-content code {
+  font-family: var(--font-mono); font-size: 13px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border-soft);
+  padding: 1px 5px; border-radius: 5px;
+}
+.a-content pre {
+  font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  padding: 12px 14px;
+  overflow-x: auto;
+}
+.a-content pre code { background: none; border: 0; padding: 0; font-size: inherit; }
+.a-content ul, .a-content ol { padding-left: 22px; display: flex; flex-direction: column; gap: 4px; }
+.a-content ul li { list-style: disc; }
+.a-content ol li { list-style: decimal; }
+.a-content strong { font-weight: 600; }
+
+.a-foot { display: flex; align-items: center; gap: 10px; font-size: var(--text-sm); color: var(--text-3); }
+.foot-copy { width: 24px; height: 24px; opacity: 0; transition: opacity var(--dur-1); }
+.msg-assistant:hover .foot-copy { opacity: 1; }
+
+/* ---------- 工具调用卡(点击可开 Inspect 右栏) ---------- */
+.tool-call {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  background: var(--bg-subtle);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color var(--dur-1), box-shadow var(--dur-1);
+}
+.tool-call:hover { border-color: var(--border); box-shadow: var(--shadow-sm); }
+.tool-head { display: flex; align-items: center; gap: 9px; padding: 8px 12px; }
+.tool-icon {
+  width: 22px; height: 22px; flex: none;
+  display: grid; place-items: center;
+  border-radius: 6px;
+  background: var(--bg-soft);
+  color: var(--text-2);
+}
+.tool-icon .ic { width: 13px; height: 13px; }
+.tool-name { font-family: var(--font-mono); font-size: var(--text-sm); font-weight: 600; }
+.tool-detail {
+  flex: 1; min-width: 0;
+  font-family: var(--font-mono); font-size: var(--text-sm);
+  color: var(--text-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tool-status { margin-left: auto; display: flex; align-items: center; }
+.tool-status .ic { width: 14px; height: 14px; color: var(--success); }
+.tool-status .dot { width: 6px; height: 6px; }
+.tool-body {
+  border-top: 1px solid var(--border-soft);
+  padding: 10px 12px;
+  font-family: var(--font-mono); font-size: var(--text-sm); line-height: 1.6;
+  color: var(--text-2);
+}
+
+/* ---------- TodoCard(对齐 Codex:无头衔浮动卡,条目可换行,完成不划线) ---------- */
+.todo-card {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
+  padding: 8px 14px;
+  display: flex;
+  flex-direction: column;
+}
+.todo-item { display: flex; align-items: flex-start; gap: 9px; padding: 5px 0; font-size: var(--text-md); line-height: 1.5; }
+.todo-state { width: 16px; height: 16px; flex: none; display: grid; place-items: center; margin-top: 2px; }
+.todo-state .ic { width: 15px; height: 15px; }
+.todo-item.done { color: var(--text-3); }
+.todo-item.done .todo-state { color: var(--success); }
+.todo-item.progress .todo-state { color: var(--accent); }
+.todo-item.pending { color: var(--text-2); }
+.todo-item.pending .todo-state { color: var(--text-3); }
+
+/* ---------- 轮次进度条(第 N/M 步 + 文件改动统计,对齐 Codex) ---------- */
+.turn-progress {
+  align-self: center;
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 14px;
+  border-radius: var(--r-full);
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  box-shadow: var(--shadow-sm);
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+.tp-spin { display: grid; color: var(--accent); animation: tp-rotate 1.1s linear infinite; }
+.tp-spin .ic { width: 14px; height: 14px; }
+@keyframes tp-rotate { to { transform: rotate(360deg); } }
+.tp-files { color: var(--text-3); }
+.tp-add, .tp-del { font-family: var(--font-mono); font-size: var(--text-sm); font-weight: 600; }
+.tp-add { color: var(--success); }
+.tp-del { color: var(--danger); }
+
+/* ---------- 子 Agent 卡 ---------- */
+.subagent-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.subagent-card {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  background: var(--bg);
+  padding: 11px 13px;
+  cursor: pointer;
+  transition: box-shadow var(--dur-2), border-color var(--dur-2), transform var(--dur-2);
+}
+.subagent-card:hover { box-shadow: var(--shadow-md); border-color: var(--border); transform: translateY(-1px); }
+.sa-head { display: flex; align-items: center; gap: 8px; }
+.sa-name { font-family: var(--font-mono); font-size: var(--text-sm); font-weight: 600; }
+.sa-status { margin-left: auto; font-size: var(--text-sm); color: var(--text-2); white-space: nowrap; }
+.sa-progress { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
+.sa-body { margin-top: 6px; font-size: var(--text-sm); line-height: 1.55; color: var(--text-2); }
+.sa-bar { margin-top: 10px; height: 3px; border-radius: var(--r-full); background: var(--bg-soft); overflow: hidden; }
+.sa-bar-fill { height: 100%; border-radius: inherit; background: var(--accent); }
+.subagent-card.is-done .sa-bar-fill { background: var(--success); }
+.subagent-card.is-waiting .sa-body {
+  background: var(--warning-soft);
+  color: var(--warning);
+  border-radius: var(--r-md);
+  padding: 7px 10px;
+}
+
+/* ---------- 子智能体面板(管理 + 完成历史,对齐 Codex) ---------- */
+.agent-panel {
+  position: absolute; top: 0; right: 0; bottom: 0;
+  width: 380px; max-width: 92%;
+  display: flex; flex-direction: column;
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  z-index: 27;
+  transform: translateX(103%);
+  transition: transform var(--dur-3) var(--ease);
+}
+.agent-panel.open { transform: none; }
+.ap-head {
+  flex: none; height: 44px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.ap-head > .ic { color: var(--text-2); }
+.ap-title { flex: 1; min-width: 0; font-size: var(--text-md); font-weight: 600; }
+.ap-body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; }
+.ap-label {
+  padding: 4px 2px 8px;
+  font-size: 10.5px; font-weight: 700;
+  letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--text-3);
+}
+.ap-empty { padding: 8px 2px 14px; font-size: var(--text-sm); color: var(--text-3); }
+.ap-row { display: flex; gap: 10px; padding: 9px 8px; border-radius: var(--r-md); cursor: pointer; }
+.ap-row:hover { background: var(--hover); }
+.ap-icon {
+  width: 22px; height: 22px; flex: none;
+  display: grid; place-items: center;
+  border-radius: 7px;
+  font-size: 11px; font-weight: 700;
+}
+.ap-icon.v1 { background: var(--accent-soft); color: var(--accent); }
+.ap-icon.v2 { background: var(--success-soft); color: var(--success); }
+.ap-icon.v3 { background: var(--warning-soft); color: var(--warning); }
+.ap-main { flex: 1; min-width: 0; }
+.ap-name { display: flex; align-items: center; gap: 7px; font-size: var(--text-md); font-weight: 550; }
+.ap-sum { margin-top: 2px; font-size: var(--text-sm); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ap-time { flex: none; font-size: 11px; color: var(--text-3); }
+.ap-bar { margin-top: 7px; height: 3px; border-radius: var(--r-full); background: var(--bg-soft); overflow: hidden; }
+.ap-bar-fill { height: 100%; border-radius: inherit; background: var(--accent); }
+.ap-more {
+  display: block; width: 100%;
+  margin-top: 6px; padding: 8px;
+  border-radius: var(--r-md);
+  text-align: center;
+  font-size: var(--text-sm); color: var(--accent);
+}
+.ap-more:hover { background: var(--accent-soft); }

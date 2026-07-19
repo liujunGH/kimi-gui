@@ -1,0 +1,112 @@
+/* ============================================================
+   kimi-gui 原型 v2 · 设计 token
+   浅色默认 / 深色 [data-theme="dark"]
+   品牌色保留 Kimi 蓝;中性色向桌面原生质感靠拢,去塑料感
+   ============================================================ */
+
+:root {
+  /* 字体:系统原生栈(SF on macOS),等宽用 ui-monospace */
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  /* 字号 */
+  --text-xs: 11.5px;
+  --text-sm: 12.5px;
+  --text-md: 13.5px;
+  --text-lg: 15px;
+  --text-xl: 17px;
+  --text-2xl: 20px;
+  --content-fs: 15px;
+
+  /* 间距(4px 网格) */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 20px; --sp-6: 24px; --sp-8: 32px;
+
+  /* 圆角 */
+  --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --r-xl: 16px; --r-full: 999px;
+
+  /* 浅色 · 中性(边框用透明度,不用死灰,深浅主题都柔和) */
+  --bg: #ffffff;
+  --bg-subtle: #fafbfc;
+  --bg-soft: #f3f5f7;
+  --sidebar-bg: #f7f7f5;
+  --hover: rgba(0, 0, 0, 0.045);
+  --active: rgba(0, 0, 0, 0.07);
+  --border: rgba(0, 0, 0, 0.09);
+  --border-soft: rgba(0, 0, 0, 0.055);
+  --bubble: rgba(0, 0, 0, 0.05);
+
+  --text: #20242a;
+  --text-2: rgba(32, 36, 42, 0.62);
+  --text-3: rgba(32, 36, 42, 0.4);
+
+  /* 品牌 */
+  --accent: #1783ff;
+  --accent-hover: #0b73ea;
+  --accent-soft: rgba(23, 131, 255, 0.09);
+  --accent-bd: rgba(23, 131, 255, 0.28);
+  --on-accent: #ffffff;
+
+  /* 语义 */
+  --success: #1a9e54;
+  --success-soft: rgba(26, 158, 84, 0.1);
+  --success-bd: rgba(26, 158, 84, 0.3);
+  --warning: #b96e05;
+  --warning-soft: rgba(185, 110, 5, 0.09);
+  --warning-bd: rgba(185, 110, 5, 0.3);
+  --danger: #d64545;
+  --danger-soft: rgba(214, 69, 69, 0.09);
+  --danger-bd: rgba(214, 69, 69, 0.3);
+
+  /* 阴影 */
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-md: 0 4px 16px rgba(16, 24, 40, 0.09);
+  --shadow-lg: 0 12px 40px rgba(16, 24, 40, 0.16);
+
+  /* 尺寸 */
+  --sidebar-w: 260px;
+  --toolbar-h: 48px;
+  --content-max: 768px;
+
+  /* 动效 */
+  --dur-1: 0.12s;
+  --dur-2: 0.18s;
+  --dur-3: 0.28s;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+[data-theme="dark"] {
+  --bg: #131518;
+  --bg-subtle: #181b1f;
+  --bg-soft: #1e2126;
+  --sidebar-bg: #15171a;
+  --hover: rgba(255, 255, 255, 0.05);
+  --active: rgba(255, 255, 255, 0.09);
+  --border: rgba(255, 255, 255, 0.1);
+  --border-soft: rgba(255, 255, 255, 0.06);
+  --bubble: rgba(255, 255, 255, 0.08);
+
+  --text: #e8eaee;
+  --text-2: rgba(232, 234, 238, 0.62);
+  --text-3: rgba(232, 234, 238, 0.4);
+
+  --accent: #4c9aff;
+  --accent-hover: #6badff;
+  --accent-soft: rgba(76, 154, 255, 0.15);
+  --accent-bd: rgba(76, 154, 255, 0.35);
+
+  --success: #3fb970;
+  --success-soft: rgba(63, 185, 112, 0.13);
+  --success-bd: rgba(63, 185, 112, 0.35);
+  --warning: #e0a338;
+  --warning-soft: rgba(224, 163, 56, 0.13);
+  --warning-bd: rgba(224, 163, 56, 0.35);
+  --danger: #e5636a;
+  --danger-soft: rgba(229, 99, 106, 0.13);
+  --danger-bd: rgba(229, 99, 106, 0.35);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.55);
+}

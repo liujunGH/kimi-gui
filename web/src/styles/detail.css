@@ -1,0 +1,87 @@
+/* ============================================================
+   detail.css · 按需右栏 Inspect(⌘I):线程 / 思考 / 工具 / 任务
+   Codex 式默认隐藏,滑出时覆盖在对话上(带阴影)
+   ============================================================ */
+
+.detail-pane {
+  position: absolute; top: 0; right: 0; bottom: 0;
+  width: 360px; max-width: 92%;
+  display: flex; flex-direction: column;
+  background: var(--bg);
+  border-left: 1px solid var(--border-soft);
+  z-index: 25;
+  transform: translateX(103%);
+  transition: transform var(--dur-3) var(--ease), box-shadow var(--dur-3) var(--ease);
+}
+.detail-pane.open { transform: none; box-shadow: var(--shadow-lg); }
+
+.dp-head {
+  flex: none;
+  display: flex; align-items: center; gap: 2px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.dp-tab {
+  padding: 5px 10px;
+  border-radius: var(--r-md);
+  font-size: var(--text-sm);
+  color: var(--text-2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--dur-1), color var(--dur-1);
+}
+.dp-tab:hover { background: var(--hover); color: var(--text); }
+.dp-tab.active { background: var(--active); color: var(--text); font-weight: 550; }
+.dp-close { margin-left: auto; }
+
+.dp-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; }
+.dp-pane { display: none; }
+.dp-pane.active { display: block; }
+
+.dp-section { margin-bottom: 20px; }
+.dp-label {
+  font-size: 10.5px; font-weight: 700;
+  letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 8px;
+}
+.dp-kv { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: var(--text-sm); }
+.dp-kv .k { flex: none; color: var(--text-3); }
+.dp-kv .v {
+  font-family: var(--font-mono); font-size: 12px;
+  text-align: right;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* token 用量条 */
+.ctx-bar { height: 5px; margin-top: 6px; border-radius: var(--r-full); background: var(--bg-soft); overflow: hidden; }
+.ctx-fill { height: 100%; border-radius: inherit; background: var(--success); }
+
+.dp-thinking-content { font-size: var(--text-sm); line-height: 1.7; color: var(--text-2); white-space: pre-wrap; }
+
+.dp-tool-item {
+  display: flex; align-items: center; gap: 9px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  font-size: var(--text-sm);
+}
+.dp-tool-item .tool-icon { width: 20px; height: 20px; }
+.dp-tool-item .t-name { font-family: var(--font-mono); font-weight: 600; font-size: 12px; }
+.dp-tool-item .t-detail {
+  flex: 1; min-width: 0;
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--text-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dp-tool-item .t-status { flex: none; display: grid; }
+.dp-tool-item .t-status .ic { width: 13px; height: 13px; color: var(--success); }
+
+.dp-task { display: flex; align-items: center; gap: 9px; padding: 5px 0; font-size: var(--text-md); }
+.dp-task .todo-state { width: 15px; height: 15px; }
+.dp-task .todo-state .ic { width: 14px; height: 14px; }
+.dp-task.done { color: var(--text-3); text-decoration: line-through; }
+.dp-task.done .todo-state { color: var(--success); }
+.dp-task.progress .todo-state { color: var(--accent); }
+.dp-task.pending .todo-state { color: var(--text-3); }
