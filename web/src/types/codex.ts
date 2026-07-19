@@ -105,6 +105,8 @@ export interface ConversationPaneProps {
   todosByTurn: Record<string /* turnId */, TodoView[]>;
   turnProgress?: { current: number; total: number; additions: number; deletions: number };
   running: boolean;
+  /** 文件路径链接点击回调(Markdown 内的 src/foo.ts 可点击) */
+  openFile?: (target: { path: string; line?: number }) => void;
 }
 
 export interface ConversationPaneEmits {

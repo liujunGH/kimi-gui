@@ -150,12 +150,17 @@ const todosByTurn = computed<Record<string, TodoView[]>>(() => {
 });
 const approvalCount = computed(() => (client.pendingApprovals.value ?? []).length);
 
-const thinkingFullText = computed(() =>
-  conversationTurns.value
+const thinkingFullText = computed(() => {
+  // 文件预览内容优先(点文件路径时临时显示)
+  if (filePreviewContent.value) return filePreviewContent.value;
+  return conversationTurns.value
     .flatMap((t) => (t.blocks ?? []).filter((b) => b.kind === 'thinking'))
     .map((b) => (b.kind === 'thinking' ? b.thinking : ''))
-    .join('\n\n'),
-);
+    .join('\n\n');
+});
+
+// 文件预览内容(简化版:复用 DetailPane thinking tab 的 pre 渲染)
+const filePreviewContent = ref('');
 const toolCalls = computed(() =>
   conversationTurns.value
     .flatMap((t) => (t.blocks ?? []).filter((b) => b.kind === 'tool'))
@@ -394,6 +399,18 @@ function onRenameSession() {
   if (title) void client.renameSession(id, title);
 }
 
+/** 文件路径链接点击 → 读文件内容 → 在 DetailPane 显示 */
+function onOpenFile(target: { path: string; line?: number }) {
+  void client.readFileContent(target.path).then((data) => {
+    if (data?.content) {
+      filePreviewContent.value = `// ${target.path}${target.line ? ':' + target.line : ''}\n\n${data.content}`;
+      ui.openDetail('thinking');
+    }
+  }).catch(() => {
+    toast(`无法读取 ${target.path}`);
+  });
+}
+
 /** 切模型:setModel + 设 daemon 默认(fire-and-forget) */
 async function onSetModel(id: string) {
   const switched = await client.setModel(id);
@@ -614,6 +631,7 @@ async function searchFiles(q: string) {
       :turns="conversationTurns"
       :todos-by-turn="todosByTurn"
       :running="conversationRunning"
+      :open-file="onOpenFile"
       @inspect="(tab) => ui.openDetail(tab)"
     />
 

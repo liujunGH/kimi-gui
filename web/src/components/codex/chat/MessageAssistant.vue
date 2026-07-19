@@ -25,8 +25,8 @@ const ui = useUIState();
 const globalThinking = computed(() => ui.globalThinking.value);
 
 const props = withDefaults(
-  defineProps<{ turn: ChatTurn; todos?: TodoView[]; running?: boolean }>(),
-  { todos: () => [], running: false },
+  defineProps<{ turn: ChatTurn; todos?: TodoView[]; running?: boolean; openFile?: (target: { path: string; line?: number }) => void }>(),
+  { todos: () => [], running: false, openFile: undefined },
 );
 const emit = defineEmits<{ (e: 'inspect', tab: 'thinking' | 'tools'): void }>();
 
@@ -81,6 +81,7 @@ function copyAll() {
         <Markdown
           :text="b.text"
           :streaming="props.running && i === lastTextIdx"
+          :open-file="props.openFile"
         />
       </div>
       <ToolCallCard v-else-if="b.kind === 'tool'" :call="b.tool" @inspect="emit('inspect', 'tools')" />

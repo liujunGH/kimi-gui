@@ -147,6 +147,7 @@ void emit;
           :turn="t"
           :todos="props.todosByTurn[t.id] ?? []"
           :running="props.running && t.id === lastTurnId"
+          :open-file="props.openFile"
           @inspect="(tab) => emit('inspect', tab)"
         />
       </template>
