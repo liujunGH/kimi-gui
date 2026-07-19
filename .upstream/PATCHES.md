@@ -49,6 +49,16 @@
 
 ---
 
+### `web/package.json`(2026-07-19 · ZCode · 轮次 3 阶段 B)
+
+**改动**:`dependencies` 加 `"@tauri-apps/api": "^2"`
+
+**原因**:web 是独立包(根的 @tauri-apps/api 装不到 web)。codex UI 要调 Tauri 命令(`invoke('daemon_info')` 拿 daemon base+token),web 必须依赖 @tauri-apps/api。
+
+**冲突风险**:低。这是纯 additive(加依赖,不改现有依赖版本)。官方将来若也加 @tauri-apps/api,我们 merge 时合并即可。
+
+---
+
 ## 未改但需关注的官方文件
 
 以下文件 fork 时**没改**,但轮次 1 阶段引入了新的引用关系:
