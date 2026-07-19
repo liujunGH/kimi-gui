@@ -18,6 +18,7 @@ import type {
 import { useUIState } from '../composables/codex/useUIState';
 import { useHotkeys } from '../composables/codex/useHotkeys';
 import { useTheme } from '../composables/codex/useTheme';
+import { useTauriDaemon } from '../composables/codex/useTauriDaemon';
 import AppShell from '../components/codex/AppShell.vue';
 import Sidebar from '../components/codex/sidebar/Sidebar.vue';
 import ConversationPane from '../components/codex/chat/ConversationPane.vue';
@@ -96,6 +97,10 @@ function togglePin(id: string) {
 // ---------------------------------------------------------------- Composer / 面板状态
 
 const ui = useUIState();
+
+// 轮次 3 阶段 C:挂载时调 daemon wire-up(Tauri 环境拿真 base,浏览器走 no-tauri)
+const tauri = useTauriDaemon();
+tauri.fetch().catch(() => {/* 静默:浏览器环境/daemon 未启动都正常 */});
 const { toast } = useToast();
 const { theme, toggle: toggleTheme } = useTheme();
 
@@ -270,6 +275,24 @@ function openFM(e: MouseEvent, file: string) {
           @open-side-task="ui.openSideTask('thread')"
         />
         <span class="toolbar-spacer"></span>
+        <!-- 轮次 3 阶段 C:daemon wire-up 状态指示(证明 B+D 端到端通) -->
+        <span
+          v-if="tauri.daemonInfo.value"
+          class="pill pill-success"
+          :title="`base: ${tauri.daemonInfo.value.base}`"
+        >
+          <span class="dot dot-done"></span>daemon 已连
+        </span>
+        <span
+          v-else-if="tauri.loading.value"
+          class="pill"
+          title="invoke('daemon_info') 中"
+        ><span class="dot dot-running"></span>连接中</span>
+        <span
+          v-else
+          class="pill"
+          :title="`error: ${tauri.error.value ?? '未知'}`"
+        >{{ tauri.error.value === 'no-tauri' ? '浏览器模式' : 'daemon 未连' }}</span>
         <div
           v-if="scene !== 'multi-agent'"
           class="toolbar-thinking-toggle"
