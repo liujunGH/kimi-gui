@@ -31,6 +31,8 @@ const props = withDefaults(
 
 const { reviewPaneOpen, closeReview } = useUIState();
 
+const emit = defineEmits<{ (e: 'select-file', path: string): void }>();
+
 const selected = ref(props.files[0]?.path ?? '');
 watch(
   () => props.files,
@@ -38,6 +40,10 @@ watch(
     if (!fs.some((f) => f.path === selected.value)) selected.value = fs[0]?.path ?? '';
   },
 );
+function selectFile(path: string) {
+  selected.value = path;
+  emit('select-file', path);
+}
 </script>
 
 <template>
@@ -56,11 +62,11 @@ watch(
         :key="f.path"
         class="rp-file"
         :class="{ active: f.path === selected }"
-        @click="selected = f.path"
+        @click="selectFile(f.path)"
       >
         <span class="rf-status" :class="f.status">{{ f.status }}</span>
         {{ f.path }}
-        <span class="rf-stats"
+        <span v-if="f.additions !== undefined" class="rf-stats"
           ><span class="add">+{{ f.additions }}</span
           ><span class="del">−{{ f.deletions }}</span></span
         >

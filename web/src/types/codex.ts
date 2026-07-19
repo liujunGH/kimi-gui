@@ -308,8 +308,9 @@ export interface QueuedPrompt {
 export interface ChangedFile {
   path: string;
   status: 'M' | 'A' | 'D' | 'R' | 'U' | 'C';
-  additions: number;
-  deletions: number;
+  /** 行级统计;未知(git_status 只有总量)时缺省,UI 不显示 */
+  additions?: number;
+  deletions?: number;
 }
 
 export interface DiffViewProps {

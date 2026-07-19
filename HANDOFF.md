@@ -702,3 +702,38 @@ permission: 'manual' | 'auto' | 'yolo';
 ## 待用户操作
 
 把 HANDOFF.md(含轮次 3.1 + 轮次 4a)转给 ZCode:复核入库,然后接轮次 4(上述 5 项数据流)。
+
+### 轮次 4b · kimi3 接管 GLM「无法修复」四项的实测结论 · 2026-07-19
+
+**GLM 报的 4 个跳过项,我逐项实测,结论:3 项可修(已完成),1 项真阻塞。**
+
+**1. @文件树 —— GLM 误判,daemon 有端点 ✅ 已修**
+- 实测:`POST /sessions/{id}/fs:search` 存在且可用(client.ts:970,官方 `useMentionMenu` 本来就用它,`useWorkspaceState.searchFiles` 已包装导出)
+- 实现:`MentionMenu` 加 `search` prop(防抖 250ms + 序号防乱序,服务端结果直驱);`Composer` 转发;`CodexApp` 接 `client.searchFiles`
+- 验证:`@CodexApp` → 真返回 `web/src/codex-app/CodexApp.vue`,Enter 回填 `@web/src/codex-app`
+
+**2. editQueued —— GLM 误判,队列本来就是纯客户端状态 ✅ 已修**
+- 实测:`rawState.queuedBySession` 全部是本地状态操作,无任何 daemon 依赖("daemon 不支持"不成立)
+- 实现:`Composer` `defineExpose({ setText })`,`qEdit` = setText 回填输入框 + `unqueue` 出队(对齐 Codex 的编辑语义:拉回输入框改完再发);队列内原地编辑如需可加 5 行 mutation,暂不需要
+
+**3. diff/ReviewPane —— GLM 说"映射复杂",其实数据全现成 ✅ 已修**
+- 实测:client 已有 `changes`(gitStatus entries 排好序)、`selectedDiffPath`、`loadFileDiff(path)`、`fileDiff`(官方 `DiffViewLine` 带真实行号)
+- 实现:`diffMapper.toDiffHunks`(真实行号分组)+ `ReviewPane` 加 `select-file` emit + `CodexApp` 挂载 + `statsByFile`(从选中文件 diff 算行级统计)+ 工具栏 Review 按钮 + ⌘B
+- 验证:kimi-gui 工作区 6 个真改动文件(CodexApp.vue +102、Composer.vue +13 −1 等),切 chip 换文件正常
+- 契约微调:additive——`ChangedFile.additions/deletions` 改为可选(git_status 只有总量时用行级统计补)
+
+**4. quota —— GLM 判断正确,真阻塞 ⚠️**
+- 实测:`/api/v1/{usage,quota,account,rate-limits,subscription,me}`、`/api/v2/usage` 全部 404;`/api/v1/config` 也无额度字段。**daemon(0.26)确实无额度端点**,待 daemon/上游支持
+- 缓解:`ContextMeter` 在 quota 为空时改显示 `client.sessionCost`(真实累计成本 USD)+「5h/周额度 待 daemon 支持」占位,不再显示假 0%
+
+**顺手修**:`ContextMeter` 模型名双重 provider 前缀(`kimi-code/kimi-code/x` → 显示 displayName)。
+
+**验证**:vue-tsc 全绿;`verify4b.mjs` 8 断言全绿(@搜索真实命中、回填、详情卡成本、Review 打开/改动 chip/diff 行/切文件);真机截图 `/tmp/4b-review.png` 确认。
+
+**git 状态**:CodexApp.vue + 组件(MentionMenu/Composer/ContextMeter/ReviewPane)+ `types/codex.ts`(ChangedFile 可选)+ `diffMapper.ts`,**未提交**,等 ZCode 统一入库。
+
+**另注**:ZCode 的 `7ff12aa fix(thinking)` 动了 kimi3 的思考组件,本轮未复核,建议双方互查一次。
+
+## 待用户操作
+
+把 HANDOFF.md(含轮次 4b)转给 ZCode:复核入库;quota 端点向上游/daemon 提需求;`7ff12aa` 的思考组件改动 kimi3 待复核。

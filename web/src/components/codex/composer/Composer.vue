@@ -40,6 +40,8 @@ const props = withDefaults(
       searchFiles?: (q: string) => Promise<FileEntry[]>;
       sessionTitle?: string;
       placeholder?: string;
+      /** 会话累计成本(USD),透传给 ContextMeter */
+      cost?: number;
     }
   >(),
   { builtin: () => [], skills: () => [], files: () => [], sessionTitle: '', placeholder: '' },
@@ -90,6 +92,15 @@ const placeholder = computed(() => {
   if (props.running && props.mode === 'steer') return '输入将立即插话到当前运行的轮次…';
   if (props.running) return '输入会排队 · 当前轮结束后自动发送下一条';
   return '给 Kimi 下达任务,⌘+Enter 发送';
+});
+
+/** ContextMeter 展示用的模型名:优先 models 里的 displayName,否则剥掉 provider 前缀 */
+const displayModelName = computed(() => {
+  const found = props.models.find((m) => m.id === props.currentModel);
+  if (found) return found.name;
+  return props.currentModel.includes('/')
+    ? (props.currentModel.split('/').pop() ?? props.currentModel)
+    : props.currentModel;
 });
 
 const canSend = computed(() => text.value.trim().length > 0);
@@ -164,8 +175,9 @@ defineExpose({ setText });
           :session-title="props.sessionTitle"
           :running="props.running"
           :permission="props.permission"
-          :model="props.currentModel"
+          :model="displayModelName"
           :effort="props.effort"
+          :cost="props.cost"
           @open-detail="emit('open-context-detail')"
         />
         <ModelPicker

@@ -11,7 +11,7 @@
  *
  * 数据边界:组件零 mock;context quota、文件树、diff/review 数据流等轮次 4(ZCode)。
  */
-import { computed, provide, ref } from 'vue';
+import { computed, provide, ref, watch } from 'vue';
 import { useKimiWebClient } from '../composables/useKimiWebClient';
 import { KIMI_CLIENT_KEY } from '../composables/codex/useKimiClient';
 import { useUIState } from '../composables/codex/useUIState';
@@ -21,7 +21,9 @@ import { SLASH_COMMANDS } from '../lib/slashCommands';
 import i18n from '../i18n';
 import type { ChatTurn, TodoView } from '../types';
 import type {
+  ChangedFile,
   ContextInfo,
+  DiffHunk,
   EffortLevel,
   ComposerMode,
   ModeFlags,
@@ -43,6 +45,8 @@ import WorkspacePicker from '../components/codex/layout/WorkspacePicker.vue';
 import Toast, { useToast } from '../components/codex/layout/Toast.vue';
 import AgentPanel from '../components/codex/agents/AgentPanel.vue';
 import SettingsPage from '../components/codex/settings/SettingsPage.vue';
+import ReviewPane from '../components/codex/diff/ReviewPane.vue';
+import { toDiffHunks } from '../components/codex/diff/diffMapper';
 import CodexIcon from '../components/codex/layout/CodexIcon.vue';
 
 // 1. 顶层 client 装配 + provide(整个 codex UI 的数据源)
@@ -95,6 +99,15 @@ useHotkeys([
     alt: true,
     handler: () => {
       if (client.activeSessionId.value) togglePin(client.activeSessionId.value);
+      return true;
+    },
+  },
+  {
+    key: 'b',
+    meta: true,
+    handler: () => {
+      if (!changedFiles.value.length) return;
+      ui.reviewPaneOpen.value ? ui.closeReview() : ui.openReview();
       return true;
     },
   },
@@ -275,11 +288,75 @@ function qSteer(i: number) {
   void client.steerPrompt(q.text);
   client.unqueue(i);
 }
-function qEdit(_i: number) {
-  toast('回填编辑待轮次 4(editQueued)');
+const composerRef = ref<InstanceType<typeof Composer> | null>(null);
+function qEdit(i: number) {
+  const q = queueItems.value[i];
+  if (!q) return;
+  composerRef.value?.setText(q.text);
+  client.unqueue(i);
 }
 function qRemove(i: number) {
   client.unqueue(i);
+}
+
+// ---------------------------------------------------------------- diff / ReviewPane(数据流,轮次 4b kimi3)
+
+function normStatus(s: string): ChangedFile['status'] {
+  const u = (s || 'M').toUpperCase();
+  if (u === '??') return 'A';
+  return (['M', 'A', 'D', 'R', 'U', 'C'] as const).includes(u as ChangedFile['status'])
+    ? (u as ChangedFile['status'])
+    : 'M';
+}
+
+/** 选中文件的行级统计(从它的 diff 算) */
+const statsByFile = ref<Record<string, { a: number; d: number }>>({});
+const changedFiles = computed<ChangedFile[]>(() =>
+  (client.changes.value ?? []).map((c) => {
+    const st = statsByFile.value[c.path];
+    return {
+      path: c.path,
+      status: normStatus(c.status),
+      ...(st ? { additions: st.a, deletions: st.d } : {}),
+    };
+  }),
+);
+const hunksByFile = computed<Record<string, DiffHunk[]>>(() => {
+  const p = client.selectedDiffPath.value;
+  if (!p) return {};
+  return { [p]: toDiffHunks(client.fileDiff.value ?? []) };
+});
+
+// 有改动时默认选第一个文件并拉它的 diff
+watch(
+  () => client.changes.value,
+  (cs) => {
+    if (cs?.length && !client.selectedDiffPath.value) void client.loadFileDiff(cs[0]!.path);
+  },
+  { immediate: true },
+);
+watch(
+  () => client.fileDiff.value,
+  (lines) => {
+    const p = client.selectedDiffPath.value;
+    if (!p || !lines) return;
+    let a = 0;
+    let d = 0;
+    for (const l of lines) {
+      if (l.type === 'add') a++;
+      else if (l.type === 'del') d++;
+    }
+    statsByFile.value = { ...statsByFile.value, [p]: { a, d } };
+  },
+);
+
+function onSelectDiffFile(path: string) {
+  void client.loadFileDiff(path);
+}
+
+async function searchFiles(q: string) {
+  const r = await client.searchFiles(q);
+  return (r ?? []).map((f) => ({ path: f.path, name: f.name, kind: 'file' as const }));
 }
 </script>
 
@@ -377,6 +454,16 @@ function qRemove(i: number) {
         <span class="dot dot-running" />连接中
       </span>
       <span v-else class="pill pill-warning"><span class="dot dot-waiting" />未连接</span>
+      <button
+        v-if="changedFiles.length"
+        class="btn"
+        title="Review pane ⌘B"
+        @click="ui.reviewPaneOpen.value ? ui.closeReview() : ui.openReview()"
+      >
+        <CodexIcon name="git-branch" />
+        Review
+        <span class="kbd">⌘B</span>
+      </button>
     </header>
 
     <!-- 对话流(审批卡由 MessageAssistant 按 turn.approval 内联渲染) -->
@@ -416,6 +503,7 @@ function qRemove(i: number) {
           @remove="(id) => qRemove(Number(id))"
         />
         <Composer
+          ref="composerRef"
           :running="conversationRunning"
           :mode="composerMode"
           :permission="composerPermission"
@@ -428,6 +516,8 @@ function qRemove(i: number) {
           :builtin="builtinCommands"
           :skills="composerSkills"
           :files="[]"
+          :search-files="searchFiles"
+          :cost="client.sessionCost.value ?? 0"
           :session-title="activeSession?.title ?? sidebarCurrentWs"
           @send="onSend"
           @set-mode="onComposerMode"
@@ -470,6 +560,15 @@ function qRemove(i: number) {
       :open="agentPanelOpen"
       @inspect="openTranscript"
       @close="agentPanelOpen = false"
+    />
+
+    <!-- Review pane(⌘B,有改动文件时出现) -->
+    <ReviewPane
+      v-if="changedFiles.length"
+      :files="changedFiles"
+      :hunks-by-file="hunksByFile"
+      :branch="client.gitInfo.value?.branch ?? ''"
+      @select-file="onSelectDiffFile"
     />
   </AppShell>
   <Toast />
