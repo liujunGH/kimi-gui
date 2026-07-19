@@ -1,0 +1,11 @@
+# pnpm workspace 配置
+#
+# 把 web/ 声明为 workspace 包,这样根目录 `pnpm install` 会连带装 web 的依赖,
+# `pnpm --filter @moonshot-ai/kimi-web xxx` 也能稳定工作(不靠 pnpm 隐式行为)。
+#
+# .upstream/kimi-code-src 是只读参考(完整官方仓库),不入 workspace:
+# 1. .gitignore 已排除
+# 2. 它是 monorepo,里面有 packages/ apps/,会被 pnpm 误识别成多个包
+# 3. 我们不需要它的依赖
+packages:
+  - 'web'

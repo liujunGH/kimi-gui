@@ -21,3 +21,11 @@ src-tauri/gen/
 
 # Upstream sync temp
 .upstream/tmp/
+
+# 上游官方源码(只读参考,不入我们的 git;通过 sync.sh 单独管理)
+.upstream/kimi-code-src/
+.upstream/kimi-code-src-next/
+
+# 工具缓存(playwright 截图 / ZCode session 状态)
+.playwright-mcp/
+.zcode/

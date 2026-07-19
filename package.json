@@ -1,0 +1,22 @@
+{
+  "name": "kimi-gui",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Kimi Code native desktop client (Tauri + Vue 3)",
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "web:dev": "pnpm --filter @moonshot-ai/kimi-web dev",
+    "web:build": "pnpm --filter @moonshot-ai/kimi-web build",
+    "web:typecheck": "pnpm --filter @moonshot-ai/kimi-web typecheck"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-opener": "^2"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}
