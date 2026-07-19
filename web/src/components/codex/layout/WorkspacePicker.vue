@@ -10,9 +10,20 @@ import type { WorkspaceView } from '../../../types';
 import CodexIcon from './CodexIcon.vue';
 
 const props = defineProps<{ workspaces: WorkspaceView[]; currentId: string }>();
-const emit = defineEmits<{ (e: 'select', id: string): void }>();
+const emit = defineEmits<{
+  (e: 'select', id: string): void;
+  (e: 'add-workspace', path: string): void;
+}>();
 
 const open = ref(false);
+
+function onAddWorkspace() {
+  const path = window.prompt('输入工作区路径(如 ~/project/my-app)');
+  if (path?.trim()) {
+    emit('add-workspace', path.trim());
+  }
+  open.value = false;
+}
 
 function onDocClick(e: MouseEvent) {
   if (!(e.target as HTMLElement | null)?.closest('.workspace-picker')) open.value = false;
@@ -55,6 +66,11 @@ onUnmounted(() => {
           <span class="mp-desc">{{ w.shortPath }}</span>
         </span>
         <CodexIcon v-if="w.id === props.currentId" name="check" class="mp-check" />
+      </button>
+      <div class="mp-sep"></div>
+      <button class="mp-item" @click="onAddWorkspace">
+        <span class="mi-ic"><CodexIcon name="plus" /></span>
+        <span class="mp-name">添加工作区…</span>
       </button>
     </div>
   </div>

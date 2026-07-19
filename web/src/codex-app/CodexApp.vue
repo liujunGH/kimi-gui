@@ -551,6 +551,7 @@ async function searchFiles(q: string) {
             :workspaces="client.workspacesView.value ?? []"
             :current-id="client.activeWorkspaceId.value ?? ''"
             @select="onPickWorkspace"
+            @add-workspace="(path: string) => void client.addWorkspaceByPath(path)"
           />
         </template>
       </Sidebar>
