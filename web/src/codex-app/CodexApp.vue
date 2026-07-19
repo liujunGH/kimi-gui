@@ -386,6 +386,14 @@ function handleCommand(cmd: string): void {
   }
 }
 
+/** 重命名当前 session */
+function onRenameSession() {
+  const id = client.activeSessionId.value;
+  if (!id) return;
+  const title = window.prompt('新标题', activeSession.value?.title ?? '');
+  if (title) void client.renameSession(id, title);
+}
+
 /** 切模型:setModel + 设 daemon 默认(fire-and-forget) */
 async function onSetModel(id: string) {
   const switched = await client.setModel(id);
@@ -551,7 +559,15 @@ async function searchFiles(q: string) {
     <!-- toolbar -->
     <header class="app-toolbar">
       <span class="toolbar-title">{{ activeSession?.title || sidebarCurrentWs || 'Kimi Code' }}</span>
-      <ThreadMenu @pin="togglePin(client.activeSessionId.value)" @open-side-task="ui.openSideTask('thread')" />
+      <ThreadMenu
+        @pin="togglePin(client.activeSessionId.value)"
+        @open-side-task="ui.openSideTask('thread')"
+        @rename="onRenameSession"
+        @archive="void client.archiveSession(client.activeSessionId.value)"
+        @copy="void client.exportSession()"
+        @fork="void client.forkSession()"
+        @export="void client.exportSession()"
+      />
       <span class="toolbar-spacer" />
       <span v-if="approvalCount" class="pill pill-warning">
         <span class="dot dot-waiting" />等待批准 · {{ approvalCount }} 项
