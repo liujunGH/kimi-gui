@@ -49,6 +49,7 @@ import AgentPanel from '../components/codex/agents/AgentPanel.vue';
 import SettingsPage from '../components/codex/settings/SettingsPage.vue';
 import ReviewPane from '../components/codex/diff/ReviewPane.vue';
 import OfficialModelPicker from '../components/settings/ModelPicker.vue';
+import Onboarding from '../components/settings/Onboarding.vue';
 import { toDiffHunks } from '../components/codex/diff/diffMapper';
 import CodexIcon from '../components/codex/layout/CodexIcon.vue';
 
@@ -71,6 +72,7 @@ const filter = ref<SessionFilter>('all');
 const pinnedIds = ref<string[]>([]);
 const composerMode = ref<ComposerMode>('queue');
 const settingsOpen = ref(false);
+const showOnboarding = ref(!client.onboarded.value);
 const agentPanelOpen = ref(false);
 
 function togglePin(id: string) {
@@ -744,6 +746,13 @@ async function searchFiles(q: string) {
       @select="onPickModelOverlay"
       @toggle-star="(id: string) => client.toggleStarModel(id)"
       @close="showModelPicker = false"
+    />
+
+    <!-- 首次引导(语言/主题/accent) -->
+    <Onboarding
+      v-if="showOnboarding"
+      @complete="() => { client.setOnboarded(true); showOnboarding = false; }"
+      @skip="() => { client.setOnboarded(true); showOnboarding = false; }"
     />
   </AppShell>
   <Toast />
