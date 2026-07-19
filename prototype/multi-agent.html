@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kimi Code · 多 Agent</title>
+<script>document.documentElement.dataset.theme = localStorage.getItem("proto-theme") || "light";</script>
+<link rel="stylesheet" href="styles/tokens.css">
+<link rel="stylesheet" href="styles/base.css">
+<link rel="stylesheet" href="styles/sidebar.css">
+<link rel="stylesheet" href="styles/conversation.css">
+<link rel="stylesheet" href="styles/composer.css">
+<script src="mock/shared.js" defer></script>
+</head>
+<body data-page="multi-agent">
+
+<div class="app">
+  <!-- ==================== 左栏 ==================== -->
+  <aside class="app-sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-logo">K</span>
+      <span class="brand-name">Kimi Code</span>
+      <button class="icon-btn brand-collapse" data-action="toggle-sidebar" title="折叠侧栏">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
+      </button>
+    </div>
+
+    <div class="sidebar-new">
+      <button class="new-task">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        新建任务
+      </button>
+    </div>
+
+    <div class="sidebar-search">
+      <div class="search-box">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.8-3.8"/></svg>
+        <span>搜索线程</span>
+        <span class="kbd">⌘K</span>
+      </div>
+    </div>
+
+    <div class="sidebar-list">
+      <!-- 工作区:kimi-gui -->
+      <section class="workspace-group">
+        <div class="workspace-header">
+          <button class="ws-toggle" title="折叠分组">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <span class="ws-name">kimi-gui</span>
+          <button class="ws-action" data-menu="ws-kimi" title="更多">
+            <svg class="ic" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+          </button>
+          <div class="ws-menu" data-id="ws-kimi">
+            <div class="menu-label">排序方式</div>
+            <button class="menu-item active" data-sort="recent">
+              <svg class="menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <span class="mi-label">最近编辑</span>
+            </button>
+            <button class="menu-item" data-sort="manual">
+              <svg class="menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <span class="mi-label">手动排序</span>
+            </button>
+            <button class="menu-item" data-sort="created">
+              <svg class="menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <span class="mi-label">创建时间</span>
+            </button>
+            <div class="menu-sep"></div>
+            <button class="menu-item"><span class="mi-label">重命名工作区</span></button>
+            <button class="menu-item"><span class="mi-label">复制路径</span></button>
+            <div class="menu-sep"></div>
+            <button class="menu-item"><span class="mi-label">归档工作区…</span></button>
+          </div>
+        </div>
+        <div class="ws-threads">
+          <div class="thread-row active">
+            <span class="dot dot-running"></span>
+            <span class="thread-title">/swarm 重构 4 个组件</span>
+            <span class="thread-meta">4 子</span>
+          </div>
+          <div class="thread-row thread-child">
+            <span class="dot dot-running"></span>
+            <span class="thread-title">refactor-thinking</span>
+          </div>
+          <div class="thread-row thread-child">
+            <span class="dot dot-running"></span>
+            <span class="thread-title">refactor-composer</span>
+          </div>
+          <div class="thread-row thread-child">
+            <span class="dot dot-waiting"></span>
+            <span class="thread-title">refactor-approval</span>
+          </div>
+          <div class="thread-row thread-child">
+            <span class="dot dot-done"></span>
+            <span class="thread-title">refactor-diff</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 工作区:my-api-server -->
+      <section class="workspace-group">
+        <div class="workspace-header">
+          <button class="ws-toggle" title="折叠分组">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <span class="ws-name">my-api-server</span>
+          <button class="ws-action" data-menu="ws-api" title="更多">
+            <svg class="ic" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+          </button>
+          <div class="ws-menu" data-id="ws-api">
+            <div class="menu-label">排序方式</div>
+            <button class="menu-item active" data-sort="recent">
+              <svg class="menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <span class="mi-label">最近编辑</span>
+            </button>
+            <button class="menu-item" data-sort="manual">
+              <svg class="menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <span class="mi-label">手动排序</span>
+            </button>
+            <div class="menu-sep"></div>
+            <button class="menu-item"><span class="mi-label">重命名工作区</span></button>
+            <button class="menu-item"><span class="mi-label">归档工作区…</span></button>
+          </div>
+        </div>
+        <div class="ws-threads">
+          <div class="thread-row">
+            <span class="dot dot-waiting"></span>
+            <span class="thread-title">添加 JWT 鉴权中间件</span>
+            <span class="thread-meta">待批准</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="sidebar-footer">
+      <a class="footer-link" href="settings.html">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        设置
+      </a>
+    </div>
+  </aside>
+
+  <!-- ==================== 主区 ==================== -->
+  <main class="app-main">
+    <header class="app-toolbar">
+      <span class="toolbar-title">/swarm 重构 4 个组件</span>
+      <span class="toolbar-spacer"></span>
+      <span class="pill pill-accent"><span class="dot dot-running"></span>2 运行 · 1 待输入 · 1 完成</span>
+    </header>
+
+    <div class="app-conversation">
+      <div class="conversation">
+
+        <!-- 用户消息 -->
+        <div class="msg-user">
+          <div class="u-bubble">/swarm 重构 4 个组件:ThinkingBlock、Composer、ApprovalCard、DiffView</div>
+          <div class="u-meta">15:02</div>
+        </div>
+
+        <!-- 助手消息:子 Agent 网格 -->
+        <div class="msg-assistant">
+          <div class="a-content">
+            <p>已拆分为 4 个子任务并行执行(点卡片钻取子 agent):</p>
+          </div>
+
+          <div class="subagent-grid">
+            <div class="subagent-card">
+              <div class="sa-head">
+                <span class="dot dot-running"></span>
+                <span class="sa-name">refactor-thinking</span>
+                <span class="sa-status">运行中</span>
+                <span class="sa-progress">7/12</span>
+              </div>
+              <div class="sa-body">正在重写流式渲染逻辑,思考块限高方案已确认…</div>
+              <div class="sa-bar"><div class="sa-bar-fill" style="width:58%"></div></div>
+            </div>
+
+            <div class="subagent-card">
+              <div class="sa-head">
+                <span class="dot dot-running"></span>
+                <span class="sa-name">refactor-composer</span>
+                <span class="sa-status">运行中</span>
+                <span class="sa-progress">5/15</span>
+              </div>
+              <div class="sa-body">双模切换布局已完成,正在接队列面板…</div>
+              <div class="sa-bar"><div class="sa-bar-fill" style="width:33%"></div></div>
+            </div>
+
+            <div class="subagent-card is-waiting">
+              <div class="sa-head">
+                <span class="dot dot-waiting"></span>
+                <span class="sa-name">refactor-approval</span>
+                <span class="sa-status">待输入</span>
+                <span class="sa-progress">2/9</span>
+              </div>
+              <div class="sa-body">审批按钮顺序用 [批准][本会话][拒绝][反馈] 还是 [批准][拒绝][本会话][反馈]?</div>
+              <div class="sa-bar"><div class="sa-bar-fill" style="width:22%"></div></div>
+            </div>
+
+            <div class="subagent-card is-done">
+              <div class="sa-head">
+                <span class="dot dot-done"></span>
+                <span class="sa-name">refactor-diff</span>
+                <span class="sa-status">已完成</span>
+                <span class="sa-progress">15/15</span>
+              </div>
+              <div class="sa-body">DiffView 高亮与 hunk 折叠已完成。</div>
+              <div class="sa-bar"><div class="sa-bar-fill" style="width:100%"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Composer(运行态:双模) -->
+    <div class="app-dock">
+      <div class="dock-inner">
+        <div class="composer is-running">
+          <div class="composer-modes">
+            <div class="mode-seg">
+              <button class="mode-btn active" data-placeholder="输入会排队 · 当前轮结束后自动发送下一条">
+                <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>
+                排队下轮
+              </button>
+              <button class="mode-btn mode-steer" data-placeholder="插话会立即注入当前轮 · Enter 发送">
+                <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4"/><path d="M5 4h12l-2.5 4L17 12H5"/></svg>
+                插话 steer
+              </button>
+            </div>
+            <span class="mode-hint">2 个 agent 运行中</span>
+          </div>
+          <div class="composer-input">
+            <textarea rows="1" placeholder="输入会排队 · 当前轮结束后自动发送下一条"></textarea>
+          </div>
+          <div class="composer-toolbar">
+            <div class="toolbar-group">
+              <button class="perm-pill" title="权限模式:逐条确认">
+                <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-3.6 8-10V5.5L12 2 4 5.5V12c0 6.4 8 10 8 10z"/></svg>
+                逐条确认
+                <svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+              </button>
+            </div>
+            <div class="toolbar-group right">
+              <button class="model-pill" title="模型">
+                Kimi K2<span class="model-thinking">&nbsp;· 思考</span>
+                <svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+              </button>
+              <button class="composer-send stop" title="停止">
+                <svg class="ic" viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- 侧栏折叠后的唯一展开入口 -->
+<button class="sidebar-expand-btn" data-action="toggle-sidebar" title="展开侧栏">
+  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
+</button>
+
+</body>
+</html>

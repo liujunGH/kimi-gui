@@ -1,0 +1,105 @@
+/* ============================================================
+   thinking.css · 思考链:内联折叠 + 顶栏全局开关 + 流式自动展开
+   修 Kimi 爬屏痛点;超 Codex(它默认不显示思考)
+   ============================================================ */
+
+.think { position: relative; padding-left: 15px; }
+.think::before {
+  content: "";
+  position: absolute; left: 0; top: 5px; bottom: 5px;
+  width: 2px; border-radius: 2px;
+  background: var(--border);
+  transition: background var(--dur-2);
+}
+.think.thinking::before { background: var(--accent); animation: rail-pulse 1.6s var(--ease) infinite; }
+@keyframes rail-pulse { 50% { opacity: 0.45; } }
+
+/* 折叠摘要行 */
+.think-summary {
+  display: flex; align-items: center; gap: 7px;
+  padding: 3px 0;
+  cursor: pointer; user-select: none;
+  font-size: var(--text-md);
+  color: var(--text-2);
+  border-radius: var(--r-sm);
+}
+.think-summary:hover { color: var(--text); }
+.think-chevron { width: 14px; height: 14px; flex: none; display: grid; place-items: center; color: var(--text-3); }
+.think-chevron .ic { width: 12px; height: 12px; transition: transform var(--dur-2) var(--ease); }
+.think.open .think-chevron .ic { transform: rotate(90deg); }
+.think-label { font-weight: 550; }
+.think.thinking .think-label { color: var(--accent); }
+.think-teaser {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--text-sm); color: var(--text-3);
+}
+.think.open .think-teaser { display: none; }
+.think-time { flex: none; font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
+
+/* 展开体:max-height 过渡;流式中限高 240px 不爬屏 */
+.think-body { max-height: 0; overflow: hidden; transition: max-height var(--dur-3) var(--ease); }
+.think.open .think-body { max-height: 480px; overflow-y: auto; }
+.think.thinking .think-body { max-height: 240px; overflow-y: auto; }
+.think-content {
+  padding: 8px 0 6px;
+  font-size: var(--text-md); line-height: 1.65;
+  color: var(--text-2);
+  white-space: pre-wrap;
+}
+.think-content + .think-content { border-top: 1px dashed var(--border-soft); }
+.think.thinking .think-content:last-of-type::after {
+  content: " ▋";
+  color: var(--accent);
+  animation: blink 1s steps(1) infinite;
+}
+
+/* steer 后:思考块顶部的"用户引导"标记 */
+.think-user-steer {
+  display: flex; align-items: flex-start; gap: 8px;
+  margin: 4px 0 8px;
+  padding: 8px 11px;
+  border-radius: var(--r-md);
+  background: var(--warning-soft);
+  border: 1px solid var(--warning-bd);
+  font-size: var(--text-sm);
+}
+.steer-icon { flex: none; color: var(--warning); margin-top: 1px; display: grid; }
+.steer-icon .ic { width: 13px; height: 13px; }
+.steer-label {
+  flex: none; margin-top: 1.5px;
+  font-size: 10.5px; font-weight: 700;
+  letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--warning);
+}
+.steer-text { color: var(--text); }
+
+/* 顶栏全局思考开关 */
+.toolbar-thinking-toggle {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 9px;
+  border-radius: var(--r-md);
+  font-size: var(--text-sm);
+  color: var(--text-2);
+  cursor: pointer; user-select: none;
+}
+.toolbar-thinking-toggle:hover { background: var(--hover); }
+.tt-switch {
+  position: relative;
+  width: 26px; height: 15px; flex: none;
+  border-radius: var(--r-full);
+  background: rgba(0, 0, 0, 0.16);
+  transition: background var(--dur-2);
+}
+[data-theme="dark"] .tt-switch { background: rgba(255, 255, 255, 0.2); }
+.tt-switch::after {
+  content: "";
+  position: absolute; left: 2px; top: 2px;
+  width: 11px; height: 11px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform var(--dur-2) var(--ease);
+}
+.toolbar-thinking-toggle.on .tt-switch { background: var(--accent); }
+.toolbar-thinking-toggle.on .tt-switch::after { transform: translateX(11px); }

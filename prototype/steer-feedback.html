@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kimi Code · 插话反馈</title>
+<script>document.documentElement.dataset.theme = localStorage.getItem("proto-theme") || "light";</script>
+<link rel="stylesheet" href="styles/tokens.css">
+<link rel="stylesheet" href="styles/base.css">
+<link rel="stylesheet" href="styles/sidebar.css">
+<link rel="stylesheet" href="styles/conversation.css">
+<link rel="stylesheet" href="styles/thinking.css">
+<link rel="stylesheet" href="styles/composer.css">
+<script src="mock/shared.js" defer></script>
+</head>
+<body data-page="steer-feedback">
+
+<div class="app">
+  <!-- ==================== 左栏 ==================== -->
+  <aside class="app-sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-logo">K</span>
+      <span class="brand-name">Kimi Code</span>
+      <button class="icon-btn brand-collapse" data-action="toggle-sidebar" title="折叠侧栏">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
+      </button>
+    </div>
+
+    <div class="sidebar-new">
+      <button class="new-task">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        新建任务
+      </button>
+    </div>
+
+    <div class="sidebar-search">
+      <div class="search-box">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.8-3.8"/></svg>
+        <span>搜索线程</span>
+        <span class="kbd">⌘K</span>
+      </div>
+    </div>
+
+    <div class="sidebar-list">
+      <!-- 工作区:kimi-gui -->
+      <section class="workspace-group">
+        <div class="workspace-header">
+          <button class="ws-toggle" title="折叠分组">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <span class="ws-name">kimi-gui</span>
+          <button class="ws-action" data-menu="ws-kimi" title="更多">
+            <svg class="ic" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+          </button>
+          <div class="ws-menu" data-id="ws-kimi">
+            <div class="menu-label">排序方式</div>
+            <button class="menu-item active" data-sort="recent">
+              <svg class="menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <span class="mi-label">最近编辑</span>
+            </button>
+            <button class="menu-item" data-sort="manual">
+              <svg class="menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <span class="mi-label">手动排序</span>
+            </button>
+            <button class="menu-item" data-sort="created">
+              <svg class="menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <span class="mi-label">创建时间</span>
+            </button>
+            <div class="menu-sep"></div>
+            <button class="menu-item"><span class="mi-label">重命名工作区</span></button>
+            <button class="menu-item"><span class="mi-label">复制路径</span></button>
+            <div class="menu-sep"></div>
+            <button class="menu-item"><span class="mi-label">归档工作区…</span></button>
+          </div>
+        </div>
+        <div class="ws-threads">
+          <div class="thread-row active">
+            <span class="dot dot-running"></span>
+            <span class="thread-title">重构 Composer 双模交互</span>
+            <span class="thread-meta">运行中</span>
+          </div>
+          <div class="thread-row">
+            <span class="dot dot-done"></span>
+            <span class="thread-title">DiffView 重做</span>
+            <span class="thread-meta">1h</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 工作区:my-api-server -->
+      <section class="workspace-group">
+        <div class="workspace-header">
+          <button class="ws-toggle" title="折叠分组">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <span class="ws-name">my-api-server</span>
+          <button class="ws-action" data-menu="ws-api" title="更多">
+            <svg class="ic" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+          </button>
+          <div class="ws-menu" data-id="ws-api">
+            <div class="menu-label">排序方式</div>
+            <button class="menu-item active" data-sort="recent">
+              <svg class="menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <span class="mi-label">最近编辑</span>
+            </button>
+            <button class="menu-item" data-sort="manual">
+              <svg class="menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <span class="mi-label">手动排序</span>
+            </button>
+            <div class="menu-sep"></div>
+            <button class="menu-item"><span class="mi-label">重命名工作区</span></button>
+            <button class="menu-item"><span class="mi-label">归档工作区…</span></button>
+          </div>
+        </div>
+        <div class="ws-threads">
+          <div class="thread-row">
+            <span class="dot dot-waiting"></span>
+            <span class="thread-title">添加 JWT 鉴权中间件</span>
+            <span class="thread-meta">待批准</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 工作区:blog -->
+      <section class="workspace-group ws-closed">
+        <div class="workspace-header">
+          <button class="ws-toggle" title="展开分组">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <span class="ws-name">blog</span>
+          <button class="ws-action" data-menu="ws-blog" title="更多">
+            <svg class="ic" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+          </button>
+          <div class="ws-menu" data-id="ws-blog">
+            <div class="menu-label">排序方式</div>
+            <button class="menu-item active" data-sort="recent">
+              <svg class="menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <span class="mi-label">最近编辑</span>
+            </button>
+            <div class="menu-sep"></div>
+            <button class="menu-item"><span class="mi-label">归档工作区…</span></button>
+          </div>
+        </div>
+        <div class="ws-threads">
+          <div class="thread-row">
+            <span class="dot dot-done"></span>
+            <span class="thread-title">部署到 Vercel</span>
+            <span class="thread-meta">3d</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="sidebar-footer">
+      <a class="footer-link" href="settings.html">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        设置
+      </a>
+    </div>
+  </aside>
+
+  <!-- ==================== 主区 ==================== -->
+  <main class="app-main">
+    <header class="app-toolbar">
+      <span class="toolbar-title">重构 Composer 双模交互</span>
+      <span class="toolbar-spacer"></span>
+      <div class="toolbar-thinking-toggle on" title="全局思考开关">
+        <span>思考</span>
+        <span class="tt-switch"></span>
+      </div>
+      <span class="pill pill-accent"><span class="dot dot-running"></span>运行中 · 23s</span>
+    </header>
+
+    <div class="app-conversation">
+      <div class="conversation">
+
+        <!-- 用户消息(运行中插进来的那条 steer) -->
+        <div class="msg-user">
+          <div class="u-bubble">插话 steer 的按钮用 warning 色高亮,跟排队区分开。</div>
+          <div class="u-meta">14:35</div>
+        </div>
+
+        <!-- 助手消息(收到 steer 后的当前轮,仍在运行) -->
+        <div class="msg-assistant">
+
+          <!-- 思考块(流式中自动展开,顶部标记「用户引导」) -->
+          <div class="think thinking open">
+            <div class="think-summary">
+              <span class="think-chevron"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span>
+              <span class="think-label">思考中</span>
+              <span class="think-teaser">收到用户引导:steer 按钮改 warning 配色,与排队区分…</span>
+              <span class="think-time">23s</span>
+            </div>
+            <div class="think-body">
+              <div class="think-user-steer">
+                <span class="steer-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4"/><path d="M5 4h12l-2.5 4L17 12H5"/></svg></span>
+                <span class="steer-label">用户引导</span>
+                <span class="steer-text">插话 steer 的按钮用 warning 色高亮,跟排队区分开。</span>
+              </div>
+              <div class="think-content">收到引导,先停下配色方案的收尾:现在 .mode-steer.active 只是普通白底,和「排队下轮」的高亮几乎一样,运行中快速操作时容易误插话,这正是要修的点。</div>
+              <div class="think-content">调整:.mode-btn.mode-steer.active 改为 warning-soft 底 + warning 字,去掉投影,与排队的 accent 蓝中性高亮拉开;mode-steer-on 下 textarea 的 placeholder 同步染 warning 色,输入前就有预期。只改 composer.css,不动 token。</div>
+            </div>
+          </div>
+
+          <!-- 正文 -->
+          <div class="a-content">
+            <p>收到,已切换 steer 按钮配色:</p>
+          </div>
+
+          <!-- 工具调用卡(进行中) -->
+          <div class="tool-call">
+            <div class="tool-head">
+              <span class="tool-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg></span>
+              <span class="tool-name">edit_file</span>
+              <span class="tool-detail">composer.css · +12 −6</span>
+              <span class="tool-status"><span class="dot dot-running"></span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dock:队列指示器 + 队列面板 + steer 反馈气泡 + Composer(运行态) -->
+    <div class="app-dock">
+      <div class="dock-inner">
+
+        <!-- 队列指示器(open:chevron 已旋转) -->
+        <div class="queue-indicator open">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8.5 6h12M8.5 12h12M8.5 18h12"/><path d="M3.5 6h1.5M3.5 12h1.5M3.5 18h1.5"/></svg>
+          <span class="qi-count">2 条</span>排队
+          <span class="qi-chevron"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+        </div>
+
+        <!-- 队列面板(open:常显,可拖拽重排) -->
+        <div class="queue-panel open">
+          <div class="qp-head">
+            消息队列
+            <span class="qp-hint">2 条 · 拖拽重排</span>
+          </div>
+          <div class="qp-row">
+            <span class="qp-grip" title="拖拽重排"><svg class="ic" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg></span>
+            <span class="qp-num">01</span>
+            <span class="qp-text">补充 steer 模式的快捷键说明</span>
+            <span class="qp-actions">
+              <button class="qp-steer" data-action="qp-steer" title="转为引导:立即插话到当前轮">
+                <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 6 6v2"/></svg>
+                引导
+              </button>
+              <button class="icon-btn" data-action="qp-edit" title="编辑">
+                <svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+              </button>
+              <button class="icon-btn" data-action="qp-del" title="删除">
+                <svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+              </button>
+            </span>
+          </div>
+          <div class="qp-row">
+            <span class="qp-grip" title="拖拽重排"><svg class="ic" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg></span>
+            <span class="qp-num">02</span>
+            <span class="qp-text">review 一下这轮的 diff</span>
+            <span class="qp-actions">
+              <button class="qp-steer" data-action="qp-steer" title="转为引导:立即插话到当前轮">
+                <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 6 6v2"/></svg>
+                引导
+              </button>
+              <button class="icon-btn" data-action="qp-edit" title="编辑">
+                <svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+              </button>
+              <button class="icon-btn" data-action="qp-del" title="删除">
+                <svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+              </button>
+            </span>
+          </div>
+        </div>
+
+        <!-- steer 反馈气泡(插话成功后短暂出现) -->
+        <div class="steer-feedback">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4"/><path d="M5 4h12l-2.5 4L17 12H5"/></svg>
+          <span>已插话到当前轮 · 1 段引导</span>
+        </div>
+
+        <!-- Composer(运行态,停在插话模式) -->
+        <div class="composer is-running mode-steer-on">
+          <div class="composer-modes">
+            <div class="mode-seg">
+              <button class="mode-btn" data-placeholder="先排队,当前轮结束后自动发送…">
+                <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8.5 6h12M8.5 12h12M8.5 18h12"/><path d="M3.5 6h1.5M3.5 12h1.5M3.5 18h1.5"/></svg>
+                排队下轮
+              </button>
+              <button class="mode-btn mode-steer active" data-placeholder="输入将立即插话到当前运行的轮次…">
+                <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4"/><path d="M5 4h12l-2.5 4L17 12H5"/></svg>
+                插话 steer
+              </button>
+            </div>
+            <span class="mode-hint hint-warning">已发送 · 仍在插话模式</span>
+          </div>
+          <div class="composer-input">
+            <textarea rows="1" placeholder="输入将立即插话到当前运行的轮次…"></textarea>
+          </div>
+          <div class="composer-toolbar">
+            <div class="toolbar-group">
+              <button class="perm-pill" title="权限模式:逐条确认">
+                <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-3.6 8-10V5.5L12 2 4 5.5V12c0 6.4 8 10 8 10z"/></svg>
+                逐条确认
+                <svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+              </button>
+            </div>
+            <div class="toolbar-group right">
+              <button class="model-pill" title="模型">
+                Kimi K2<span class="model-thinking">&nbsp;· 思考</span>
+                <svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+              </button>
+              <button class="composer-send stop" title="停止">
+                <svg class="ic" viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- 侧栏折叠后的唯一展开入口 -->
+<button class="sidebar-expand-btn" data-action="toggle-sidebar" title="展开侧栏">
+  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
+</button>
+
+</body>
+</html>

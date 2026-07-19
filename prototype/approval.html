@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kimi Code · 审批</title>
+<script>document.documentElement.dataset.theme = localStorage.getItem("proto-theme") || "light";</script>
+<link rel="stylesheet" href="styles/tokens.css">
+<link rel="stylesheet" href="styles/base.css">
+<link rel="stylesheet" href="styles/sidebar.css">
+<link rel="stylesheet" href="styles/conversation.css">
+<link rel="stylesheet" href="styles/thinking.css">
+<link rel="stylesheet" href="styles/composer.css">
+<link rel="stylesheet" href="styles/approval.css">
+<link rel="stylesheet" href="styles/diff.css">
+<script src="mock/shared.js" defer></script>
+</head>
+<body data-page="approval">
+
+<div class="app">
+  <!-- ==================== 左栏 ==================== -->
+  <aside class="app-sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-logo">K</span>
+      <span class="brand-name">Kimi Code</span>
+      <button class="icon-btn brand-collapse" data-action="toggle-sidebar" title="折叠侧栏">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
+      </button>
+    </div>
+
+    <div class="sidebar-new">
+      <button class="new-task">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        新建任务
+      </button>
+    </div>
+
+    <div class="sidebar-search">
+      <div class="search-box">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.8-3.8"/></svg>
+        <span>搜索线程</span>
+        <span class="kbd">⌘K</span>
+      </div>
+    </div>
+
+    <div class="sidebar-list">
+      <!-- 工作区:my-api-server -->
+      <section class="workspace-group">
+        <div class="workspace-header">
+          <button class="ws-toggle" title="折叠分组">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <span class="ws-name">my-api-server</span>
+          <button class="ws-action" data-menu="ws-api" title="更多">
+            <svg class="ic" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+          </button>
+          <div class="ws-menu" data-id="ws-api">
+            <div class="menu-label">排序方式</div>
+            <button class="menu-item active" data-sort="recent">
+              <svg class="menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <span class="mi-label">最近编辑</span>
+            </button>
+            <button class="menu-item" data-sort="manual">
+              <svg class="menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <span class="mi-label">手动排序</span>
+            </button>
+            <div class="menu-sep"></div>
+            <button class="menu-item"><span class="mi-label">归档工作区…</span></button>
+          </div>
+        </div>
+        <div class="ws-threads">
+          <div class="thread-row active">
+            <span class="dot dot-waiting"></span>
+            <span class="thread-title">添加 JWT 鉴权中间件</span>
+            <span class="thread-meta">待批准</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 工作区:kimi-gui -->
+      <section class="workspace-group">
+        <div class="workspace-header">
+          <button class="ws-toggle" title="折叠分组">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <span class="ws-name">kimi-gui</span>
+          <button class="ws-action" data-menu="ws-gui" title="更多">
+            <svg class="ic" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+          </button>
+          <div class="ws-menu" data-id="ws-gui">
+            <div class="menu-label">排序方式</div>
+            <button class="menu-item active" data-sort="recent">
+              <svg class="menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <span class="mi-label">最近编辑</span>
+            </button>
+            <button class="menu-item" data-sort="manual">
+              <svg class="menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <span class="mi-label">手动排序</span>
+            </button>
+            <div class="menu-sep"></div>
+            <button class="menu-item"><span class="mi-label">归档工作区…</span></button>
+          </div>
+        </div>
+        <div class="ws-threads">
+          <div class="thread-row">
+            <span class="dot dot-done"></span>
+            <span class="thread-title">重构 Composer 双模交互</span>
+            <span class="thread-meta">2m</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="sidebar-footer">
+      <a class="footer-link" href="settings.html">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1-1.51H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        设置
+      </a>
+    </div>
+  </aside>
+
+  <!-- ==================== 主区 ==================== -->
+  <main class="app-main">
+    <header class="app-toolbar">
+      <span class="toolbar-title">添加 JWT 鉴权中间件</span>
+      <span class="toolbar-spacer"></span>
+      <div class="toolbar-thinking-toggle on" title="全局思考开关">
+        <span>思考</span>
+        <span class="tt-switch"></span>
+      </div>
+      <span class="pill pill-warning"><span class="dot dot-waiting"></span>等待批准 · 2 项</span>
+    </header>
+
+    <div class="app-conversation">
+      <div class="conversation">
+
+        <!-- 用户消息 -->
+        <div class="msg-user">
+          <div class="u-bubble">给 /api 下的路由都加上 JWT 鉴权中间件,密钥从环境变量读。</div>
+          <div class="u-meta">14:40</div>
+        </div>
+
+        <!-- 助手消息 -->
+        <div class="msg-assistant">
+
+          <!-- 思考块(已完成,展开态) -->
+          <div class="think open">
+            <div class="think-summary">
+              <span class="think-chevron"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span>
+              <span class="think-label">思考过程</span>
+              <span class="think-teaser">拆成两步:先装 jsonwebtoken,再改 routes/api.js…</span>
+              <span class="think-time">6s</span>
+            </div>
+            <div class="think-body">
+              <div class="think-content">拆成两步操作:第一步安装 jsonwebtoken 依赖,第二步修改 src/routes/api.js,删掉旧的自制 auth,统一在 /api 前缀上挂 authMiddleware。</div>
+              <div class="think-content">密钥从 process.env.JWT_SECRET 读取,不写死;启动时若环境变量缺失直接报错退出,避免弱密钥上线。两步都有副作用,先给用户审批。</div>
+            </div>
+          </div>
+
+          <!-- 正文 -->
+          <div class="a-content">
+            <p>需要两步操作,都等你批准:</p>
+          </div>
+
+          <!-- 审批卡 1:shell 命令 -->
+          <div class="approval">
+            <div class="approval-head">
+              <span class="ah-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg></span>
+              <span class="ah-kind">运行命令?</span>
+              <span class="ah-path">npm install jsonwebtoken@9.0.2</span>
+              <span class="ah-required">Approval Required</span>
+            </div>
+            <div class="approval-body">
+              <div class="body-shell">
+                <div class="shell-cmd"><span class="shell-prompt">$ </span>npm install jsonwebtoken@9.0.2</div>
+                <div class="shell-cwd">cwd: ~/project/my-api-server</div>
+              </div>
+            </div>
+            <div class="approval-actions">
+              <button class="act-btn primary" data-key="approve">批准 <span class="kbd">Y</span></button>
+              <button class="act-btn" data-key="session">本会话 <span class="kbd">A</span></button>
+              <button class="act-btn reject" data-key="reject">拒绝 <span class="kbd">N</span></button>
+              <button class="act-btn feedback" data-key="feedback">反馈 <span class="kbd">P</span></button>
+            </div>
+          </div>
+
+          <!-- 审批卡 2:diff 修改 -->
+          <div class="approval">
+            <div class="approval-head">
+              <span class="ah-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><path d="M10 13l-2 2 2 2"/><path d="M14 13l2 2-2 2"/></svg></span>
+              <span class="ah-kind">应用修改?</span>
+              <span class="ah-path">src/routes/api.js · +9 −1</span>
+              <span class="ah-required">Approval Required</span>
+            </div>
+            <div class="approval-body">
+              <div class="body-diff">
+                <div class="diff-lines">
+                  <div class="dl dl-hunk"><span class="dl-gutter"></span><span class="dl-gutter"></span><span class="dl-sign"></span><span class="dl-text">@@ -12,6 +12,9 @@</span></div>
+                  <div class="dl"><span class="dl-gutter">12</span><span class="dl-gutter">12</span><span class="dl-sign"></span><span class="dl-text"><span class="tk-kw">import</span> express <span class="tk-kw">from</span> <span class="tk-str">'express'</span><span class="tk-punc">;</span></span></div>
+                  <div class="dl"><span class="dl-gutter">13</span><span class="dl-gutter">13</span><span class="dl-sign"></span><span class="dl-text"></span></div>
+                  <div class="dl"><span class="dl-gutter">14</span><span class="dl-gutter">14</span><span class="dl-sign"></span><span class="dl-text"><span class="tk-kw">const</span> router <span class="tk-punc">=</span> express<span class="tk-punc">.</span><span class="tk-fn">Router</span><span class="tk-punc">();</span></span></div>
+                  <div class="dl dl-del"><span class="dl-gutter">15</span><span class="dl-gutter"></span><span class="dl-sign">−</span><span class="dl-text"><span class="tk-kw">const</span> auth <span class="tk-punc">=</span> <span class="tk-fn">require</span><span class="tk-punc">(</span><span class="tk-str">'../auth'</span><span class="tk-punc">);</span></span></div>
+                  <div class="dl dl-add"><span class="dl-gutter"></span><span class="dl-gutter">15</span><span class="dl-sign">+</span><span class="dl-text"><span class="tk-kw">import</span> <span class="tk-punc">{</span> authMiddleware <span class="tk-punc">}</span> <span class="tk-kw">from</span> <span class="tk-str">'./auth.js'</span><span class="tk-punc">;</span></span></div>
+                  <div class="dl dl-add"><span class="dl-gutter"></span><span class="dl-gutter">16</span><span class="dl-sign">+</span><span class="dl-text"><span class="tk-cmt">// 密钥从环境变量读取</span></span></div>
+                  <div class="dl dl-add"><span class="dl-gutter"></span><span class="dl-gutter">17</span><span class="dl-sign">+</span><span class="dl-text">router<span class="tk-punc">.</span><span class="tk-fn">use</span><span class="tk-punc">(</span><span class="tk-str">'/api'</span><span class="tk-punc">,</span> authMiddleware<span class="tk-punc">);</span></span></div>
+                  <div class="dl dl-add"><span class="dl-gutter"></span><span class="dl-gutter">18</span><span class="dl-sign">+</span><span class="dl-text"><span class="tk-cmt">// 以下路由全部需要鉴权</span></span></div>
+                  <div class="dl"><span class="dl-gutter">16</span><span class="dl-gutter">19</span><span class="dl-sign"></span><span class="dl-text"></span></div>
+                  <div class="dl"><span class="dl-gutter">17</span><span class="dl-gutter">20</span><span class="dl-sign"></span><span class="dl-text">router<span class="tk-punc">.</span><span class="tk-fn">get</span><span class="tk-punc">(</span><span class="tk-str">'/users'</span><span class="tk-punc">,</span> <span class="tk-punc">(</span>req<span class="tk-punc">,</span> res<span class="tk-punc">)</span> <span class="tk-punc">=&gt;</span> <span class="tk-punc">{</span></span></div>
+                </div>
+              </div>
+            </div>
+            <div class="approval-actions">
+              <button class="act-btn primary" data-key="approve">批准 <span class="kbd">Y</span></button>
+              <button class="act-btn" data-key="session">本会话 <span class="kbd">A</span></button>
+              <button class="act-btn reject" data-key="reject">拒绝 <span class="kbd">N</span></button>
+              <button class="act-btn feedback" data-key="feedback">反馈 <span class="kbd">P</span></button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Composer(空闲态,审批不阻塞输入) -->
+    <div class="app-dock">
+      <div class="dock-inner">
+        <div class="composer">
+          <div class="composer-input">
+            <textarea rows="1" placeholder="等待审批中 · 可继续输入下一条消息…"></textarea>
+          </div>
+          <div class="composer-toolbar">
+            <div class="toolbar-group">
+              <button class="perm-pill" title="权限模式:逐条确认">
+                <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-3.6 8-10V5.5L12 2 4 5.5V12c0 6.4 8 10 8 10z"/></svg>
+                逐条确认
+                <svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+              </button>
+            </div>
+            <div class="toolbar-group right">
+              <button class="model-pill" title="模型">
+                Kimi K2<span class="model-thinking">&nbsp;· 思考</span>
+                <svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+              </button>
+              <button class="composer-send" title="发送 ⌘+Enter">
+                <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- 侧栏折叠后的唯一展开入口 -->
+<button class="sidebar-expand-btn" data-action="toggle-sidebar" title="展开侧栏">
+  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
+</button>
+
+</body>
+</html>

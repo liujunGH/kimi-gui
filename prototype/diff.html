@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kimi Code · Diff</title>
+<script>document.documentElement.dataset.theme = localStorage.getItem("proto-theme") || "light";</script>
+<link rel="stylesheet" href="styles/tokens.css">
+<link rel="stylesheet" href="styles/base.css">
+<link rel="stylesheet" href="styles/sidebar.css">
+<link rel="stylesheet" href="styles/conversation.css">
+<link rel="stylesheet" href="styles/thinking.css">
+<link rel="stylesheet" href="styles/composer.css">
+<link rel="stylesheet" href="styles/diff.css">
+<script src="mock/shared.js" defer></script>
+</head>
+<body data-page="diff">
+
+<div class="app">
+  <!-- ==================== 左栏 ==================== -->
+  <aside class="app-sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-logo">K</span>
+      <span class="brand-name">Kimi Code</span>
+      <button class="icon-btn brand-collapse" data-action="toggle-sidebar" title="折叠侧栏">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
+      </button>
+    </div>
+
+    <div class="sidebar-new">
+      <button class="new-task">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        新建任务
+      </button>
+    </div>
+
+    <div class="sidebar-search">
+      <div class="search-box">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.8-3.8"/></svg>
+        <span>搜索线程</span>
+        <span class="kbd">⌘K</span>
+      </div>
+    </div>
+
+    <div class="sidebar-list">
+      <!-- 工作区:kimi-gui -->
+      <section class="workspace-group">
+        <div class="workspace-header">
+          <button class="ws-toggle" title="折叠分组">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <span class="ws-name">kimi-gui</span>
+          <button class="ws-action" data-menu="ws-kimi" title="更多">
+            <svg class="ic" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+          </button>
+          <div class="ws-menu" data-id="ws-kimi">
+            <div class="menu-label">排序方式</div>
+            <button class="menu-item active" data-sort="recent">
+              <svg class="menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <span class="mi-label">最近编辑</span>
+            </button>
+            <button class="menu-item" data-sort="manual">
+              <svg class="menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <span class="mi-label">手动排序</span>
+            </button>
+            <button class="menu-item" data-sort="created">
+              <svg class="menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <span class="mi-label">创建时间</span>
+            </button>
+            <div class="menu-sep"></div>
+            <button class="menu-item"><span class="mi-label">重命名工作区</span></button>
+            <button class="menu-item"><span class="mi-label">复制路径</span></button>
+            <div class="menu-sep"></div>
+            <button class="menu-item"><span class="mi-label">归档工作区…</span></button>
+          </div>
+        </div>
+        <div class="ws-threads">
+          <div class="thread-row active">
+            <span class="dot dot-done"></span>
+            <span class="thread-title">DiffView 重做</span>
+            <span class="thread-meta">1h</span>
+          </div>
+          <div class="thread-row">
+            <span class="dot dot-running"></span>
+            <span class="thread-title">重构 Composer 双模交互</span>
+            <span class="thread-meta">运行中</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 工作区:my-api-server -->
+      <section class="workspace-group">
+        <div class="workspace-header">
+          <button class="ws-toggle" title="折叠分组">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <span class="ws-name">my-api-server</span>
+          <button class="ws-action" data-menu="ws-api" title="更多">
+            <svg class="ic" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+          </button>
+          <div class="ws-menu" data-id="ws-api">
+            <div class="menu-label">排序方式</div>
+            <button class="menu-item active" data-sort="recent">
+              <svg class="menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <span class="mi-label">最近编辑</span>
+            </button>
+            <button class="menu-item" data-sort="manual">
+              <svg class="menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <span class="mi-label">手动排序</span>
+            </button>
+            <div class="menu-sep"></div>
+            <button class="menu-item"><span class="mi-label">重命名工作区</span></button>
+            <button class="menu-item"><span class="mi-label">归档工作区…</span></button>
+          </div>
+        </div>
+        <div class="ws-threads">
+          <div class="thread-row">
+            <span class="dot dot-waiting"></span>
+            <span class="thread-title">添加 JWT 鉴权中间件</span>
+            <span class="thread-meta">待批准</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 工作区:blog -->
+      <section class="workspace-group ws-closed">
+        <div class="workspace-header">
+          <button class="ws-toggle" title="展开分组">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <span class="ws-name">blog</span>
+          <button class="ws-action" data-menu="ws-blog" title="更多">
+            <svg class="ic" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+          </button>
+          <div class="ws-menu" data-id="ws-blog">
+            <div class="menu-label">排序方式</div>
+            <button class="menu-item active" data-sort="recent">
+              <svg class="menu-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+              <span class="mi-label">最近编辑</span>
+            </button>
+            <div class="menu-sep"></div>
+            <button class="menu-item"><span class="mi-label">归档工作区…</span></button>
+          </div>
+        </div>
+        <div class="ws-threads">
+          <div class="thread-row">
+            <span class="dot dot-done"></span>
+            <span class="thread-title">部署到 Vercel</span>
+            <span class="thread-meta">3d</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="sidebar-footer">
+      <a class="footer-link" href="settings.html">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        设置
+      </a>
+    </div>
+  </aside>
+
+  <!-- ==================== 主区 ==================== -->
+  <main class="app-main">
+    <header class="app-toolbar">
+      <span class="toolbar-title">DiffView 重做</span>
+      <span class="toolbar-spacer"></span>
+      <div class="toolbar-thinking-toggle on" title="全局思考开关">
+        <span>思考</span>
+        <span class="tt-switch"></span>
+      </div>
+      <span class="pill pill-success"><span class="dot dot-done"></span>已完成</span>
+      <button class="btn" data-action="toggle-review" title="Review ⌘B">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.5 6H14a4 4 0 0 1 4 4v5.5"/><path d="M15.5 18H10a4 4 0 0 1-4-4V8.5"/></svg>
+        Review
+        <span class="kbd">⌘B</span>
+      </button>
+    </header>
+
+    <div class="app-conversation">
+      <div class="conversation">
+
+        <!-- 用户消息 -->
+        <div class="msg-user">
+          <div class="u-bubble">把 DiffView 重做一下:语法高亮对齐 GitHub,大 hunk 自动折叠。</div>
+          <div class="u-meta">16:20</div>
+        </div>
+
+        <!-- 助手消息 -->
+        <div class="msg-assistant">
+
+          <!-- 思考块(完成,默认展开) -->
+          <div class="think open">
+            <div class="think-summary">
+              <span class="think-chevron"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span>
+              <span class="think-label">思考过程</span>
+              <span class="think-teaser">diff 高亮直接接 shiki,配色对齐 GitHub…</span>
+              <span class="think-time">12s</span>
+            </div>
+            <div class="think-body">
+              <div class="think-content">高亮不自己写正则:直接接 shiki(VS Code 同款 TextMate 引擎),主题取 GitHub light / dark 两套,token 统一映射到 tk-kw、tk-str、tk-cmt 等 class;深色主题只覆盖色值,不动 DOM 结构,和现有 diff.css 的 token 类完全对上。</div>
+              <div class="think-content">折叠策略:hunk 超过 8 行默认收起,中间渲染一条可点击的折叠条,展开后新旧行号保持连续。另外新增右侧 Review pane 聚合本次全部改动,⌘B 开合,按文件 chip 切换,对话流里只放关键两个文件的内联 diff。</div>
+            </div>
+          </div>
+
+          <!-- 正文 -->
+          <div class="a-content">
+            <p>完成,改动 3 个文件:</p>
+            <ul>
+              <li>接入 <code>shiki</code> 做 token 着色,配色对齐 GitHub</li>
+              <li>hunk 超 8 行自动折叠、点击展开</li>
+              <li>新增右侧 Review pane 聚合全部改动</li>
+            </ul>
+          </div>
+
+          <!-- 内联 diff 卡 1:DiffView.vue -->
+          <div class="diff-inline">
+            <div class="diff-head">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+              <span class="diff-file">DiffView.vue</span>
+              <span class="diff-stats"><span class="add">+48</span><span class="del">−12</span></span>
+            </div>
+            <div class="diff-lines">
+              <div class="dl dl-hunk"><span class="dl-gutter"></span><span class="dl-gutter"></span><span class="dl-sign"></span><span class="dl-text">@@ -10,7 +10,15 @@</span></div>
+              <div class="dl"><span class="dl-gutter">10</span><span class="dl-gutter">10</span><span class="dl-sign"></span><span class="dl-text"><span class="tk-kw">const</span> store = <span class="tk-fn">useAppStore</span>()</span></div>
+              <div class="dl"><span class="dl-gutter">11</span><span class="dl-gutter">11</span><span class="dl-sign"></span><span class="dl-text"><span class="tk-kw">const</span> lines = <span class="tk-fn">ref</span>&lt;DiffLine[]&gt;([])</span></div>
+              <div class="dl dl-del"><span class="dl-gutter">12</span><span class="dl-gutter"></span><span class="dl-sign">−</span><span class="dl-text"><span class="tk-kw">const</span> html = <span class="tk-fn">highlightSync</span>(lines.value)</span></div>
+              <div class="dl dl-del"><span class="dl-gutter">13</span><span class="dl-gutter"></span><span class="dl-sign">−</span><span class="dl-text"><span class="tk-fn">renderPlain</span>(html)</span></div>
+              <div class="dl dl-add"><span class="dl-gutter"></span><span class="dl-gutter">12</span><span class="dl-sign">+</span><span class="dl-text"><span class="tk-kw">const</span> highlighter = <span class="tk-kw">await</span> <span class="tk-fn">getHighlighter</span>({ theme: <span class="tk-str">"github-light"</span> })</span></div>
+              <div class="dl dl-add"><span class="dl-gutter"></span><span class="dl-gutter">13</span><span class="dl-sign">+</span><span class="dl-text"><span class="tk-kw">const</span> COLLAPSE_THRESHOLD = <span class="tk-num">8</span></span></div>
+              <div class="dl dl-add"><span class="dl-gutter"></span><span class="dl-gutter">14</span><span class="dl-sign">+</span><span class="dl-text"><span class="tk-cmt">// 大 hunk 自动折叠,点击展开</span></span></div>
+              <div class="dl-collapsed" data-hunk="h1">⋯ 显示折叠的 8 行 ⋯</div>
+              <div class="dl dl-hidden" data-hunk="h1"><span class="dl-gutter">14</span><span class="dl-gutter">15</span><span class="dl-sign"></span><span class="dl-text"><span class="tk-fn">watch</span>(lines, <span class="tk-kw">async</span> () =&gt; {</span></div>
+              <div class="dl dl-add dl-hidden" data-hunk="h1"><span class="dl-gutter"></span><span class="dl-gutter">16</span><span class="dl-sign">+</span><span class="dl-text">  tokens.value = <span class="tk-kw">await</span> highlighter.<span class="tk-fn">tokenize</span>(lines.value)</span></div>
+              <div class="dl dl-add dl-hidden" data-hunk="h1"><span class="dl-gutter"></span><span class="dl-gutter">17</span><span class="dl-sign">+</span><span class="dl-text">  collapsed.value = tokens.value.length &gt; COLLAPSE_THRESHOLD</span></div>
+              <div class="dl dl-hidden" data-hunk="h1"><span class="dl-gutter">15</span><span class="dl-gutter">18</span><span class="dl-sign"></span><span class="dl-text">})</span></div>
+              <div class="dl"><span class="dl-gutter">16</span><span class="dl-gutter">19</span><span class="dl-sign"></span><span class="dl-text"><span class="tk-kw">const</span> changedFiles = <span class="tk-fn">computed</span>(() =&gt; store.diff?.files ?? [])</span></div>
+              <div class="dl"><span class="dl-gutter">17</span><span class="dl-gutter">20</span><span class="dl-sign"></span><span class="dl-text"><span class="tk-fn">provide</span>(<span class="tk-str">"collapseThreshold"</span>, COLLAPSE_THRESHOLD)</span></div>
+            </div>
+          </div>
+
+          <!-- 内联 diff 卡 2:diffHighlight.ts -->
+          <div class="diff-inline">
+            <div class="diff-head">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+              <span class="diff-file">diffHighlight.ts</span>
+              <span class="diff-stats"><span class="add">+87</span><span class="del">−0</span></span>
+            </div>
+            <div class="diff-lines">
+              <div class="dl dl-hunk"><span class="dl-gutter"></span><span class="dl-gutter"></span><span class="dl-sign"></span><span class="dl-text">@@ -0,0 +1,6 @@</span></div>
+              <div class="dl dl-add"><span class="dl-gutter"></span><span class="dl-gutter">1</span><span class="dl-sign">+</span><span class="dl-text"><span class="tk-kw">import</span> { getHighlighter } <span class="tk-kw">from</span> <span class="tk-str">"shiki"</span></span></div>
+              <div class="dl dl-add"><span class="dl-gutter"></span><span class="dl-gutter">2</span><span class="dl-sign">+</span><span class="dl-text"><span class="tk-kw">import type</span> { Highlighter, ShikiToken } <span class="tk-kw">from</span> <span class="tk-str">"shiki"</span></span></div>
+              <div class="dl dl-add"><span class="dl-gutter"></span><span class="dl-gutter">3</span><span class="dl-sign">+</span><span class="dl-text"><span class="tk-kw">export const</span> TOKEN_MAP = {</span></div>
+              <div class="dl dl-add"><span class="dl-gutter"></span><span class="dl-gutter">4</span><span class="dl-sign">+</span><span class="dl-text">  keyword: <span class="tk-str">"tk-kw"</span>, string: <span class="tk-str">"tk-str"</span>, comment: <span class="tk-str">"tk-cmt"</span>,</span></div>
+              <div class="dl dl-add"><span class="dl-gutter"></span><span class="dl-gutter">5</span><span class="dl-sign">+</span><span class="dl-text">  function: <span class="tk-str">"tk-fn"</span>, number: <span class="tk-str">"tk-num"</span>, punctuation: <span class="tk-str">"tk-punc"</span>,</span></div>
+              <div class="dl dl-add"><span class="dl-gutter"></span><span class="dl-gutter">6</span><span class="dl-sign">+</span><span class="dl-text">} <span class="tk-kw">as const</span></span></div>
+            </div>
+          </div>
+
+          <div class="a-foot">
+            <span>用时 68s</span>
+            <button class="icon-btn foot-copy" title="复制">
+              <svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Composer(空闲态) -->
+    <div class="app-dock">
+      <div class="dock-inner">
+        <div class="composer">
+          <div class="composer-input">
+            <textarea rows="1" placeholder="给 Kimi 下达任务,⌘+Enter 发送"></textarea>
+          </div>
+          <div class="composer-toolbar">
+            <div class="toolbar-group">
+              <button class="perm-pill" title="权限模式:逐条确认">
+                <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-3.6 8-10V5.5L12 2 4 5.5V12c0 6.4 8 10 8 10z"/></svg>
+                逐条确认
+                <svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+              </button>
+            </div>
+            <div class="toolbar-group right">
+              <button class="model-pill" title="模型">
+                Kimi K2<span class="model-thinking">&nbsp;· 思考</span>
+                <svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+              </button>
+              <button class="composer-send" title="发送 ⌘+Enter">
+                <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Review pane(右侧滑出,⌘B) -->
+    <aside class="review-pane">
+      <div class="rp-head">
+        <span class="rp-title">Review · 3 个文件</span>
+        <span class="rp-branch">feat/diff-redo</span>
+        <button class="icon-btn rp-close" title="关闭 Esc">
+          <svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="rp-files">
+        <button class="rp-file active" data-file="f1">
+          <span class="rf-status M">M</span>
+          DiffView.vue
+          <span class="rf-stats"><span class="add">+48</span><span class="del">−12</span></span>
+        </button>
+        <button class="rp-file" data-file="f2">
+          <span class="rf-status A">A</span>
+          diffHighlight.ts
+          <span class="rf-stats"><span class="add">+87</span><span class="del">−0</span></span>
+        </button>
+        <button class="rp-file" data-file="f3">
+          <span class="rf-status M">M</span>
+          DiffLines.vue
+          <span class="rf-stats"><span class="add">+23</span><span class="del">−5</span></span>
+        </button>
+      </div>
+      <div class="rp-content">
+        <!-- f1:DiffView.vue -->
+        <div class="rp-diff" data-file="f1">
+          <div class="diff-inline">
+            <div class="diff-head">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+              <span class="diff-file">DiffView.vue</span>
+              <span class="diff-stats"><span class="add">+48</span><span class="del">−12</span></span>
+            </div>
+            <div class="diff-lines">
+              <div class="dl dl-hunk"><span class="dl-gutter"></span><span class="dl-gutter"></span><span class="dl-sign"></span><span class="dl-text">@@ -32,5 +34,9 @@</span></div>
+              <div class="dl"><span class="dl-gutter">32</span><span class="dl-gutter">34</span><span class="dl-sign"></span><span class="dl-text">  <span class="tk-kw">function</span> <span class="tk-fn">renderView</span>() {</span></div>
+              <div class="dl dl-del"><span class="dl-gutter">33</span><span class="dl-gutter"></span><span class="dl-sign">−</span><span class="dl-text">    <span class="tk-kw">return</span> <span class="tk-fn">h</span>(<span class="tk-str">"pre"</span>, lines.map(renderPlain))</span></div>
+              <div class="dl dl-add"><span class="dl-gutter"></span><span class="dl-gutter">35</span><span class="dl-sign">+</span><span class="dl-text">    <span class="tk-kw">const</span> hunks = <span class="tk-fn">groupHunks</span>(tokens.value, COLLAPSE_THRESHOLD)</span></div>
+              <div class="dl dl-add"><span class="dl-gutter"></span><span class="dl-gutter">36</span><span class="dl-sign">+</span><span class="dl-text">    <span class="tk-kw">return</span> hunks.map(renderHunk)</span></div>
+              <div class="dl-collapsed" data-hunk="r1">⋯ 显示折叠的 4 行 ⋯</div>
+              <div class="dl dl-add dl-hidden" data-hunk="r1"><span class="dl-gutter"></span><span class="dl-gutter">37</span><span class="dl-sign">+</span><span class="dl-text">  <span class="tk-kw">function</span> <span class="tk-fn">renderHunk</span>(h: Hunk) {</span></div>
+              <div class="dl dl-add dl-hidden" data-hunk="r1"><span class="dl-gutter"></span><span class="dl-gutter">38</span><span class="dl-sign">+</span><span class="dl-text">    <span class="tk-kw">const</span> collapsed = h.count &gt; COLLAPSE_THRESHOLD</span></div>
+              <div class="dl dl-hidden" data-hunk="r1"><span class="dl-gutter">34</span><span class="dl-gutter">39</span><span class="dl-sign"></span><span class="dl-text">    <span class="tk-kw">return</span> <span class="tk-fn">h</span>(DiffLines, { hunk: h, collapsed })</span></div>
+              <div class="dl dl-hidden" data-hunk="r1"><span class="dl-gutter">35</span><span class="dl-gutter">40</span><span class="dl-sign"></span><span class="dl-text">  }</span></div>
+              <div class="dl"><span class="dl-gutter">36</span><span class="dl-gutter">41</span><span class="dl-sign"></span><span class="dl-text">  <span class="tk-fn">watch</span>(() =&gt; store.branch, reload)</span></div>
+              <div class="dl"><span class="dl-gutter">37</span><span class="dl-gutter">42</span><span class="dl-sign"></span><span class="dl-text">&lt;/script&gt;</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- f2:diffHighlight.ts -->
+        <div class="rp-diff" data-file="f2" hidden>
+          <div class="diff-inline">
+            <div class="diff-head">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+              <span class="diff-file">diffHighlight.ts</span>
+              <span class="diff-stats"><span class="add">+87</span><span class="del">−0</span></span>
+            </div>
+            <div class="diff-lines">
+              <div class="dl dl-hunk"><span class="dl-gutter"></span><span class="dl-gutter"></span><span class="dl-sign"></span><span class="dl-text">@@ -0,0 +1,6 @@</span></div>
+              <div class="dl dl-add"><span class="dl-gutter"></span><span class="dl-gutter">1</span><span class="dl-sign">+</span><span class="dl-text"><span class="tk-kw">import</span> { getHighlighter } <span class="tk-kw">from</span> <span class="tk-str">"shiki"</span></span></div>
+              <div class="dl dl-add"><span class="dl-gutter"></span><span class="dl-gutter">2</span><span class="dl-sign">+</span><span class="dl-text"><span class="tk-kw">import type</span> { Highlighter, ShikiToken } <span class="tk-kw">from</span> <span class="tk-str">"shiki"</span></span></div>
+              <div class="dl dl-add"><span class="dl-gutter"></span><span class="dl-gutter">3</span><span class="dl-sign">+</span><span class="dl-text"><span class="tk-kw">export const</span> TOKEN_MAP = {</span></div>
+              <div class="dl dl-add"><span class="dl-gutter"></span><span class="dl-gutter">4</span><span class="dl-sign">+</span><span class="dl-text">  keyword: <span class="tk-str">"tk-kw"</span>, string: <span class="tk-str">"tk-str"</span>, comment: <span class="tk-str">"tk-cmt"</span>,</span></div>
+              <div class="dl dl-add"><span class="dl-gutter"></span><span class="dl-gutter">5</span><span class="dl-sign">+</span><span class="dl-text">  function: <span class="tk-str">"tk-fn"</span>, number: <span class="tk-str">"tk-num"</span>, punctuation: <span class="tk-str">"tk-punc"</span>,</span></div>
+              <div class="dl dl-add"><span class="dl-gutter"></span><span class="dl-gutter">6</span><span class="dl-sign">+</span><span class="dl-text">} <span class="tk-kw">as const</span></span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- f3:DiffLines.vue -->
+        <div class="rp-diff" data-file="f3" hidden>
+          <div class="diff-inline">
+            <div class="diff-head">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+              <span class="diff-file">DiffLines.vue</span>
+              <span class="diff-stats"><span class="add">+23</span><span class="del">−5</span></span>
+            </div>
+            <div class="diff-lines">
+              <div class="dl dl-hunk"><span class="dl-gutter"></span><span class="dl-gutter"></span><span class="dl-sign"></span><span class="dl-text">@@ -4,3 +4,6 @@</span></div>
+              <div class="dl"><span class="dl-gutter">4</span><span class="dl-gutter">4</span><span class="dl-sign"></span><span class="dl-text">    &lt;span class=<span class="tk-str">"dl-gutter"</span>&gt;{{ line.oldNo }}&lt;/span&gt;</span></div>
+              <div class="dl dl-del"><span class="dl-gutter">5</span><span class="dl-gutter"></span><span class="dl-sign">−</span><span class="dl-text">    &lt;span class=<span class="tk-str">"dl-text"</span>&gt;{{ line.text }}&lt;/span&gt;</span></div>
+              <div class="dl dl-add"><span class="dl-gutter"></span><span class="dl-gutter">5</span><span class="dl-sign">+</span><span class="dl-text">    &lt;span class=<span class="tk-str">"dl-text"</span>&gt;</span></div>
+              <div class="dl dl-add"><span class="dl-gutter"></span><span class="dl-gutter">6</span><span class="dl-sign">+</span><span class="dl-text">      &lt;span <span class="tk-kw">v-for</span>=<span class="tk-str">"tok in line.tokens"</span> :class=<span class="tk-str">"tok.class"</span>&gt;{{ tok.text }}&lt;/span&gt;</span></div>
+              <div class="dl dl-add"><span class="dl-gutter"></span><span class="dl-gutter">7</span><span class="dl-sign">+</span><span class="dl-text">    &lt;/span&gt;</span></div>
+              <div class="dl"><span class="dl-gutter">6</span><span class="dl-gutter">8</span><span class="dl-sign"></span><span class="dl-text">  &lt;/div&gt;</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<!-- 侧栏折叠后的唯一展开入口 -->
+<button class="sidebar-expand-btn" data-action="toggle-sidebar" title="展开侧栏">
+  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
+</button>
+
+</body>
+</html>
