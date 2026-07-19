@@ -55,6 +55,8 @@ import CodexIcon from '../components/codex/layout/CodexIcon.vue';
 // 1. 顶层 client 装配 + provide(整个 codex UI 的数据源)
 const client = useKimiWebClient();
 provide(KIMI_CLIENT_KEY, client);
+// 官方 Markdown.vue inject('resolveImage') 用于解析消息里的本地图片路径
+provide('resolveImage', client.resolveImageUrl);
 
 // 启动连接 + 首轮数据拉取:官方 App.vue 的 client.load()(web/src/App.vue:181)。
 void client.load();
