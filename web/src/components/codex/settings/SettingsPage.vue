@@ -2,26 +2,22 @@
 /**
  * SettingsPage —— 设置页(6 分类:通用/外观/权限/快捷键/归档管理/关于)
  *
- * 结构对齐 prototype/settings.html;样式类全部在 settings.css + base.css。
- * 组件内行为(翻译自 prototype/mock/shared.js bindSettingsNav):
- * - 左导航点击切换 section(active 类联动,无路由)
- * - 主题 seg 调 useTheme().set() 真实生效(浅色/深色直接切;跟随系统解析后切,
- *   useTheme 暂无 'system' 档与系统主题监听 —— 契约缺口,已报备)
- * - 其余控件为原型期展示,本地 ref 持有,轮次 3 接 daemon 持久化
- *
- * props:仅可选 initialSection(初始激活的分类)。
- * 归档预览为原型占位内容,轮次 3 需由外部传入真实归档列表(契约缺口,已报备)。
+ * 轮次 4e:接通 client 配置(权限/模型/字号/通知/归档)
+ * 替代原型期的本地 ref 占位。
  */
-import { ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import type { PermissionMode } from '../../../types';
 import CodexIcon from '../layout/CodexIcon.vue';
 import { useTheme } from '../../../composables/codex/useTheme';
+import { useKimiClient } from '../../../composables/codex/useKimiClient';
 
 type SectionId = 'general' | 'appearance' | 'permissions' | 'shortcuts' | 'archive' | 'about';
 
 const props = withDefaults(defineProps<{ initialSection?: SectionId }>(), {
   initialSection: 'general',
 });
+
+const client = useKimiClient();
 
 const NAV: { id: SectionId; label: string; icon: string }[] = [
   { id: 'general', label: '通用', icon: 'sliders' },
@@ -34,9 +30,42 @@ const NAV: { id: SectionId; label: string; icon: string }[] = [
 
 const active = ref<SectionId>(props.initialSection);
 
-/* ---------- 通用(原型期展示,本地态) ---------- */
-const permDefault = ref<PermissionMode>('manual');
-const defaultModel = ref('K3');
+/* ---------- 通用 ---------- */
+// 权限默认值:读 client.permission,写 client.setPermission
+const permDefault = computed<PermissionMode>({
+  get: () => client.permission.value ?? 'manual',
+  set: (v) => void client.setPermission(v),
+});
+
+// 默认模型:读 client.models + defaultModel,写 client.setModel
+const modelOptions = computed(() =>
+  (client.models.value ?? []).map((m: any) => ({
+    id: m.id,
+    name: m.displayName ?? m.model ?? m.id,
+  })),
+);
+const defaultModelId = computed<string>({
+  get: () => client.defaultModel.value ?? '',
+  set: (v) => void client.setModel(v),
+});
+
+// 通知开关
+const notifyComplete = computed<boolean>({
+  get: () => client.notifyOnComplete.value ?? false,
+  set: (v) => client.setNotifyOnComplete(v),
+});
+const notifyQuestion = computed<boolean>({
+  get: () => client.notifyOnQuestion.value ?? false,
+  set: (v) => client.setNotifyOnQuestion(v),
+});
+const notifyApproval = computed<boolean>({
+  get: () => client.notifyOnApproval.value ?? false,
+  set: (v) => client.setNotifyOnApproval(v),
+});
+const soundComplete = computed<boolean>({
+  get: () => client.soundOnComplete.value ?? false,
+  set: (v) => client.setSoundOnComplete(v),
+});
 
 /* ---------- 外观 ---------- */
 type ThemeChoice = 'light' | 'dark' | 'system';
@@ -44,26 +73,37 @@ const { theme, set } = useTheme();
 const themeChoice = ref<ThemeChoice>(theme.value);
 function pickTheme(c: ThemeChoice) {
   themeChoice.value = c;
-  if (c === 'system') {
-    const dark =
-      typeof window !== 'undefined' &&
-      window.matchMedia &&
-      window.matchMedia('(prefers-color-scheme: dark)').matches;
-    set(dark ? 'dark' : 'light');
-  } else {
-    set(c);
-  }
+  set(c as any);
 }
-const fontSize = ref('标准');
-const codeFont = ref('SF Mono');
 
-/* ---------- 权限(原型期展示,本地态) ---------- */
-const shellPerm = ref('逐条确认');
-const filePerm = ref('逐条确认');
+const fontSize = computed<string>({
+  get: () => String(client.uiFontSize.value ?? 14) + 'px',
+  set: (v) => client.setUiFontSize(Number(v.replace('px', '')) || 14),
+});
+function setFontSize(px: number) {
+  client.setUiFontSize(px);
+}
+
+/* ---------- 权限(详细) ---------- */
 const netAccess = ref(true);
 const dangerConfirm = ref(true);
 
-/* ---------- 归档管理(原型期展示,本地态) ---------- */
+/* ---------- 归档 ---------- */
+const archivedSessions = ref<any[]>([]);
+const archivedLoading = ref(false);
+async function loadArchive() {
+  archivedLoading.value = true;
+  try {
+    await client.loadArchivedSessions();
+    archivedSessions.value = (client as any).archivedSessions?.value ?? [];
+  } catch {
+    /* ignore */
+  } finally {
+    archivedLoading.value = false;
+  }
+}
+onMounted(() => void loadArchive());
+
 const autoArchive = ref(false);
 </script>
 
@@ -72,13 +112,11 @@ const autoArchive = ref(false);
     <div class="settings-inner">
       <h1 class="settings-title">设置</h1>
       <div class="settings-grid">
-        <!-- 分类导航(组件内切换,无路由) -->
         <nav class="settings-nav">
           <a
             v-for="n in NAV"
             :key="n.id"
             :href="'#' + n.id"
-            :data-section="n.id"
             :class="{ active: active === n.id }"
             @click.prevent="active = n.id"
           >
@@ -87,7 +125,6 @@ const autoArchive = ref(false);
           </a>
         </nav>
 
-        <!-- 设置内容 -->
         <div class="settings-content">
           <!-- 通用 -->
           <section class="settings-section" :class="{ active: active === 'general' }" id="general">
@@ -121,11 +158,54 @@ const autoArchive = ref(false);
                 <div class="setting-label">默认模型</div>
               </div>
               <div class="setting-control">
-                <select v-model="defaultModel" class="control">
-                  <option>K3</option>
-                  <option>K2.7 Coding</option>
-                  <option>K2.7 Coding Highspeed</option>
+                <select v-model="defaultModelId" class="control">
+                  <option v-for="m in modelOptions" :key="m.id" :value="m.id">{{ m.name }}</option>
                 </select>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">完成时通知</div>
+                <div class="setting-desc">agent 完成任务后发送系统通知</div>
+              </div>
+              <div class="setting-control">
+                <label class="switch">
+                  <input v-model="notifyComplete" type="checkbox" />
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">提问时通知</div>
+              </div>
+              <div class="setting-control">
+                <label class="switch">
+                  <input v-model="notifyQuestion" type="checkbox" />
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">审批时通知</div>
+              </div>
+              <div class="setting-control">
+                <label class="switch">
+                  <input v-model="notifyApproval" type="checkbox" />
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">完成时播放声音</div>
+              </div>
+              <div class="setting-control">
+                <label class="switch">
+                  <input v-model="soundComplete" type="checkbox" />
+                  <span class="switch-slider"></span>
+                </label>
               </div>
             </div>
           </section>
@@ -158,30 +238,14 @@ const autoArchive = ref(false);
             <div class="setting-row">
               <div class="setting-info">
                 <div class="setting-label">界面字号</div>
+                <div class="setting-desc">当前: {{ fontSize }}</div>
               </div>
               <div class="setting-control">
                 <div class="seg">
-                  <button
-                    v-for="s in ['小', '标准', '大']"
-                    :key="s"
-                    :class="{ active: fontSize === s }"
-                    @click="fontSize = s"
-                  >
-                    {{ s }}
-                  </button>
+                  <button @click="setFontSize(13)">小</button>
+                  <button @click="setFontSize(14)">标准</button>
+                  <button @click="setFontSize(16)">大</button>
                 </div>
-              </div>
-            </div>
-            <div class="setting-row">
-              <div class="setting-info">
-                <div class="setting-label">代码字体</div>
-              </div>
-              <div class="setting-control">
-                <select v-model="codeFont" class="control">
-                  <option>SF Mono</option>
-                  <option>JetBrains Mono</option>
-                  <option>Menlo</option>
-                </select>
               </div>
             </div>
           </section>
@@ -195,25 +259,14 @@ const autoArchive = ref(false);
             <h2>权限</h2>
             <div class="setting-row">
               <div class="setting-info">
-                <div class="setting-label">Shell 命令</div>
+                <div class="setting-label">当前会话权限</div>
+                <div class="setting-desc">{{ permDefault }}</div>
               </div>
               <div class="setting-control">
-                <select v-model="shellPerm" class="control">
-                  <option>逐条确认</option>
-                  <option>本会话内自动</option>
-                  <option>完全自动</option>
-                </select>
-              </div>
-            </div>
-            <div class="setting-row">
-              <div class="setting-info">
-                <div class="setting-label">文件修改</div>
-              </div>
-              <div class="setting-control">
-                <select v-model="filePerm" class="control">
-                  <option>逐条确认</option>
-                  <option>本会话内自动</option>
-                  <option>完全自动</option>
+                <select v-model="permDefault" class="control">
+                  <option value="manual">逐条确认</option>
+                  <option value="auto">自动通过</option>
+                  <option value="yolo">完全自主</option>
                 </select>
               </div>
             </div>
@@ -251,57 +304,39 @@ const autoArchive = ref(false);
           >
             <h2>快捷键</h2>
             <div class="setting-row">
-              <div class="setting-info">
-                <div class="setting-label">发送消息</div>
-              </div>
+              <div class="setting-info"><div class="setting-label">发送消息</div></div>
               <div class="setting-control">
-                <div class="shortcut-keys">
-                  <span class="kbd">⌘</span>
-                  <span class="kbd">Enter</span>
-                </div>
+                <div class="shortcut-keys"><span class="kbd">⌘</span><span class="kbd">Enter</span></div>
               </div>
             </div>
             <div class="setting-row">
-              <div class="setting-info">
-                <div class="setting-label">中断当前轮</div>
-              </div>
+              <div class="setting-info"><div class="setting-label">中断当前轮</div></div>
               <div class="setting-control">
-                <div class="shortcut-keys">
-                  <span class="kbd">Esc</span>
-                </div>
+                <div class="shortcut-keys"><span class="kbd">Esc</span></div>
               </div>
             </div>
             <div class="setting-row">
-              <div class="setting-info">
-                <div class="setting-label">Review pane</div>
-              </div>
+              <div class="setting-info"><div class="setting-label">Review pane</div></div>
               <div class="setting-control">
-                <div class="shortcut-keys">
-                  <span class="kbd">⌘</span>
-                  <span class="kbd">B</span>
-                </div>
+                <div class="shortcut-keys"><span class="kbd">⌘</span><span class="kbd">B</span></div>
               </div>
             </div>
             <div class="setting-row">
-              <div class="setting-info">
-                <div class="setting-label">Inspect</div>
-              </div>
+              <div class="setting-info"><div class="setting-label">Inspect</div></div>
               <div class="setting-control">
-                <div class="shortcut-keys">
-                  <span class="kbd">⌘</span>
-                  <span class="kbd">I</span>
-                </div>
+                <div class="shortcut-keys"><span class="kbd">⌘</span><span class="kbd">I</span></div>
               </div>
             </div>
             <div class="setting-row">
-              <div class="setting-info">
-                <div class="setting-label">搜索线程</div>
-              </div>
+              <div class="setting-info"><div class="setting-label">侧边任务</div></div>
               <div class="setting-control">
-                <div class="shortcut-keys">
-                  <span class="kbd">⌘</span>
-                  <span class="kbd">K</span>
-                </div>
+                <div class="shortcut-keys"><span class="kbd">⌥</span><span class="kbd">⌘</span><span class="kbd">S</span></div>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info"><div class="setting-label">全局唤起</div></div>
+              <div class="setting-control">
+                <div class="shortcut-keys"><span class="kbd">⌘</span><span class="kbd">⌥</span><span class="kbd">N</span></div>
               </div>
             </div>
             <div class="setting-row">
@@ -311,10 +346,7 @@ const autoArchive = ref(false);
               </div>
               <div class="setting-control">
                 <div class="shortcut-keys">
-                  <span class="kbd">Y</span>
-                  <span class="kbd">A</span>
-                  <span class="kbd">N</span>
-                  <span class="kbd">P</span>
+                  <span class="kbd">Y</span><span class="kbd">A</span><span class="kbd">N</span><span class="kbd">P</span>
                 </div>
               </div>
             </div>
@@ -325,20 +357,13 @@ const autoArchive = ref(false);
             <h2>归档管理</h2>
             <div class="setting-row">
               <div class="setting-info">
-                <div class="setting-label">归档工作区</div>
-                <div class="setting-desc">3 个工作区</div>
+                <div class="setting-label">已归档对话</div>
+                <div class="setting-desc">{{ archivedSessions.length }} 条</div>
               </div>
               <div class="setting-control">
-                <button class="btn">查看</button>
-              </div>
-            </div>
-            <div class="setting-row">
-              <div class="setting-info">
-                <div class="setting-label">归档对话</div>
-                <div class="setting-desc">12 条</div>
-              </div>
-              <div class="setting-control">
-                <button class="btn">查看</button>
+                <button class="btn" @click="loadArchive" :disabled="archivedLoading">
+                  {{ archivedLoading ? '加载中…' : '刷新' }}
+                </button>
               </div>
             </div>
             <div class="setting-row">
@@ -354,34 +379,15 @@ const autoArchive = ref(false);
               </div>
             </div>
 
-            <!-- 最近归档预览(原型占位,轮次 3 接真源) -->
-            <div class="archive-preview">
-              <div class="ap-head">最近归档</div>
-              <div class="archive-item">
+            <div v-if="archivedSessions.length" class="archive-preview">
+              <div class="ap-head">归档列表</div>
+              <div v-for="s in archivedSessions" :key="s.id" class="archive-item">
                 <span class="ai-icon"><CodexIcon name="archive" /></span>
                 <div class="ai-info">
-                  <div class="ai-name">旧版 React 客户端</div>
-                  <div class="ai-meta">kimi-gui · 归档于 6 天前</div>
+                  <div class="ai-name">{{ s.title || s.id }}</div>
+                  <div class="ai-meta">归档于 {{ s.archivedAt?.slice(0, 10) ?? '未知' }}</div>
                 </div>
-                <button class="ai-restore">恢复</button>
               </div>
-              <div class="archive-item">
-                <span class="ai-icon"><CodexIcon name="archive" /></span>
-                <div class="ai-info">
-                  <div class="ai-name">实验性 TUI 界面</div>
-                  <div class="ai-meta">my-api-server · 归档于 2 周前</div>
-                </div>
-                <button class="ai-restore">恢复</button>
-              </div>
-              <div class="archive-item">
-                <span class="ai-icon"><CodexIcon name="archive" /></span>
-                <div class="ai-info">
-                  <div class="ai-name">首页 SEO 优化</div>
-                  <div class="ai-meta">blog · 归档于 1 个月前</div>
-                </div>
-                <button class="ai-restore">恢复</button>
-              </div>
-              <a class="ap-footer" href="#archive" @click.prevent>查看全部 →</a>
             </div>
           </section>
 
@@ -389,28 +395,22 @@ const autoArchive = ref(false);
           <section class="settings-section" :class="{ active: active === 'about' }" id="about">
             <h2>关于</h2>
             <div class="setting-row">
-              <div class="setting-info">
-                <div class="setting-label">版本</div>
-              </div>
+              <div class="setting-info"><div class="setting-label">版本</div></div>
+              <div class="setting-control"><span>0.1.0</span></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info"><div class="setting-label">Daemon</div></div>
               <div class="setting-control">
-                <span>0.1.0-prototype</span>
+                <span>{{ client.connection.value === 'connected' ? '已连接' : '未连接' }}</span>
+                <span v-if="client.serverVersion.value" class="pill">{{ client.serverVersion.value }}</span>
               </div>
             </div>
             <div class="setting-row">
               <div class="setting-info">
-                <div class="setting-label">Daemon</div>
+                <div class="setting-label">模型引擎</div>
               </div>
               <div class="setting-control">
-                <span>127.0.0.1:58627</span>
-                <span class="pill pill-success"><span class="dot dot-done"></span>已连接</span>
-              </div>
-            </div>
-            <div class="setting-row">
-              <div class="setting-info">
-                <div class="setting-label">检查更新</div>
-              </div>
-              <div class="setting-control">
-                <button class="btn">检查更新</button>
+                <span>{{ client.backend.value ?? '—' }}</span>
               </div>
             </div>
           </section>
