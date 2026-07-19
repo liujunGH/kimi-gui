@@ -562,6 +562,7 @@ async function searchFiles(q: string) {
         @toggle-pin="togglePin"
         @open-settings="settingsOpen = true"
         @select-workspace="() => {}"
+        @set-workspace-sort="(m: any) => client.setWorkspaceSortMode(m)"
       >
         <template #new-task>
           <WorkspacePicker

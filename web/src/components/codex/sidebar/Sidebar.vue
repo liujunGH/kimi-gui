@@ -19,12 +19,17 @@ const props = defineProps<SidebarProps & { pinnedIds?: string[] }>();
 const emit = defineEmits<SidebarEmits & {
   (e: 'open-settings'): void;
   (e: 'select-workspace', name: string): void;
+  (e: 'set-workspace-sort', mode: WorkspaceSortMode): void;
 }>();
 
-/** 工作区排序模式(每组独立,组件内 UI 状态;轮次 3 可挪 daemon 持久化) */
+/** 工作区排序模式:接 client.setWorkspaceSortMode(持久化) */
 const sortModes = ref<Record<string, WorkspaceSortMode>>({});
 function sortOf(name: string): WorkspaceSortMode {
   return sortModes.value[name] ?? 'recent';
+}
+function onSetSort(wsId: string, mode: WorkspaceSortMode) {
+  sortModes.value[wsId] = mode;
+  emit('set-workspace-sort', mode);
 }
 
 const filteredSessions = computed(() => {
@@ -103,7 +108,7 @@ function sessionsOf(wsName: string): Session[] {
         :active-workspace="ws.name === props.currentWorkspaceId"
         @select-session="(id) => emit('select-session', id)"
         @toggle-pin="(id) => emit('toggle-pin', id)"
-        @set-sort="(m) => (sortModes[ws.name] = m)"
+        @set-sort="(m) => onSetSort(ws.name, m)"
         @select-workspace="emit('select-workspace', ws.name)"
       />
     </div>
