@@ -212,7 +212,9 @@ export interface ComposerEmits {
   (e: 'set-model', id: string): void;
   (e: 'set-effort', lv: EffortLevel): void;
   (e: 'set-permission', p: PermissionMode): void;
+  (e: 'pick-model'): void;
   (e: 'open-context-detail'): void;
+  (e: 'pick-model'): void;
 }
 
 /** 模型元信息:daemon 返回(不同账号能用的模型不同,不写死)。 */

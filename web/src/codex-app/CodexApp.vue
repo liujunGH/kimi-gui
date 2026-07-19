@@ -48,6 +48,7 @@ import Toast, { useToast } from '../components/codex/layout/Toast.vue';
 import AgentPanel from '../components/codex/agents/AgentPanel.vue';
 import SettingsPage from '../components/codex/settings/SettingsPage.vue';
 import ReviewPane from '../components/codex/diff/ReviewPane.vue';
+import OfficialModelPicker from '../components/settings/ModelPicker.vue';
 import { toDiffHunks } from '../components/codex/diff/diffMapper';
 import CodexIcon from '../components/codex/layout/CodexIcon.vue';
 
@@ -307,6 +308,36 @@ function onPickWorkspace(id: string) {
 function onComposerMode(m: ComposerMode) {
   composerMode.value = m;
 }
+
+/** EffortLevel → 官方 ThinkingLevel 反向映射 */
+const EFFORT_TO_THINKING: Record<EffortLevel, string> = {
+  Low: 'medium',
+  High: 'high',
+  Max: 'xhigh',
+};
+
+/** 切模型:setModel + 设 daemon 默认(fire-and-forget) */
+async function onSetModel(id: string) {
+  const switched = await client.setModel(id);
+  if (switched && id !== client.defaultModel.value) {
+    void client.setModel(id); // 设默认(fire-and-forget,不阻塞 UI)
+  }
+}
+
+/** 切思考强度:EffortLevel → ThinkingLevel → client.setThinking */
+function onSetEffort(lv: EffortLevel) {
+  const thinking = EFFORT_TO_THINKING[lv];
+  if (thinking) client.setThinking(thinking as any);
+}
+
+// 官方 ModelPicker 全屏弹层(更多模型)
+// 官方 components/settings/ModelPicker.vue 可直接 import(同项目 fork)
+const showModelPicker = ref(false);
+async function onPickModelOverlay(id: string) {
+  showModelPicker.value = false;
+  await onSetModel(id);
+}
+
 function qSteer(i: number) {
   const q = queueItems.value[i];
   if (!q) return;
@@ -553,7 +584,9 @@ async function searchFiles(q: string) {
             else if (m === 'goal') client.toggleGoalMode();
           }"
           @set-permission="(p: PermissionMode) => client.setPermission(p)"
-          @set-model="(id: string) => client.setModel(id)"
+          @set-model="onSetModel"
+          @set-effort="onSetEffort"
+          @pick-model="toast('模型管理页待做')"
         />
       </div>
     </div>
@@ -594,6 +627,16 @@ async function searchFiles(q: string) {
       :hunks-by-file="hunksByFile"
       :branch="client.gitInfo.value?.branch ?? ''"
       @select-file="onSelectDiffFile"
+    />
+
+    <OfficialModelPicker
+      v-if="showModelPicker"
+      :models="client.models.value ?? []"
+      :current="composerCurrentModel"
+      :starred-ids="client.starredModelIds.value ?? []"
+      @select="onPickModelOverlay"
+      @toggle-star="(id: string) => client.toggleStarModel(id)"
+      @close="showModelPicker = false"
     />
   </AppShell>
   <Toast />

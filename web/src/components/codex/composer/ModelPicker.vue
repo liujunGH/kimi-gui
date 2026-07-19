@@ -24,6 +24,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'set-model', id: string): void;
   (e: 'set-effort', lv: EffortLevel): void;
+  (e: 'pick-model'): void;
 }>();
 
 /** EffortLevel 联合类型的全部成员(类型域,非 mock 数据) */
@@ -127,6 +128,6 @@ onUnmounted(() => {
       </span>
     </div>
     <div class="mp-sep"></div>
-    <button class="mp-more" @click="open = false">更多模型…</button>
+    <button class="mp-more" @click="emit('pick-model'); open = false">更多模型…</button>
   </div>
 </template>

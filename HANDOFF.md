@@ -734,6 +734,28 @@ permission: 'manual' | 'auto' | 'yolo';
 
 **另注**:ZCode 的 `7ff12aa fix(thinking)` 动了 kimi3 的思考组件,本轮未复核,建议双方互查一次。
 
+### 轮次 4c · quota 真源打通(复刻 kimi-ui 的 PTY 抓取)· 2026-07-19
+
+**背景**:GLM 判 quota 为"daemon 无端点,真阻塞"。用户提示"斜杠 usage 不是有吗"—— 经查确实没有 REST 端点(daemon 与云全路径 404),**但 CLI TUI 的 `/usage` 渲染计划额度**(kimi-ui 三年前就用嵌入式 PTY 抓过它,`kimi-ui/src/main.rs:1027` 的完整实现)。
+
+**方案**(全部实现并真机验证):
+1. **`src-tauri/src/usage.rs`(新)**:照 kimi-ui 配方 —— portable-pty 起无头 TUI(throwaway KIMI_CODE_HOME 放凭据副本)→ ESC 清首启对话框 → 发 `/usage` → **单独发 `\r` 提交**(关键:文本和回车必须分两次写,合并不提交)→ vt100 解析 → 提取 "X% used ... resets in Y" 两行。`PlanUsage { weekly_pct, weekly_reset, hourly_pct, hourly_reset, fetched_at }`,缓存 TTL 600s,后台刷新,启动预热不阻塞。Cargo 加 `portable-pty = "0.8"` + `vt100 = "0.15"`(与 kimi-ui 同版本)
+2. **命令注册**:`plan_usage` 进 invoke_handler(lib.rs),`usage::warm_cache()` 在 setup 预热
+3. **前端**:`useTauriDaemon` 加 `fetchPlanUsage()`(additive,浏览器返回 null);CodexApp 轮询(启动 + 60s)→ `QuotaInfo` → ContextMeter;quota 为 0 时仍 fallback 到 sessionCost(浏览器沙箱不受影响)
+
+**验证**(真机,非 mock):
+- python PTY 探针先证算法:`/usage` 渲染出 Weekly 61% used / 5h 62% used
+- Rust 版起真 Tauri 应用,上下文详情卡实测显示:**5 小时额度 15%(4h 40m 后重置)、每周额度 65%(5d 22h 40m 后重置)**(截图 `/tmp/kgui-quota12.png`)——额度滚动窗口随时间真实变化(5h 已从早前 62% 滚到 15%)
+- cargo check 0 错 / vue-tsc 全绿
+
+**至此 GLM 轮次 4 的 6 项遗留全部闭环**:首启竞态(GLM)、effort(GLM)、@文件(kimi3,轮次 4b)、editQueued(kimi3,轮次 4b)、diff/ReviewPane(kimi3,轮次 4b)、**quota(kimi3,本轮)**。
+
+**git 状态**:`src-tauri/{Cargo.toml,src/usage.rs,src/lib.rs}` + `web/src/composables/codex/useTauriDaemon.ts` + `web/src/codex-app/CodexApp.vue`,**未提交**,等 ZCode 统一入库。
+
+## 待用户操作
+
+把 HANDOFF.md(含轮次 4b + 4c)转给 ZCode:复核入库;轮次 4 遗留清零,可进轮次 5(打磨/其他 spec 项)。
+
 ## 待用户操作
 
 把 HANDOFF.md(含轮次 4b)转给 ZCode:复核入库;quota 端点向上游/daemon 提需求;`7ff12aa` 的思考组件改动 kimi3 待复核。

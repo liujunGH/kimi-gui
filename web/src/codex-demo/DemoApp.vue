@@ -60,6 +60,46 @@ const scene = computed<SceneId>(() => {
   const s = new URLSearchParams(location.search).get('scene') ?? 'index';
   return (SCENES.some((x) => x.id === s) ? s : 'index') as SceneId;
 });
+
+/** 验收专用:?stress=N 在 index 场景追加 N 条合成 turn(验证窗口化渲染) */
+const stressTurns = computed<ChatTurn[]>(() => {
+  const n = Number(new URLSearchParams(location.search).get('stress') ?? 0);
+  if (!Number.isFinite(n) || n <= 0) return [];
+  const out: ChatTurn[] = [];
+  for (let i = 1; i <= n; i++) {
+    out.push({
+      id: `stress-u-${i}`,
+      role: 'user',
+      no: i,
+      text: `压测消息 ${i}:把这个函数拆成更小的单元。`,
+      createdAt: '2026-07-19T10:00:00',
+    });
+    out.push({
+      id: `stress-a-${i}`,
+      role: 'assistant',
+      no: i,
+      text: '',
+      durationMs: 3000,
+      createdAt: '2026-07-19T10:00:10',
+      blocks: [
+        {
+          kind: 'thinking',
+          thinking: `第 ${i} 轮:先看调用链,确认无副作用边界。`,
+        },
+        {
+          kind: 'text',
+          text: `第 ${i} 轮结论:拆成两步,先提公共逻辑,再改调用方。`,
+        },
+        {
+          kind: 'tool',
+          tool: { id: `st-${i}`, name: 'edit_file', arg: `module/f${i}.ts · +12 −4`, status: 'ok' },
+        },
+      ],
+    });
+  }
+  return out;
+});
+const indexTurnsAll = computed<ChatTurn[]>(() => [...stressTurns.value, ...M.indexTurns]);
 function go(id: string) {
   location.search = '?scene=' + id;
 }
@@ -329,7 +369,7 @@ function openFM(e: MouseEvent, file: string) {
     <!-- ================= index ================= -->
     <template v-if="scene === 'index'">
       <ConversationPane
-        :turns="M.indexTurns"
+        :turns="indexTurnsAll"
         :todos-by-turn="M.indexTodos"
         :turn-progress="M.indexProgress"
         :running="false"

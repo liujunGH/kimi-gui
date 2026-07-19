@@ -186,6 +186,7 @@ defineExpose({ setText });
           :effort="props.effort"
           @set-model="(id) => emit('set-model', id)"
           @set-effort="(lv) => emit('set-effort', lv)"
+          @pick-model="emit('pick-model')"
         />
         <button
           v-if="!props.running"
