@@ -87,7 +87,12 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('keydown', onKeydown, true);
+  // 用 bubble 相(默认 false),不是 capture。
+  // 原因(kimi3 报的问题 5):SlashMenu/MentionMenu 等组件级 Esc handler 在 bubble 相,
+  // 它们 stopPropagation 拦截后,全局 escClose 不应触发。
+  // capture 相会先于组件触发,导致组件菜单关不掉时全局先关了 DetailPane。
+  // bubble 相让组件先处理,组件 stopPropagation 就能阻止全局兜底。
+  window.addEventListener('keydown', onKeydown, false);
 }
 
 /**
