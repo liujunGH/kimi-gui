@@ -49,6 +49,14 @@
 
 ---
 
+### `web/src/main.ts`(2026-07-19 · ZCode · 轮次 3)
+
+**改动**:启动时 bootstrapTauriToken(invoke daemon_info 拿 token → setCredential)
+
+**原因**:Tauri 环境下免用户手输 server token(官方 ServerAuthDialog)。浏览器环境跳过,走官方 fragment/手输流程。
+
+**冲突风险**:中。main.ts 是入口,官方改动较多。token 注入逻辑独立,merge 时保留即可。
+
 ### `web/package.json`(2026-07-19 · ZCode · 轮次 3 阶段 B)
 
 **改动**:`dependencies` 加 `"@tauri-apps/api": "^2"`

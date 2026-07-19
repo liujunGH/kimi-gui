@@ -15,11 +15,16 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-# custom-protocol: makes WebviewUrl::App resolve to embedded assets in release
-# builds too. macos-private-api: needed for transparent / pinned toast windows
-# (ARCHITECTURE §6 规划的通知浮窗等 P1+ 功能)。
+# ⚠️ 不要在 features 里加 "custom-protocol"!
+# Tauri 用 custom-protocol feature 判断 dev/prod 模式:
+#   - 不启用(默认)= dev 模式 → webview 走 devUrl(http://localhost:5175)
+#   - 启用(custom-protocol) = prod 模式 → webview 走 frontendDist(tauri://localhost)
+# `tauri build` 命令在 release 时自动注入 custom-protocol feature,不用我们手动加。
+# 之前手动加了导致 dev 模式也走 frontendDist,webview 加载空白。
+#
+# macos-private-api: needed for transparent / pinned toast windows
 # tray-icon: 系统托盘(TrayIconBuilder 等需要)
-tauri = { version = "2", features = ["custom-protocol", "macos-private-api", "tray-icon"] }
+tauri = { version = "2", features = ["macos-private-api", "tray-icon"] }
 tauri-plugin-opener = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-global-shortcut = "2"
