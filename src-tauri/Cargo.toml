@@ -18,9 +18,11 @@ tauri-build = { version = "2", features = [] }
 # custom-protocol: makes WebviewUrl::App resolve to embedded assets in release
 # builds too. macos-private-api: needed for transparent / pinned toast windows
 # (ARCHITECTURE §6 规划的通知浮窗等 P1+ 功能)。
-tauri = { version = "2", features = ["custom-protocol", "macos-private-api"] }
+# tray-icon: 系统托盘(TrayIconBuilder 等需要)
+tauri = { version = "2", features = ["custom-protocol", "macos-private-api", "tray-icon"] }
 tauri-plugin-opener = "2"
 tauri-plugin-notification = "2"
+tauri-plugin-global-shortcut = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
