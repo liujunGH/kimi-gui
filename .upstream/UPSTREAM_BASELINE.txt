@@ -1,0 +1,2 @@
+3086e4703992fbbe7a41379405ee243713ad9ced
+3086e470 2026-07-18 02:09:31 +0800 fix: unify YOLO and Auto permission mode descriptions across surfaces (#1867)
