@@ -1,16 +1,19 @@
 /**
  * codex-app 入口 —— 真产品入口(web/app.html → /src/codex-app/main.ts)
  *
- * 与 codex-demo/main.ts 区别:
- * - codex-demo:挂 DemoApp(mock 数据,7 场景)
- * - codex-app:挂 CodexApp(真 useKimiWebClient 数据,单场景)
+ * Tauri 环境下 token 注入:
+ * Rust setup 异步连接 daemon → eval JS 写 localStorage('kimi-web.server-credential')。
+ * 前端不依赖 Tauri IPC(__TAURI_INTERNALS__ 在 dev 外部 URL 不注入),
+ * 而是轮询 localStorage 等 Rust eval 写入,最多等 10 秒。
+ *
+ * 浏览器环境(开发测试)无 token,走官方 fragment / 手输流程。
  */
 import { createApp } from 'vue';
 import CodexApp from './CodexApp.vue';
 import i18n from '../i18n';
 import { installClientErrorCapture } from '../debug/trace';
-import { setCredential, initServerAuth } from '../api/daemon/serverAuth';
-import '../composables/codex/useTheme'; // 触发模块级 data-theme apply
+import { initServerAuth } from '../api/daemon/serverAuth';
+import '../composables/codex/useTheme';
 import '@fontsource-variable/inter/opsz.css';
 import '@fontsource-variable/inter/opsz-italic.css';
 import '@fontsource-variable/jetbrains-mono/wght.css';
@@ -30,30 +33,33 @@ import '../styles/settings.css';
 installClientErrorCapture();
 
 /**
- * Tauri 环境下:启动时从 Rust 端拿 daemon token,注入到 serverAuth。
- * 跟 web/src/main.ts 的 bootstrapTauriToken 一样(两份入口共用逻辑)。
+ * 等 token 到位再 mount。
+ *
+ * Tauri 环境:Rust eval 异步写 localStorage,轮询等它。
+ * 浏览器环境:localStorage 无 token,等 3 秒后放弃(走官方 ServerAuthDialog)。
  */
-async function bootstrapTauriToken(): Promise<void> {
-  if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return;
-  const { invoke } = await import('@tauri-apps/api/core');
-  for (let i = 0; i < 10; i++) {
-    try {
-      const info = await invoke<{ base: string; token: string }>('daemon_info');
-      if (info?.token) {
-        setCredential(info.token);
-        return;
-      }
-    } catch {
-      // daemon 未连接,等 500ms 重试
-    }
-    await new Promise((r) => setTimeout(r, 500));
+function hasCredential(): boolean {
+  try {
+    return !!localStorage.getItem('kimi-web.server-credential');
+  } catch {
+    return false;
   }
 }
 
-bootstrapTauriToken().finally(() => {
-  // 初始化 serverAuth(读 fragment 或 localStorage)
-  // bootstrapTauriToken 已经通过 setCredential 写了 localStorage,
-  // initServerAuth 会读到它;浏览器环境无 fragment 也能 fallback
+async function waitForCredential(maxWait = 10000, interval = 200): Promise<boolean> {
+  if (hasCredential()) return true;
+  for (let elapsed = 0; elapsed < maxWait; elapsed += interval) {
+    await new Promise((r) => setTimeout(r, interval));
+    if (hasCredential()) return true;
+  }
+  return false;
+}
+
+waitForCredential().then((ok) => {
+  if (!ok) {
+    // eslint-disable-next-line no-console
+    console.warn('[codex-app] 10 秒内未检测到 daemon token,走官方 ServerAuthDialog');
+  }
   initServerAuth();
   createApp(CodexApp).use(i18n).mount('#app');
 });

@@ -22,6 +22,7 @@ import i18n from '../i18n';
 import type { ChatTurn, TodoView } from '../types';
 import type {
   ContextInfo,
+  EffortLevel,
   ComposerMode,
   ModeFlags,
   QueuedPrompt,
@@ -190,6 +191,16 @@ const ctxInfo = computed<ContextInfo>(() => {
     total: fmtK(limit),
     pct: limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0,
   };
+});
+
+// thinking effort 映射:官方 ThinkingLevel('none'|'minimal'|'low'|'medium'|'high'|'xhigh')
+// → 契约 EffortLevel('Low'|'High'|'Max')
+const composerEffort = computed<EffortLevel | null>(() => {
+  const t = client.thinking.value;
+  if (!t || t === 'none' || t === 'minimal') return null;
+  if (t === 'low' || t === 'medium') return 'Low';
+  if (t === 'high') return 'High';
+  return 'Max'; // xhigh
 });
 
 // ---------------------------------------------------------------- 子智能体
@@ -411,7 +422,7 @@ function qRemove(i: number) {
           :modes="composerModes"
           :models="composerModels"
           :current-model="composerCurrentModel"
-          :effort="null"
+          :effort="composerEffort"
           :context="ctxInfo"
           :quota="{ q5h: 0, q5hReset: '', qWeek: 0, qWeekReset: '' }"
           :builtin="builtinCommands"
