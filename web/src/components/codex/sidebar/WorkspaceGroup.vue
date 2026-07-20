@@ -19,6 +19,9 @@ const emit = defineEmits<{
   (e: 'toggle-pin', id: string): void;
   (e: 'set-sort', mode: WorkspaceSortMode): void;
   (e: 'select-workspace'): void;
+  (e: 'rename-workspace'): void;
+  (e: 'delete-workspace'): void;
+  (e: 'copy-path'): void;
 }>();
 
 const SORTS: { id: WorkspaceSortMode; label: string }[] = [
@@ -82,10 +85,10 @@ onUnmounted(() => document.removeEventListener('click', onDocClick));
           <span class="mi-label">{{ s.label }}</span>
         </button>
         <div class="menu-sep"></div>
-        <button class="menu-item"><span class="mi-label">重命名工作区</span></button>
-        <button class="menu-item"><span class="mi-label">复制路径</span></button>
+        <button class="menu-item" @click.stop="emit('rename-workspace'); menuOpen = false"><span class="mi-label">重命名工作区</span></button>
+        <button class="menu-item" @click.stop="emit('copy-path'); menuOpen = false"><span class="mi-label">复制路径</span></button>
         <div class="menu-sep"></div>
-        <button class="menu-item"><span class="mi-label">归档工作区…</span></button>
+        <button class="menu-item" @click.stop="emit('delete-workspace'); menuOpen = false"><span class="mi-label">移除工作区</span></button>
       </div>
     </div>
     <div class="ws-threads">

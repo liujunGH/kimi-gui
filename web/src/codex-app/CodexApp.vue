@@ -305,6 +305,13 @@ const sideSubTask = computed(() => {
   const id = ui.sideTaskSubagentId.value;
   return id ? (client.tasks.value ?? []).find((t) => t.id === id) ?? null : null;
 });
+// 侧边对话(/btw)真数据
+const sideChatTurns = computed(() => client.sideChatTurns.value ?? []);
+const sideChatRunning = computed(() => client.sideChatRunning.value ?? false);
+function onSideChatSend(text: string) {
+  if (text.trim()) void client.sendSideChatPrompt(text);
+}
+
 const sideTaskProps = computed(() => {
   const t = sideSubTask.value;
   if (ui.sideTaskKind.value === 'agent-transcript' && t) {
@@ -433,6 +440,19 @@ function onRenameSession() {
   if (!id) return;
   const title = window.prompt('新标题', activeSession.value?.title ?? '');
   if (title) void client.renameSession(id, title);
+}
+function onRenameWorkspace() {
+  const id = client.activeWorkspaceId.value;
+  if (!id) return;
+  const name = window.prompt('工作区新名称', sidebarCurrentWs.value);
+  if (name) void client.renameWorkspace(id, name);
+}
+function onDeleteWorkspace() {
+  const id = client.activeWorkspaceId.value;
+  if (!id) return;
+  if (window.confirm('确定移除工作区?会话数据保留,可重新添加。')) {
+    void client.deleteWorkspace(id);
+  }
 }
 
 /** 文件路径链接点击 → 读文件内容 → 在 DetailPane 显示 */
@@ -580,6 +600,8 @@ async function searchFiles(q: string) {
           @toggle-pin="togglePin"
           @open-settings="settingsOpen = false"
           @select-workspace="() => {}"
+          @rename-workspace="onRenameWorkspace"
+          @delete-workspace="onDeleteWorkspace"
         />
       </template>
       <header class="app-toolbar">
@@ -612,6 +634,8 @@ async function searchFiles(q: string) {
         @open-settings="settingsOpen = true"
         @select-workspace="() => {}"
         @set-workspace-sort="(m: any) => client.setWorkspaceSortMode(m)"
+        @rename-workspace="onRenameWorkspace"
+        @delete-workspace="onDeleteWorkspace"
       >
         <template #new-task>
           <WorkspacePicker
@@ -783,6 +807,7 @@ async function searchFiles(q: string) {
 
     <!-- 侧边任务(分栏) -->
     <SideTask v-bind="sideTaskProps">
+      <!-- agent-transcript 模式:子 agent 详情 -->
       <div v-if="sideSubTask" class="msg-assistant">
         <div class="a-content">
           <p>
@@ -794,11 +819,33 @@ async function searchFiles(q: string) {
           <p v-else style="color: var(--text-3)">该子智能体暂无输出记录。</p>
         </div>
       </div>
-      <div v-else class="msg-assistant">
-        <div class="a-content">
-          <p style="color: var(--text-3)">从子智能体面板钻取一个 agent 查看详情;或继续当前线程,这里是只读视图。</p>
+      <!-- thread 模式:侧边对话(/btw) -->
+      <template v-else>
+        <div v-if="sideChatTurns.length" class="side-chat-turns">
+          <template v-for="t in sideChatTurns" :key="t.id">
+            <MessageUser v-if="t.role === 'user'" :turn="t" />
+            <MessageAssistant
+              v-else-if="t.role === 'assistant'"
+              :turn="t"
+              :running="sideChatRunning && t.id === sideChatTurns[sideChatTurns.length - 1]?.id"
+            />
+          </template>
         </div>
-      </div>
+        <div v-else class="msg-assistant">
+          <div class="a-content">
+            <p style="color: var(--text-3)">侧边对话:在这里问问题,不影响主线程。</p>
+          </div>
+        </div>
+        <!-- 迷你输入 -->
+        <div class="side-chat-input">
+          <input
+            type="text"
+            placeholder="给侧边对话发消息…"
+            @keydown.enter="(e) => { const t = (e.target as HTMLInputElement).value; if (t.trim()) { onSideChatSend(t); (e.target as HTMLInputElement).value = ''; } }"
+            :disabled="sideChatRunning"
+          />
+        </div>
+      </template>
     </SideTask>
 
     <!-- 子智能体面板 -->
