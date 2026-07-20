@@ -50,6 +50,9 @@ import SettingsPage from '../components/codex/settings/SettingsPage.vue';
 import ReviewPane from '../components/codex/diff/ReviewPane.vue';
 import OfficialModelPicker from '../components/settings/ModelPicker.vue';
 import Onboarding from '../components/settings/Onboarding.vue';
+import OfficialQuestionCard from '../components/chat/QuestionCard.vue';
+import OfficialGoalStrip from '../components/chat/GoalStrip.vue';
+import type { UIQuestion } from '../types';
 import { toDiffHunks } from '../components/codex/diff/diffMapper';
 import CodexIcon from '../components/codex/layout/CodexIcon.vue';
 
@@ -151,6 +154,37 @@ const todosByTurn = computed<Record<string, TodoView[]>>(() => {
   return lastAssistantTurnId.value && todos.length ? { [lastAssistantTurnId.value]: todos } : {};
 });
 const approvalCount = computed(() => (client.pendingApprovals.value ?? []).length);
+// agent 提问(对话流内联 QuestionCard)
+const pendingQuestions = computed<UIQuestion[]>(() => client.questions.value ?? []);
+const currentQuestion = computed(() => pendingQuestions.value[0] ?? null);
+// 目标条(/goal 创建后显示)
+const activeGoal = computed(() => client.goal.value ?? null);
+// 压缩摘要(/compact 后显示分隔线)
+const compactionInfo = computed(() => client.compaction.value ?? null);
+// daemon 警告
+const activeWarnings = computed(() => client.warnings.value ?? []);
+// 侧栏未读数(用于 Dock badge)
+const unreadCount = computed(() => {
+  const m = client.unreadBySession.value;
+  if (!m) return 0;
+  return Object.values(m).filter((v) => v).length;
+});
+// 压缩分隔线(对话流中显示"上下文已压缩")
+const hasCompaction = computed(() => compactionInfo.value !== null);
+function onViewCompaction() {
+  if (compactionInfo.value) {
+    filePreviewContent.value = `// 上下文压缩摘要\n\n${JSON.stringify(compactionInfo.value, null, 2)}`;
+    ui.openDetail('thinking');
+  }
+}
+// 未读数变化时更新 Dock badge
+watch(unreadCount, (n) => {
+  if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+    import('@tauri-apps/api/core').then(({ invoke }) => {
+      void invoke('set_dock_badge', { count: n });
+    }).catch(() => {});
+  }
+});
 
 const thinkingFullText = computed(() => {
   // 文件预览内容优先(点文件路径时临时显示)
@@ -402,6 +436,19 @@ function onRenameSession() {
 }
 
 /** 文件路径链接点击 → 读文件内容 → 在 DetailPane 显示 */
+/** agent 提问:回答 */
+function onAnswerQuestion(questionId: string, response: any) {
+  void client.respondQuestion(questionId, response);
+}
+/** agent 提问:忽略 */
+function onDismissQuestion(questionId: string) {
+  void client.dismissQuestion(questionId);
+}
+/** 忽略警告(by index) */
+function onDismissWarning(idx: number) {
+  client.dismissWarning(idx);
+}
+
 function onOpenFile(target: { path: string; line?: number }) {
   void client.readFileContent(target.path).then((data) => {
     if (data?.content) {
@@ -654,6 +701,40 @@ async function searchFiles(q: string) {
       :tasks="client.todos.value ?? []"
       @set-tab="(t) => ui.setDetailTab(t)"
       @close="ui.closeDetail()"
+    />
+
+    <!-- 警告提示(daemon warnings) -->
+    <div v-if="activeWarnings.length" class="codex-warnings">
+      <div v-for="(w, idx) in activeWarnings" :key="idx" class="codex-warning">
+        <span class="cw-icon"><CodexIcon name="alert-triangle" /></span>
+        <span class="cw-text">{{ typeof w === 'string' ? w : w.title }}</span>
+        <button class="cw-close" @click="onDismissWarning(idx)"><CodexIcon name="x" /></button>
+      </div>
+    </div>
+
+    <!-- 目标条(/goal) -->
+    <div v-if="activeGoal" class="dock-goal-strip">
+      <OfficialGoalStrip
+        :goal="activeGoal"
+        @pause="client.controlGoal('pause')"
+        @resume="client.controlGoal('resume')"
+        @cancel="client.controlGoal('cancel')"
+      />
+    </div>
+
+    <!-- 压缩分隔线(/compact 后) -->
+    <div v-if="hasCompaction" class="codex-compaction">
+      <span class="cc-line"></span>
+      <button class="cc-text" @click="onViewCompaction">上下文已压缩 · 查看摘要</button>
+      <span class="cc-line"></span>
+    </div>
+
+    <!-- agent 提问(QuestionCard) -->
+    <OfficialQuestionCard
+      v-if="currentQuestion"
+      :question="currentQuestion"
+      @answer="onAnswerQuestion"
+      @dismiss="onDismissQuestion"
     />
 
     <!-- Composer dock -->
