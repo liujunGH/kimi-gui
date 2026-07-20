@@ -2,11 +2,10 @@
 /**
  * QueuePanel —— 队列指示器 + 队列面板
  *
- * 行为(组件内):
+ * 行为:
  * - 指示器开合面板;条数空时自动收起并隐藏
- * - 行操作:引导(转插话)/ 编辑 / 删除,经 emit 上抛
- * - defaultOpen:steer 场景用,初始即展开
- * - reorder:拖拽重排本阶段只做 grip 暗示,emit 保留
+ * - 条操作:引导(转插话)/ 编辑 / 删除,经 emit 上抛
+ * - 拖拽重排:grip 拖动 → emit reorder(from, to)
  */
 import { computed, ref, watch } from 'vue';
 import type { QueuePanelProps, QueuePanelEmits } from '../../../types/codex';
@@ -22,6 +21,36 @@ const count = computed(() => props.queuedPrompts.length);
 watch(count, (n) => {
   if (n === 0) open.value = false;
 });
+
+// ---------- 拖拽重排 ----------
+const dragIndex = ref<number | null>(null);
+const dragOverIndex = ref<number | null>(null);
+
+function onDragStart(e: DragEvent, index: number) {
+  dragIndex.value = index;
+  e.dataTransfer?.setData('text/plain', String(index));
+  if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+}
+
+function onDragOver(e: DragEvent, index: number) {
+  e.preventDefault();
+  dragOverIndex.value = index;
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+}
+
+function onDrop(e: DragEvent, index: number) {
+  e.preventDefault();
+  const from = dragIndex.value;
+  dragIndex.value = null;
+  dragOverIndex.value = null;
+  if (from === null || from === index) return;
+  emit('reorder', from, index);
+}
+
+function onDragEnd() {
+  dragIndex.value = null;
+  dragOverIndex.value = null;
+}
 </script>
 
 <template>
@@ -37,7 +66,20 @@ watch(count, (n) => {
         消息队列
         <span class="qp-hint">{{ count }} 条 · 拖拽重排</span>
       </div>
-      <div v-for="(q, i) in props.queuedPrompts" :key="q.id" class="qp-row">
+      <div
+        v-for="(q, i) in props.queuedPrompts"
+        :key="q.id"
+        class="qp-row"
+        :class="{
+          dragging: dragIndex === i,
+          'drag-over': dragOverIndex === i && dragIndex !== i,
+        }"
+        draggable="true"
+        @dragstart="(e) => onDragStart(e, i)"
+        @dragover="(e) => onDragOver(e, i)"
+        @drop="(e) => onDrop(e, i)"
+        @dragend="onDragEnd"
+      >
         <span class="qp-grip" title="拖拽重排"><CodexIcon name="grip" /></span>
         <span class="qp-num">{{ i + 1 }}</span>
         <span class="qp-text">{{ q.text }}</span>

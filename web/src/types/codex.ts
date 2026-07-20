@@ -45,6 +45,14 @@ export type WorkspaceSortMode = 'recent' | 'manual' | 'created';
 
 import type { Session, Workspace } from '../types';
 
+/** 附件(prompt attachments,跟官方 useKimiWebClient 一致) */
+export interface PromptAttachment {
+  fileId: string;
+  kind: 'image' | 'video' | 'file';
+  url: string;
+  name?: string;
+}
+
 export interface SidebarProps {
   workspaces: Workspace[];
   currentWorkspaceId: string;
@@ -207,7 +215,7 @@ export interface ComposerProps {
 }
 
 export interface ComposerEmits {
-  (e: 'send', text: string, mode: ComposerMode): void;
+  (e: 'send', text: string, mode: ComposerMode, attachments?: PromptAttachment[]): void;
   (e: 'set-mode', m: ComposerMode): void;
   (e: 'toggle-mode', m: keyof ModeFlags): void; // 'plan' | 'swarm' | 'goal'
   (e: 'cancel'): void;

@@ -26,6 +26,7 @@ import type {
   ContextInfo,
   DiffHunk,
   EffortLevel,
+  PromptAttachment,
   ComposerMode,
   ModeFlags,
   QueuedPrompt,
@@ -351,12 +352,12 @@ function openTranscript(id: string) {
 
 // ---------------------------------------------------------------- 事件处理
 
-function onSend(text: string, mode: ComposerMode) {
-  if (!text.trim()) return;
+function onSend(text: string, mode: ComposerMode, attachments?: PromptAttachment[]) {
+  if (!text.trim() && !attachments?.length) return;
   if (mode === 'steer' && conversationRunning.value) {
-    void client.steerPrompt(text);
+    void client.steerPrompt(text, attachments as any);
   } else {
-    void client.sendPrompt(text);
+    void client.sendPrompt(text, attachments as any);
   }
 }
 function onSelectSession(id: string) {
@@ -720,6 +721,7 @@ async function searchFiles(q: string) {
       :todos-by-turn="todosByTurn"
       :running="conversationRunning"
       :open-file="onOpenFile"
+      :has-more-messages="client.hasMoreMessages.value ?? false"
       @inspect="(tab) => ui.openDetail(tab)"
       @load-older="() => { const sid = client.activeSessionId.value; if (sid && client.hasMoreMessages.value) void client.loadOlderMessages(sid); }"
     />
@@ -785,6 +787,7 @@ async function searchFiles(q: string) {
           @promote-to-steer="(id) => qSteer(Number(id))"
           @edit="(id) => qEdit(Number(id))"
           @remove="(id) => qRemove(Number(id))"
+          @reorder="(from: number, to: number) => void client.reorderQueue(from, to)"
         />
         <Composer
           ref="composerRef"
@@ -802,6 +805,7 @@ async function searchFiles(q: string) {
           :files="[]"
           :search-files="searchFiles"
           :cost="client.sessionCost.value ?? 0"
+          :upload-image="(file: Blob, name?: string) => client.uploadImage(file, name)"
           :session-title="activeSession?.title ?? sidebarCurrentWs"
           @send="onSend"
           @set-mode="onComposerMode"

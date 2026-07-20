@@ -42,6 +42,8 @@ const props = withDefaults(
       placeholder?: string;
       /** 会话累计成本(USD),透传给 ContextMeter */
       cost?: number;
+      /** 图片上传(daemon uploadImage);提供后 paste/drop 可上传图片 */
+      uploadImage?: (file: Blob, name?: string) => Promise<{ fileId: string; name: string; mediaType: string } | null>;
     }
   >(),
   { builtin: () => [], skills: () => [], files: () => [], sessionTitle: '', placeholder: '' },
@@ -103,12 +105,15 @@ const displayModelName = computed(() => {
     : props.currentModel;
 });
 
-const canSend = computed(() => text.value.trim().length > 0);
+const canSend = computed(() => text.value.trim().length > 0 || attachments.value.some((a) => a.fileId && !a.uploading && !a.error));
 
 function submit() {
+  if (attachments.value.some((a) => a.uploading)) return;
   if (!canSend.value) return;
-  emit('send', text.value.trim(), props.mode);
+  const atts = buildAttachments();
+  emit('send', text.value.trim(), props.mode, atts.length ? atts : undefined);
   text.value = '';
+  clearAttachments();
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -124,6 +129,103 @@ function setText(t: string) {
   text.value = t;
   taEl.value?.focus();
 }
+
+// ---------- 附件上传(paste / drop / file picker) ----------
+interface PendingAttachment {
+  localId: string;
+  name: string;
+  url: string;
+  uploading: boolean;
+  error: boolean;
+  fileId?: string;
+  mediaType?: string;
+}
+const attachments = ref<PendingAttachment[]>([]);
+const fileInputEl = ref<HTMLInputElement | null>(null);
+
+async function handleFiles(files: FileList | File[]) {
+  if (!props.uploadImage) return;
+  const arr = Array.from(files);
+  for (const file of arr) {
+    const isImage = file.type.startsWith('image/') || file.type.startsWith('video/');
+    if (!isImage) continue;
+    const att: PendingAttachment = {
+      localId: crypto.randomUUID(),
+      name: file.name,
+      url: URL.createObjectURL(file),
+      uploading: true,
+      error: false,
+    };
+    attachments.value.push(att);
+    try {
+      const result = await props.uploadImage(file, file.name);
+      if (result) {
+        att.fileId = result.fileId;
+        att.mediaType = result.mediaType;
+      } else {
+        att.error = true;
+      }
+    } catch {
+      att.error = true;
+    } finally {
+      att.uploading = false;
+    }
+  }
+}
+
+function removeAttachment(localId: string) {
+  const idx = attachments.value.findIndex((a) => a.localId === localId);
+  if (idx >= 0) {
+    URL.revokeObjectURL(attachments.value[idx]!.url);
+    attachments.value.splice(idx, 1);
+  }
+}
+
+function onPaste(e: ClipboardEvent) {
+  const files = e.clipboardData?.files;
+  if (files && files.length > 0) {
+    e.preventDefault();
+    void handleFiles(files);
+  }
+}
+
+function onDrop(e: DragEvent) {
+  if (!e.dataTransfer?.files?.length) return;
+  e.preventDefault();
+  void handleFiles(e.dataTransfer.files);
+}
+
+function onDragOver(e: DragEvent) {
+  if (e.dataTransfer?.types?.includes('Files')) e.preventDefault();
+}
+
+function pickFile() {
+  fileInputEl.value?.click();
+}
+
+function onFileInputChange(e: Event) {
+  const input = e.target as HTMLInputElement;
+  if (input.files?.length) void handleFiles(input.files);
+  input.value = '';
+}
+
+// 发送时携带附件(构建 PromptAttachment[])
+function buildAttachments(): { fileId: string; kind: 'image' | 'video' | 'file'; url: string; name?: string }[] {
+  return attachments.value
+    .filter((a) => a.fileId && !a.uploading && !a.error)
+    .map((a) => ({
+      fileId: a.fileId!,
+      kind: (a.mediaType?.startsWith('video/') ? 'video' : 'image') as 'image' | 'video' | 'file',
+      url: a.url,
+      name: a.name,
+    }));
+}
+
+function clearAttachments() {
+  for (const a of attachments.value) URL.revokeObjectURL(a.url);
+  attachments.value = [];
+}
+
 defineExpose({ setText });
 </script>
 
@@ -131,6 +233,8 @@ defineExpose({ setText });
   <div
     class="composer"
     :class="{ 'is-running': props.running, 'mode-steer-on': props.mode === 'steer' }"
+    @dragover="onDragOver"
+    @drop="onDrop"
   >
     <SlashMenu
       v-if="assistVisible?.mode === 'slash'"
@@ -153,6 +257,31 @@ defineExpose({ setText });
 
     <ComposerModes v-if="props.running" :mode="props.mode" @set-mode="(m) => emit('set-mode', m)" />
 
+    <!-- 附件 chips -->
+    <div v-if="attachments.length" class="att-strip">
+      <div
+        v-for="att in attachments"
+        :key="att.localId"
+        class="att-chip"
+        :class="{ uploading: att.uploading, error: att.error }"
+      >
+        <img v-if="att.url" :src="att.url" class="att-thumb" />
+        <span class="att-name">{{ att.name }}</span>
+        <span v-if="att.uploading" class="att-status">上传中…</span>
+        <span v-else-if="att.error" class="att-status err">失败</span>
+        <button class="att-remove" @click="removeAttachment(att.localId)"><CodexIcon name="x" /></button>
+      </div>
+    </div>
+
+    <input
+      ref="fileInputEl"
+      type="file"
+      accept="image/*,video/*"
+      multiple
+      style="display:none"
+      @change="onFileInputChange"
+    />
+
     <div class="composer-input">
       <textarea
         ref="taEl"
@@ -160,11 +289,15 @@ defineExpose({ setText });
         rows="1"
         :placeholder="placeholder"
         @keydown="onKeydown"
+        @paste="onPaste"
       ></textarea>
     </div>
 
     <div class="composer-toolbar">
       <div class="toolbar-group">
+        <button v-if="props.uploadImage" class="attach-btn" title="添加图片附件" @click="pickFile">
+          <CodexIcon name="paperclip" />
+        </button>
         <PermPicker :permission="props.permission" @set-permission="(p) => emit('set-permission', p)" />
         <ModePicker :modes="props.modes" @toggle-mode="(m) => emit('toggle-mode', m)" />
       </div>

@@ -18,7 +18,13 @@ import MessageAssistant from './MessageAssistant.vue';
 import TurnProgress from './TurnProgress.vue';
 import ConversationToc, { type ConversationTocItem } from '../../chat/ConversationToc.vue';
 
-const props = defineProps<ConversationPaneProps>();
+const props = withDefaults(
+  defineProps<ConversationPaneProps & {
+    /** daemon 是否有更多更早消息(控制"加载更早"按钮显隐) */
+    hasMoreMessages?: boolean;
+  }>(),
+  { hasMoreMessages: false },
+);
 const emit = defineEmits<ConversationPaneEmits & {
   (e: 'inspect', tab: 'thinking' | 'tools'): void;
   (e: 'load-older'): void;
@@ -33,6 +39,8 @@ const visibleCount = ref(PAGE);
 const total = computed(() => props.turns.length);
 const shownTurns = computed(() => props.turns.slice(Math.max(0, total.value - visibleCount.value)));
 const hiddenCount = computed(() => total.value - shownTurns.value.length);
+/** 是否显示"加载更早"按钮:本地有更多 hidden,或 daemon 有更多 */
+const canLoadMore = computed(() => hiddenCount.value > 0 || props.hasMoreMessages);
 const lastTurnId = computed(() => props.turns[props.turns.length - 1]?.id);
 
 // ConversationToc:每轮 user query 一条竖条(hover 展开 label)
@@ -140,10 +148,11 @@ void emit;
   <div ref="scrollEl" class="app-conversation" @scroll="onScroll">
     <div class="conversation">
       <!-- 更早加载哨兵/按钮 -->
-      <div v-if="hiddenCount > 0" ref="sentinelEl" class="load-earlier">
+      <div v-if="canLoadMore" ref="sentinelEl" class="load-earlier">
         <button class="load-earlier-btn" @click="loadMore">
           <CodexIcon name="chevron-down" style="transform: rotate(180deg)" />
-          加载更早的 {{ Math.min(hiddenCount, PAGE) }} 条(共 {{ total }} 轮)
+          <template v-if="hiddenCount > 0">加载更早的 {{ Math.min(hiddenCount, PAGE) }} 条(共 {{ total }} 轮)</template>
+          <template v-else>加载更早的消息</template>
         </button>
       </div>
 
