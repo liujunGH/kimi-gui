@@ -462,6 +462,10 @@ function onEditMessage(turn: ChatTurn) {
 
 function onSend(text: string, mode: ComposerMode, attachments?: PromptAttachment[]) {
   if (!text.trim() && !attachments?.length) return;
+  if (client.connection.value !== 'connected') {
+    toast('未连接到 daemon,无法发送');
+    return;
+  }
   if (mode === 'steer' && conversationRunning.value) {
     void client.steerPrompt(text, attachments as any);
     // B4:steer 反馈(原型有气泡,真 app 至少给 toast;思考块 steerMark 待数据侧接线)
@@ -947,6 +951,7 @@ async function searchFiles(q: string) {
 
     <!-- 对话流(审批卡由 MessageAssistant 按 turn.approval 内联渲染) -->
     <ConversationPane
+      v-if="conversationTurns.length || conversationRunning"
       :turns="conversationTurns"
       :todos-by-turn="todosByTurn"
       :running="conversationRunning"
@@ -958,6 +963,14 @@ async function searchFiles(q: string) {
       @view-compaction="onViewCompaction"
       @edit-message="onEditMessage"
     />
+    <!-- 空态:无会话/空会话占位 -->
+    <div v-else class="empty-state">
+      <CodexIcon name="sparkle" />
+      <p class="es-title">
+        {{ client.activeSessionId.value ? '开始你的第一句话' : '选择左侧会话,或在下方输入开始新对话' }}
+      </p>
+      <p class="es-sub">⌘K 命令面板 · / 斜杠命令 · @ 引用文件</p>
+    </div>
 
     <!-- Inspect 右栏 -->
     <DetailPane

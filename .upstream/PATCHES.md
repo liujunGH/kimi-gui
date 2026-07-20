@@ -74,3 +74,11 @@
 - `web/src/types.ts`:被 `web/src/types/codex.ts` import 类型(`ChatTurn` / `TurnBlock` / `ToolCall` / `TodoView` / `PermissionMode` / `Session` / `Workspace`)。只读引用。
 - `web/src/composables/useKimiWebClient.ts`:被 `web/src/composables/codex/useKimiClient.ts` import 类型(`ReturnType<typeof useKimiWebClient>`)。只读引用。
 - `web/src/lib/slashCommands.ts`:内置命令元数据,`composables/codex/useSlashMenu`(轮次 3 实现)会读取。只读引用。
+
+### `web/src/components/chat/Markdown.vue`(2026-07-20 · kimi3 · 轮次 7+)
+
+**改动**:本地图片解析完成后的写回改为同帧批量提交(`resolvedBatch` + rAF flush),不再每张图 `resolvedImages.set` 一次。
+
+**原因**:`segments` computed 依赖 `resolvedImages`,N 张本地图 = N 次整条消息 rewriteImageSrcs + markstream 重解析(图片多的会话流式/加载时明显卡顿)。批量后同帧 resolve 只触发 1 次重算,行为不变(未 flush 前仍是 placeholder,与原"in-flight 占位"一致)。
+
+**冲突风险**:低。改动只在 `resolvedImages` 声明块和 `queueImageResolution` 的两个 promise 回调里,上游同区域改动时按"批量写回"语义手工合。

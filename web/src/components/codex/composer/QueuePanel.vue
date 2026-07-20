@@ -93,7 +93,7 @@ function onDragEnd() {
         <span class="qp-actions">
           <button
             class="qp-steer"
-            title="转为引导:立即插话到当前轮"
+            title="转为引导:合并全部排队消息,立即插话到当前轮(TUI 对等行为)"
             @click="emit('promote-to-steer', q.id)"
           >
             <CodexIcon name="reply" />

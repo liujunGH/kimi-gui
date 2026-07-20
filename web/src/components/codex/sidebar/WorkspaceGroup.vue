@@ -27,7 +27,7 @@ const emit = defineEmits<{
 const SORTS: { id: WorkspaceSortMode; label: string }[] = [
   { id: 'recent', label: '最近编辑' },
   { id: 'manual', label: '手动排序' },
-  { id: 'created', label: '创建时间' },
+  { id: 'created', label: '最早编辑' },
 ];
 
 const closed = ref(false);

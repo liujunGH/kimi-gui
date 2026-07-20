@@ -393,3 +393,14 @@ a { color: inherit; text-decoration: none; }
 .cw-msg { display: block; margin-top: 1px; }
 .cw-details { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 3px; }
 .cw-detail { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
+
+/* ---------- 空态(无会话/空会话的对话区占位) ---------- */
+.empty-state {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 10px;
+  color: var(--text-3);
+}
+.empty-state .ic { width: 28px; height: 28px; opacity: 0.5; }
+.es-title { font-size: var(--text-lg); color: var(--text-2); }
+.es-sub { font-size: var(--text-sm); }

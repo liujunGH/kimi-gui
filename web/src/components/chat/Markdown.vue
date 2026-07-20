@@ -140,6 +140,21 @@ const IMG_PLACEHOLDER = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAA
 const resolvedImages = reactive(new Map<string, string>());
 const pendingImages = new Set<string>();
 
+// 解析完成不立即写 reactive Map:同帧批量提交,N 张图只触发 1 次 segments 重算
+// (否则每张图 resolve 都让整条消息重跑 rewriteImageSrcs + markstream 重解析;
+// 见 .upstream/PATCHES.md 2026-07-20 kimi3 条目)
+const resolvedBatch = new Map<string, string>();
+let resolvedFlushScheduled = false;
+function scheduleResolvedFlush(): void {
+  if (resolvedFlushScheduled) return;
+  resolvedFlushScheduled = true;
+  requestAnimationFrame(() => {
+    resolvedFlushScheduled = false;
+    for (const [src, url] of resolvedBatch) resolvedImages.set(src, url);
+    resolvedBatch.clear();
+  });
+}
+
 // ![alt](src) — src up to the first whitespace/closing paren (optional title
 // stays in place). <img src="..."> for raw-HTML images.
 const MD_IMG_RE = /(!\[[^\]]*\]\()\s*([^)\s]+)([^)]*\))/g;
@@ -163,10 +178,12 @@ function queueImageResolution(text: string): void {
     pendingImages.add(src);
     resolveImage(src)
       .then((url) => {
-        resolvedImages.set(src, url !== src ? url : '');
+        resolvedBatch.set(src, url !== src ? url : '');
+        scheduleResolvedFlush();
       })
       .catch(() => {
-        resolvedImages.set(src, '');
+        resolvedBatch.set(src, '');
+        scheduleResolvedFlush();
       })
       .finally(() => {
         pendingImages.delete(src);

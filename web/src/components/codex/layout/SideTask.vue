@@ -11,15 +11,25 @@
  * 内容(slot)两种形态由 useUIState().sideTaskKind 区分:
  * 'thread'(侧边线程) | 'agent-transcript'(子 agent 钻取),由父组件组装。
  */
-import { computed, onUnmounted, ref, watch } from 'vue';
+import { computed, inject, onUnmounted, ref, watch } from 'vue';
 import type { SideTaskProps } from '../../../types/codex';
 import CodexIcon from './CodexIcon.vue';
+import { KIMI_CLIENT_KEY } from '../../../composables/codex/useKimiClient';
 import { useUIState } from '../../../composables/codex/useUIState';
 
 const props = withDefaults(defineProps<SideTaskProps & { running?: boolean }>(), {
   running: false,
 });
 const emit = defineEmits<{ (e: 'send', text: string): void }>();
+
+/** 权限徽标跟随真实权限(注入失败=沙箱,回退完全自主对齐原型) */
+const client = inject(KIMI_CLIENT_KEY, null);
+const PERM_LABEL: Record<string, string> = { manual: '逐条确认', auto: '自动通过', yolo: '完全自主' };
+const permLabel = computed(() => PERM_LABEL[client?.permission.value ?? ''] ?? '完全自主');
+const permCls = computed(() => {
+  const p = client?.permission.value;
+  return p === 'yolo' ? 'perm-danger' : p === 'auto' ? 'perm-yolo' : '';
+});
 
 const ui = useUIState();
 const shown = computed(() => ui.sideTaskOpen.value);
@@ -93,9 +103,9 @@ onUnmounted(() => {
         </div>
         <div class="composer-toolbar">
           <div class="toolbar-group">
-            <button class="perm-pill perm-danger" title="权限模式:完全自主">
-              <CodexIcon name="shield" />完全自主
-            </button>
+            <span class="perm-pill" :class="permCls" title="权限模式(跟随主 Composer)">
+              <CodexIcon name="shield" />{{ permLabel }}
+            </span>
           </div>
           <div class="toolbar-group right">
             <button class="composer-send" title="发送" :disabled="!draft.trim() || props.running" @click="send">
