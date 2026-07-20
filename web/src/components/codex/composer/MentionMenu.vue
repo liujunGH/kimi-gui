@@ -105,6 +105,7 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown);
   document.removeEventListener('click', onDocClick);
+  clearTimeout(searchTimer); // 防抖定时器未清,卸载后不再 set 已卸载组件的 ref
 });
 </script>
 

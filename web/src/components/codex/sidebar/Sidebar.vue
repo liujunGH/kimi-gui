@@ -45,8 +45,19 @@ const pinnedSessions = computed(() =>
   filteredSessions.value.filter((s) => props.pinnedIds?.includes(s.id)),
 );
 
+/** 失败/待输入优先(C9):稳定分区排序,不打乱组内原有顺序 */
+function rankOf(s: Session): number {
+  const st = sessionToThreadStatus(s);
+  if (st === 'failed') return 0;
+  if (st === 'needs_input') return 1;
+  return 2;
+}
 function sessionsOf(wsName: string): Session[] {
-  return filteredSessions.value.filter((s) => (s.workspaceName ?? '') === wsName);
+  return filteredSessions.value
+    .filter((s) => (s.workspaceName ?? '') === wsName)
+    .map((s, i) => [s, i] as const)
+    .sort((a, b) => rankOf(a[0]) - rankOf(b[0]) || a[1] - b[1])
+    .map(([s]) => s);
 }
 </script>
 

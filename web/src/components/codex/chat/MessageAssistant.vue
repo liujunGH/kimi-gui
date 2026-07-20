@@ -97,9 +97,18 @@ function copyAll() {
 
     <div class="a-foot">
       <span v-if="duration">{{ duration }}</span>
-      <button class="icon-btn foot-copy" title="复制" @click="copyAll">
+      <button type="button" class="icon-btn foot-copy" title="复制" aria-label="复制" @click="copyAll">
         <CodexIcon name="copy" size="sm" />
       </button>
     </div>
   </div>
 </template>
+
+<style scoped>
+/* hover 操作区:与 MessageUser 的 u-actions 同一套视觉(24px icon-btn,
+   hover / 键盘 focus-within 时显形);基础规则在 conversation.css,这里补键盘可达 */
+.foot-copy { width: 24px; height: 24px; opacity: 0; transition: opacity var(--dur-1); }
+.msg-assistant:hover .foot-copy,
+.msg-assistant:focus-within .foot-copy { opacity: 1; }
+.foot-copy:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+</style>

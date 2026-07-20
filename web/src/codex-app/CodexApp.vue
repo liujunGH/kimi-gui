@@ -11,13 +11,14 @@
  *
  * 数据边界:组件零 mock;context quota、文件树、diff/review 数据流等轮次 4(ZCode)。
  */
-import { computed, onUnmounted, provide, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { useKimiWebClient } from '../composables/useKimiWebClient';
 import { KIMI_CLIENT_KEY } from '../composables/codex/useKimiClient';
 import { useUIState } from '../composables/codex/useUIState';
 import { useHotkeys } from '../composables/codex/useHotkeys';
 import { useTheme } from '../composables/codex/useTheme';
 import { useTauriDaemon } from '../composables/codex/useTauriDaemon';
+import { onAuthRequired } from '../api/daemon/serverAuth';
 import { SLASH_COMMANDS } from '../lib/slashCommands';
 import i18n from '../i18n';
 import type { ChatTurn, TodoView } from '../types';
@@ -54,7 +55,8 @@ import OfficialModelPicker from '../components/settings/ModelPicker.vue';
 import Onboarding from '../components/settings/Onboarding.vue';
 import OfficialQuestionCard from '../components/chat/QuestionCard.vue';
 import OfficialGoalStrip from '../components/chat/GoalStrip.vue';
-import OfficialSearchDialog from '../components/dialogs/SearchSessionsDialog.vue';
+import OfficialServerAuthDialog from '../components/ServerAuthDialog.vue';
+import CommandPalette, { type PaletteAction } from '../components/codex/layout/CommandPalette.vue';
 import type { UIQuestion } from '../types';
 import { toDiffHunks } from '../components/codex/diff/diffMapper';
 import CodexIcon from '../components/codex/layout/CodexIcon.vue';
@@ -70,8 +72,22 @@ void client.load();
 
 // 2. UI 状态
 const ui = useUIState();
-useTheme();
+const { toggle: toggleTheme } = useTheme();
 const { toast } = useToast();
+
+// 401 监听:daemon 拒绝 token 时弹官方 ServerAuthDialog(浏览器 dev 流程)
+const authRequired = ref(false);
+let offAuthRequired: (() => void) | null = null;
+onMounted(() => {
+  offAuthRequired = onAuthRequired(() => {
+    authRequired.value = true;
+    client.clearDangerousBypassAuth();
+  });
+});
+onUnmounted(() => offAuthRequired?.());
+const showServerAuth = computed(
+  () => !client.dangerousBypassAuth.value && authRequired.value,
+);
 
 // 3. 侧栏 + Composer 状态
 const filter = ref<SessionFilter>('all');
@@ -95,7 +111,6 @@ watch(pinnedIds, (v) => {
 const composerMode = ref<ComposerMode>('queue');
 const settingsOpen = ref(false);
 const showOnboarding = ref(!client.onboarded.value);
-const agentPanelOpen = ref(false);
 
 function togglePin(id: string) {
   pinnedIds.value = pinnedIds.value.includes(id)
@@ -235,11 +250,15 @@ const unreadCount = computed(() => {
 });
 // 压缩分隔线(对话流中显示"上下文已压缩")
 const hasCompaction = computed(() => compactionInfo.value !== null);
-function onViewCompaction() {
-  if (compactionInfo.value) {
-    filePreviewContent.value = `// 上下文压缩摘要\n\n${JSON.stringify(compactionInfo.value, null, 2)}`;
-    ui.openDetail('thinking');
-  }
+/** transcript 压缩分隔线点击 → 右栏展示该 turn 的摘要文本(turn.text 即 LLM 摘要) */
+function onViewCompaction(turn: ChatTurn) {
+  const meta = turn.compaction;
+  const tokens = meta?.tokensBefore
+    ? ` · ${meta.tokensBefore} → ${meta.tokensAfter ?? '?'} tokens`
+    : '';
+  const head = `// 上下文压缩摘要(${meta?.trigger === 'auto' ? '自动' : '手动'}${tokens})\n\n`;
+  filePreviewContent.value = head + (turn.text || '(无摘要内容)');
+  ui.openDetail('thinking');
 }
 // 未读数变化时更新 Dock badge
 watch(unreadCount, (n) => {
@@ -263,6 +282,18 @@ const thinkingFullText = computed(() => {
 
 // 文件预览内容(简化版:复用 DetailPane thinking tab 的 pre 渲染)
 const filePreviewContent = ref('');
+/** DetailPane 思考大纲分段:与 thinkingFullText 同一 flatMap 顺序,按下标对齐 */
+const thinkingSegments = computed(() => {
+  if (!ui.detailPaneOpen.value) return [];
+  return conversationTurns.value.flatMap((t, ti) =>
+    (t.blocks ?? [])
+      .filter((b) => b.kind === 'thinking')
+      .map((b, bi) => ({
+        id: `${t.id}#${bi}`,
+        label: `turn ${ti + 1} · ${(b.kind === 'thinking' ? b.thinking : '').trim().slice(0, 60)}`,
+      })),
+  );
+});
 const toolCalls = computed(() => {
   if (!ui.detailPaneOpen.value) return []; // 同上:面板关闭零成本
   return conversationTurns.value
@@ -401,13 +432,30 @@ const sideTaskProps = computed(() => {
 });
 
 function openTranscript(id: string) {
-  agentPanelOpen.value = false;
+  ui.closeAgentPanel();
   ui.openSideTask('agent-transcript', id);
 }
 
 /** AgentPanel/SubagentCard 行内 stop → 取消子任务 */
 function onCancelTask(id: string) {
   void client.cancelTask(id);
+}
+
+/** 用户消息「编辑重发」:撤销该 turn 及之后所有 turn,文本回填输入框 */
+function onEditMessage(turn: ChatTurn) {
+  const idx = conversationTurns.value.findIndex((t) => t.id === turn.id);
+  if (idx < 0) return;
+  promptDialog.value = {
+    title: '编辑并重发?',
+    description: '将撤销这条消息及之后的全部回复,原内容回填到输入框。',
+    confirmLabel: '撤销并回填',
+    danger: true,
+    input: false,
+    onConfirm: () => {
+      const n = conversationTurns.value.length - idx;
+      void client.undo(n).then(() => composerRef.value?.setText(turn.text));
+    },
+  };
 }
 
 // ---------------------------------------------------------------- 事件处理
@@ -609,6 +657,83 @@ const showModelPicker = ref(false);
 const showSearch = ref(false);
 // 搜索弹层用全部会话(不按 workspace 分组/过滤)
 const allSessions = computed(() => client.sessions.value ?? []);
+
+// ⌘K 命令面板:命令(应用动作)+ 会话双区
+const paletteActions = computed<PaletteAction[]>(() => {
+  const list: PaletteAction[] = [
+    { id: 'new', label: '新建会话(当前工作区)', icon: 'plus' },
+    { id: 'settings', label: '打开设置', icon: 'settings' },
+    { id: 'theme', label: '切换深浅色主题', icon: 'moon' },
+    { id: 'inspect', label: 'Inspect 右栏', icon: 'panel-right', kbd: '⌘I' },
+    { id: 'sidetask', label: '侧边任务', icon: 'panel-side', kbd: '⌥⌘S' },
+  ];
+  if (changedFiles.value.length) {
+    list.push({ id: 'review', label: 'Review pane', icon: 'git-branch', kbd: '⌘B' });
+  }
+  if (subagents.value.length) {
+    list.push({ id: 'agents', label: '子智能体面板', icon: 'bot' });
+  }
+  if (client.activeSessionId.value) {
+    list.push(
+      { id: 'rename', label: '重命名当前任务', icon: 'pencil', kbd: '⌥⌘R' },
+      { id: 'archive', label: '归档当前任务', icon: 'archive', kbd: '⇧⌘A' },
+      { id: 'export', label: '导出对话', icon: 'download' },
+      { id: 'copy-id', label: '复制会话 ID', icon: 'copy' },
+    );
+  }
+  return list;
+});
+const paletteSessions = computed(() =>
+  allSessions.value.map((s) => ({
+    id: s.id,
+    title: s.title || s.id,
+    meta: s.workspaceName ?? s.time,
+  })),
+);
+function onPaletteAction(id: string) {
+  showSearch.value = false;
+  switch (id) {
+    case 'new':
+      client.clearActiveSession();
+      break;
+    case 'settings':
+      settingsOpen.value = true;
+      break;
+    case 'theme':
+      toggleTheme();
+      break;
+    case 'inspect':
+      ui.openDetail('thread');
+      break;
+    case 'sidetask':
+      ui.openSideTask('thread');
+      break;
+    case 'review':
+      ui.openReview();
+      break;
+    case 'agents':
+      ui.openAgentPanel();
+      break;
+    case 'rename':
+      onRenameSession();
+      break;
+    case 'archive':
+      if (client.activeSessionId.value) void client.archiveSession(client.activeSessionId.value);
+      break;
+    case 'export':
+      void client.exportSession();
+      break;
+    case 'copy-id': {
+      const sid = client.activeSessionId.value;
+      if (sid) {
+        void navigator.clipboard.writeText(sid);
+        toast('已复制会话 ID');
+      }
+      break;
+    }
+  }
+}
+
 async function onPickModelOverlay(id: string) {
   showModelPicker.value = false;
   await onSetModel(id);
@@ -783,7 +908,7 @@ async function searchFiles(q: string) {
         v-if="subagents.length"
         class="icon-btn"
         title="子智能体"
-        @click="agentPanelOpen = !agentPanelOpen"
+        @click="ui.agentPanelOpen.value ? ui.closeAgentPanel() : ui.openAgentPanel()"
       >
         <CodexIcon name="bot" />
       </button>
@@ -822,8 +947,11 @@ async function searchFiles(q: string) {
       :running="conversationRunning"
       :open-file="onOpenFile"
       :has-more-messages="client.hasMoreMessages.value ?? false"
+      :loading-more="client.loadingMoreMessages.value ?? false"
       @inspect="(tab) => ui.openDetail(tab)"
       @load-older="() => { const sid = client.activeSessionId.value; if (sid && client.hasMoreMessages.value) void client.loadOlderMessages(sid); }"
+      @view-compaction="onViewCompaction"
+      @edit-message="onEditMessage"
     />
 
     <!-- Inspect 右栏 -->
@@ -838,17 +966,24 @@ async function searchFiles(q: string) {
         context: ctxInfo,
       }"
       :thinking-full-text="thinkingFullText"
+      :thinking-segments="thinkingSegments"
       :tool-calls="toolCalls"
       :tasks="client.todos.value ?? []"
       @set-tab="(t) => ui.setDetailTab(t)"
       @close="ui.closeDetail()"
     />
 
-    <!-- 警告提示(daemon warnings) -->
+    <!-- 警告提示(daemon warnings,AppNotice 完整渲染:title + message + details) -->
     <div v-if="activeWarnings.length" class="codex-warnings">
       <div v-for="(w, idx) in activeWarnings" :key="idx" class="codex-warning">
         <span class="cw-icon"><CodexIcon name="alert-triangle" /></span>
-        <span class="cw-text">{{ typeof w === 'string' ? w : w.title }}</span>
+        <span class="cw-text">
+          <span class="cw-title">{{ typeof w === 'string' ? w : w.title }}</span>
+          <span v-if="typeof w !== 'string' && w.message" class="cw-msg">{{ w.message }}</span>
+          <span v-if="typeof w !== 'string' && w.details?.length" class="cw-details">
+            <span v-for="(d, di) in w.details" :key="di" class="cw-detail">{{ d.label }}:{{ d.value }}</span>
+          </span>
+        </span>
         <button class="cw-close" @click="onDismissWarning(idx)"><CodexIcon name="x" /></button>
       </div>
     </div>
@@ -861,10 +996,10 @@ async function searchFiles(q: string) {
       />
     </div>
 
-    <!-- 压缩分隔线(/compact 后) -->
+    <!-- 压缩进行中指示(client.compaction 仅运行时存在;完成后 transcript 留有分隔线) -->
     <div v-if="hasCompaction" class="codex-compaction">
       <span class="cc-line"></span>
-      <button class="cc-text" @click="onViewCompaction">上下文已压缩 · 查看摘要</button>
+      <span class="cc-text cc-live"><CodexIcon name="spinner" class="cc-spin" />正在压缩上下文…</span>
       <span class="cc-line"></span>
     </div>
 
@@ -872,6 +1007,7 @@ async function searchFiles(q: string) {
     <OfficialQuestionCard
       v-if="currentQuestion"
       :question="currentQuestion"
+      :busy-kind="client.pendingQuestionActions[currentQuestion.questionId]"
       @answer="onAnswerQuestion"
       @dismiss="onDismissQuestion"
     />
@@ -905,6 +1041,7 @@ async function searchFiles(q: string) {
           :cost="client.sessionCost.value ?? 0"
           :upload-image="(file: Blob, name?: string) => client.uploadImage(file, name)"
           :session-title="activeSession?.title ?? sidebarCurrentWs"
+          :session-id="client.activeSessionId.value ?? ''"
           @send="onSend"
           @set-mode="onComposerMode"
           @cancel="() => client.abortCurrentPrompt()"
@@ -960,10 +1097,10 @@ async function searchFiles(q: string) {
     <AgentPanel
       :active="activeSubagents"
       :completed="completedSubagents"
-      :open="agentPanelOpen"
+      :open="ui.agentPanelOpen.value"
       @inspect="openTranscript"
       @cancel="onCancelTask"
-      @close="agentPanelOpen = false"
+      @close="ui.closeAgentPanel()"
     />
 
     <!-- Review pane(⌘B,有改动文件时出现) -->
@@ -992,16 +1129,20 @@ async function searchFiles(q: string) {
       @skip="() => { client.setOnboarded(true); showOnboarding = false; }"
     />
 
-    <!-- 搜索会话(Cmd+K) -->
-    <OfficialSearchDialog
+    <!-- ⌘K 命令面板(命令 + 会话双区) -->
+    <CommandPalette
       v-if="showSearch"
-      :sessions="allSessions as any"
-      :active-id="sidebarCurrentSession"
-      @select="(id: string) => { onSelectSession(id); showSearch = false; }"
+      :actions="paletteActions"
+      :sessions="paletteSessions"
+      @select-action="onPaletteAction"
+      @select-session="(id: string) => { onSelectSession(id); showSearch = false; }"
       @close="showSearch = false"
     />
   </AppShell>
   <Toast />
+
+  <!-- 401 时的 token 输入弹层(浏览器 dev 流程;Tauri 由 Rust 注入凭据) -->
+  <OfficialServerAuthDialog v-if="showServerAuth" />
 
   <!-- 应用内输入/确认弹层(重命名/移除工作区等,替代 window.prompt) -->
   <PromptDialog

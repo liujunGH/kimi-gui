@@ -19,6 +19,8 @@ const detailPaneOpen = ref(false);
 const detailPaneTab = ref<DetailPaneTab>('thread');
 const reviewPaneOpen = ref(false);
 const sideTaskOpen = ref(false);
+/** AgentPanel(子智能体面板)开合:轮次 6 起并入 Esc 分层栈(原为 CodexApp 本地 ref) */
+const agentPanelOpen = ref(false);
 /** SideTask slot 内容类型:'thread'(侧边线程) | 'agent-transcript'(子 agent 钻取)。 */
 const sideTaskKind = ref<'thread' | 'agent-transcript'>('thread');
 const sideTaskSubagentId = ref<string | null>(null);
@@ -30,10 +32,10 @@ const sideTaskSubagentId = ref<string | null>(null);
  */
 const globalThinking = ref(true);
 
-/** 覆盖物 z 顺序:Review pane 最高 > Detail pane > SideTask(分栏,非覆盖)。 */
-const overlayStack = ref<('review' | 'detail')[]>([]);
+/** 覆盖物 z 顺序:Review pane 最高 > Detail pane > AgentPanel > SideTask(分栏,非覆盖)。 */
+const overlayStack = ref<('review' | 'detail' | 'agent')[]>([]);
 
-function pushOverlay(kind: 'review' | 'detail') {
+function pushOverlay(kind: 'review' | 'detail' | 'agent') {
   if (!overlayStack.value.includes(kind)) overlayStack.value.push(kind);
 }
 function popOverlay() {
@@ -52,11 +54,16 @@ function closeReviewImpl() {
 function closeSideTaskImpl() {
   sideTaskOpen.value = false;
 }
+function closeAgentPanelImpl() {
+  agentPanelOpen.value = false;
+  popOverlay();
+}
 function escCloseImpl(): boolean {
   if (overlayStack.value.length > 0) {
     const top = overlayStack.value[overlayStack.value.length - 1];
     if (top === 'review') closeReviewImpl();
     else if (top === 'detail') closeDetailImpl();
+    else if (top === 'agent') closeAgentPanelImpl();
     return true;
   }
   if (sideTaskOpen.value) {
@@ -75,6 +82,7 @@ export function useUIState() {
     sideTaskOpen,
     sideTaskKind,
     sideTaskSubagentId,
+    agentPanelOpen,
     globalThinking,
 
     // 意图方法(组件调用,都是模块级函数引用,支持解构)
@@ -98,6 +106,12 @@ export function useUIState() {
       sideTaskOpen.value = true;
     },
     closeSideTask: closeSideTaskImpl,
+    /** AgentPanel 开合(入 Esc 分层栈;视觉 z 27 > detail 25,Esc 序与之一致) */
+    openAgentPanel() {
+      agentPanelOpen.value = true;
+      pushOverlay('agent');
+    },
+    closeAgentPanel: closeAgentPanelImpl,
     /** 全局思考默认展开 toggle:只影响新出现的思考块,不影响已手动 toggle 的。 */
     toggleGlobalThinking() {
       globalThinking.value = !globalThinking.value;

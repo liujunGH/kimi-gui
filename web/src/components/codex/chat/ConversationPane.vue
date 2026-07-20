@@ -22,12 +22,18 @@ const props = withDefaults(
   defineProps<ConversationPaneProps & {
     /** daemon 是否有更多更早消息(控制"加载更早"按钮显隐) */
     hasMoreMessages?: boolean;
+    /** daemon 正在加载更早(按钮禁用 + spinner) */
+    loadingMore?: boolean;
   }>(),
-  { hasMoreMessages: false },
+  { hasMoreMessages: false, loadingMore: false },
 );
 const emit = defineEmits<ConversationPaneEmits & {
   (e: 'inspect', tab: 'thinking' | 'tools'): void;
   (e: 'load-older'): void;
+  /** MessageUser 的「编辑重发」透传(本地交叉类型,不改契约文件) */
+  (e: 'edit-message', turn: ChatTurn): void;
+  /** 压缩分隔线点击 → 父级在右栏展示该 turn 的摘要文本 */
+  (e: 'view-compaction', turn: ChatTurn): void;
 }>();
 
 const PAGE = 50;
@@ -94,11 +100,17 @@ watch(
   },
 );
 
+// 滚动事件可能高频触发:updateActiveToc 有 querySelectorAll 全量遍历,rAF 节流
+let scrollRaf = 0;
 function onScroll() {
-  const el = scrollEl.value;
-  if (!el) return;
-  nearBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
-  updateActiveToc();
+  if (scrollRaf) return;
+  scrollRaf = requestAnimationFrame(() => {
+    scrollRaf = 0;
+    const el = scrollEl.value;
+    if (!el) return;
+    nearBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+    updateActiveToc();
+  });
 }
 
 async function loadMore() {
@@ -158,6 +170,7 @@ onMounted(() => {
 onUnmounted(() => {
   observer?.disconnect();
   resizeObserver?.disconnect();
+  cancelAnimationFrame(scrollRaf);
 });
 
 // 哨兵在 v-if="canLoadMore" 内,初始短会话时不存在;渲染出来后要补观察,
@@ -175,23 +188,31 @@ void emit;
     <div ref="contentEl" class="conversation">
       <!-- 更早加载哨兵/按钮 -->
       <div v-if="canLoadMore" ref="sentinelEl" class="load-earlier">
-        <button class="load-earlier-btn" @click="loadMore">
-          <CodexIcon name="chevron-down" style="transform: rotate(180deg)" />
-          <template v-if="hiddenCount > 0">加载更早的 {{ Math.min(hiddenCount, PAGE) }} 条(共 {{ total }} 轮)</template>
+        <button class="load-earlier-btn" :disabled="props.loadingMore" @click="loadMore">
+          <CodexIcon v-if="props.loadingMore" name="spinner" class="le-spin" />
+          <CodexIcon v-else name="chevron-down" style="transform: rotate(180deg)" />
+          <template v-if="props.loadingMore">加载中…</template>
+          <template v-else-if="hiddenCount > 0">加载更早的 {{ Math.min(hiddenCount, PAGE) }} 条(共 {{ total }} 轮)</template>
           <template v-else>加载更早的消息</template>
         </button>
       </div>
 
       <template v-for="t in shownTurns" :key="t.id">
         <div v-if="t.role === 'user'" :data-turn-id="t.id">
-          <MessageUser :turn="t" />
+          <MessageUser :turn="t" @edit="(turn) => emit('edit-message', turn)" />
         </div>
-        <!-- 压缩分隔线(transcript 持久 divider;摘要点击入口在 dock 上方分隔线条) -->
-        <div v-else-if="t.role === 'compaction'" class="compaction-divider">
+        <!-- 压缩分隔线(transcript 持久 divider,点击在右栏查看摘要) -->
+        <button
+          v-else-if="t.role === 'compaction'"
+          type="button"
+          class="compaction-divider"
+          title="查看压缩摘要"
+          @click="emit('view-compaction', t)"
+        >
           <span class="cd-line"></span>
-          <span class="cd-text">上下文已压缩</span>
+          <span class="cd-text">上下文已压缩 · 查看摘要</span>
           <span class="cd-line"></span>
-        </div>
+        </button>
         <!-- cron 定时触发 notice(简单行,官方 CronNotice 的极简版) -->
         <div v-else-if="t.role === 'cron'" class="cron-notice">
           <CodexIcon name="clock" size="sm" />
@@ -251,10 +272,29 @@ void emit;
   width: 13px;
   height: 13px;
 }
+.load-earlier-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.le-spin {
+  animation: le-rotate 1.1s linear infinite;
+}
+@keyframes le-rotate {
+  to { transform: rotate(360deg); }
+}
 .compaction-divider {
   display: flex;
   align-items: center;
   gap: 12px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+.compaction-divider:hover .cd-text {
+  color: var(--text-2);
 }
 .cd-line {
   flex: 1;
@@ -265,6 +305,7 @@ void emit;
   flex: none;
   font-size: var(--text-sm);
   color: var(--text-3);
+  transition: color var(--dur-1);
 }
 .cron-notice {
   display: flex;

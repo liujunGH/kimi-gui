@@ -40,12 +40,12 @@ function toggle() {
 
 <template>
   <div class="think" :class="{ open, thinking: props.streaming }">
-    <div class="think-summary" @click="toggle">
+    <button type="button" class="think-summary" :aria-expanded="open" @click="toggle">
       <span class="think-chevron"><CodexIcon name="chevron-right" /></span>
       <span class="think-label">{{ props.streaming ? '思考中' : '思考过程' }}</span>
       <span class="think-teaser">{{ teaser }}</span>
       <span v-if="props.duration" class="think-time">{{ props.duration }}</span>
-    </div>
+    </button>
     <div class="think-body">
       <div v-if="props.steerMark" class="think-user-steer">
         <span class="steer-icon"><CodexIcon name="flag" /></span>
@@ -56,3 +56,15 @@ function toggle() {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* div → button 的 UA 样式 reset:类名未动,布局/配色仍由 thinking.css 的 .think-summary 承担 */
+.think-summary {
+  width: 100%;
+  border: none;
+  background: none;
+  font-family: inherit;
+  text-align: left;
+}
+.think-summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+</style>

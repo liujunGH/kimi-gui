@@ -5,6 +5,11 @@
  * 组件内行为(kimi3 域):
  * - `/` 与 `@` 补全检测,联动 SlashMenu / MentionMenu(选中回填 / 直接执行)
  * - ⌘+Enter 发送;运行态 stop = emit('cancel')
+ * - ↑/↓ shell 式输入历史召回(useInputHistory,按 sessionId 分会话持久化;
+ *   光标在文本起始处才进入召回,手动打字退出浏览态,菜单开着时 ↑↓ 归菜单,
+ *   IME 组词中不触发)
+ * - 未发送草稿持久化(useComposerDraft,按 sessionId 存 localStorage,
+ *   切会话/刷新不丢;未传 sessionId 时退化为全局单草稿)
  * - placeholder 随 running/mode 切换;steer 模式 placeholder 染 warning 色
  *
  * 弹层簇(PermPicker / ModePicker / ContextMeter / ModelPicker)与补全菜单
@@ -13,7 +18,7 @@
  * 契约外补充 props(已报备):builtin / skills / files —— 补全数据源,
  * 原型期由场景传入 mock,轮次 3 由 ZCode 的 composable 接真源。
  */
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import type {
   BuiltinCommand,
   ComposerProps,
@@ -21,6 +26,8 @@ import type {
   FileEntry,
   Skill,
 } from '../../../types/codex';
+import { useComposerDraft } from '../../../composables/useComposerDraft';
+import { useInputHistory } from '../../../composables/useInputHistory';
 import CodexIcon from '../layout/CodexIcon.vue';
 import ComposerModes from './ComposerModes.vue';
 import PermPicker from './PermPicker.vue';
@@ -40,6 +47,8 @@ const props = withDefaults(
       searchFiles?: (q: string) => Promise<FileEntry[]>;
       sessionTitle?: string;
       placeholder?: string;
+      /** 当前会话 id —— 草稿与输入历史按会话隔离;未传时退化为全局单草稿 */
+      sessionId?: string;
       /** 会话累计成本(USD),透传给 ContextMeter */
       cost?: number;
       /** 图片上传(daemon uploadImage);提供后 paste/drop 可上传图片 */
@@ -50,7 +59,13 @@ const props = withDefaults(
 );
 const emit = defineEmits<ComposerEmits>();
 
-const text = ref('');
+// 文本状态 + 按会话草稿持久化(textareaRef/autosize 同时供输入历史用)——见 useComposerDraft
+const { text, textareaRef, autosize, loadForEdit, clearDraft } = useComposerDraft({
+  sessionId: () => props.sessionId,
+});
+
+// shell 式 ↑/↓ 已发消息召回 —— 见 useInputHistory;键位编排留在本组件(见 onKeydown)
+const history = useInputHistory({ text, textareaRef, autosize, sessionId: () => props.sessionId });
 
 /** 补全检测:'/' 开头单 token → slash;最后 token 以 @ 起头 → mention */
 const assist = computed(() => {
@@ -64,7 +79,16 @@ const assist = computed(() => {
 
 /** Esc 关闭补全后,文本再变前抑制重开 */
 const assistDismissed = ref(false);
+/**
+ * 历史召回改写 text 时置位:该次变化不解除补全抑制(否则召回 '/cmd' 类
+ * 文本会重开菜单,把继续按 ↑ 的键位劫走)。仅当召回真的改了文本才置位。
+ */
+let recallArmed = false;
 watch(text, () => {
+  if (recallArmed) {
+    recallArmed = false;
+    return;
+  }
   assistDismissed.value = false;
 });
 const assistVisible = computed(() => (assistDismissed.value ? null : assist.value));
@@ -77,9 +101,12 @@ function onSlashSelect(cmd: BuiltinCommand | Skill) {
   if ((cmd as BuiltinCommand).acceptsInput) {
     text.value = '/' + name + ' ';
   } else {
-    /* 无参命令:emit command 让父级执行(不走 send,避免当普通消息发) */
+    /* 无参命令:emit command 让父级执行(不走 send,避免当普通消息发);
+       与官方一致,命令也进输入历史(↑ 可召回) */
+    history.push('/' + name);
     emit('command', '/' + name);
     text.value = '';
+    clearDraft();
   }
 }
 function onAtSelect(file: FileEntry) {
@@ -111,23 +138,59 @@ function submit() {
   if (attachments.value.some((a) => a.uploading)) return;
   if (!canSend.value) return;
   const atts = buildAttachments();
+  // 进历史(↑ 可召回)再发送;push 内部忽略空串与无 session 的草稿态
+  history.push(text.value.trim());
   emit('send', text.value.trim(), props.mode, atts.length ? atts : undefined);
   text.value = '';
+  // 同步清掉持久化草稿:不能依赖 text watcher(组件可能在 watcher flush 前卸载)
+  clearDraft();
   clearAttachments();
 }
 
 function onKeydown(e: KeyboardEvent) {
+  // IME 组词中不拦截任何键(isComposing + keyCode 229 双保险,同官方)
+  if (e.isComposing || e.keyCode === 229) return;
+
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
     e.preventDefault();
     submit();
+    return;
+  }
+
+  // 历史召回(shell 式 ↑/↓):
+  // - 补全菜单开着时 ↑↓ 归菜单(SlashMenu/MentionMenu 挂在 window keydown 上,
+  //   冒泡阶段在 textarea 之后触发,故这里必须让路)
+  // - 进入召回要求光标在文本起始处(多行草稿内正常移动光标不被劫持);
+  //   进入浏览态后 ↑↓ 直接走历史,打字(@input → resetBrowsing)退出
+  if (!assistVisible.value && !e.shiftKey && !e.altKey && !e.metaKey && !e.ctrlKey) {
+    const browsing = history.isBrowsing();
+    if (e.key === 'ArrowUp' && history.hasHistory() && (browsing || history.caretAtTextStart())) {
+      e.preventDefault();
+      const before = text.value;
+      assistDismissed.value = true; // 召回 '/cmd' 类文本也别重开菜单
+      history.recallOlder();
+      if (text.value !== before) recallArmed = true;
+      return;
+    }
+    if (e.key === 'ArrowDown' && browsing) {
+      e.preventDefault();
+      const before = text.value;
+      assistDismissed.value = true;
+      history.recallNewer();
+      if (text.value !== before) recallArmed = true;
+      return;
+    }
   }
 }
 
-/** 供父组件回填文本(队列「编辑」→ 拉回输入框) */
-const taEl = ref<HTMLTextAreaElement | null>(null);
+/** 手动打字退出历史浏览态(召回是程序化改 text,不触发 @input) */
+function onInput() {
+  history.resetBrowsing();
+}
+
+/** 供父组件回填文本(队列「编辑」/「编辑重发」→ 拉回输入框,光标移到末尾) */
 function setText(t: string) {
-  text.value = t;
-  taEl.value?.focus();
+  loadForEdit(t);
 }
 
 // ---------- 附件上传(paste / drop / file picker) ----------
@@ -226,6 +289,11 @@ function clearAttachments() {
   attachments.value = [];
 }
 
+onMounted(() => {
+  // 挂载时若有恢复出来的草稿,先拟合一次高度(autosize 平时由 text watcher 驱动)
+  if (text.value) void nextTick(autosize);
+});
+
 defineExpose({ setText });
 </script>
 
@@ -284,11 +352,12 @@ defineExpose({ setText });
 
     <div class="composer-input">
       <textarea
-        ref="taEl"
+        ref="textareaRef"
         v-model="text"
         rows="1"
         :placeholder="placeholder"
         @keydown="onKeydown"
+        @input="onInput"
         @paste="onPaste"
       ></textarea>
     </div>

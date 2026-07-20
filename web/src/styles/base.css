@@ -387,3 +387,9 @@ a { color: inherit; text-decoration: none; }
 
 /* SideTask 侧边对话流(/btw) */
 .side-chat-turns { display: flex; flex-direction: column; gap: 16px; padding: var(--sp-4); }
+
+/* warnings 完整渲染(title + message + details) */
+.cw-title { display: block; font-weight: 550; color: var(--text); }
+.cw-msg { display: block; margin-top: 1px; }
+.cw-details { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 3px; }
+.cw-detail { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }

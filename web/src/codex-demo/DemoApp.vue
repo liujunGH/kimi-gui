@@ -388,6 +388,8 @@ function openFM(e: MouseEvent, file: string) {
         :todos-by-turn="M.indexTodos"
         :turn-progress="M.indexProgress"
         :running="false"
+        @edit-message="() => toast('编辑重发(演示)')"
+        @view-compaction="() => toast('查看压缩摘要(演示)')"
       />
       <div class="app-dock">
         <div class="dock-inner">
@@ -440,6 +442,8 @@ function openFM(e: MouseEvent, file: string) {
         :todos-by-turn="{}"
         :turn-progress="M.runningProgress"
         :running="true"
+        @edit-message="() => toast('编辑重发(演示)')"
+        @view-compaction="() => toast('查看压缩摘要(演示)')"
       />
       <div class="app-dock">
         <div class="dock-inner">

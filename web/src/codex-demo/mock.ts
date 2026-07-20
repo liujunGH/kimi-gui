@@ -155,9 +155,14 @@ export const indexTurns: ChatTurn[] = [
         tool: {
           id: 'tc1',
           name: 'edit_file',
-          arg: 'web/src/components/codex/Composer.vue · +86 −24',
+          arg: JSON.stringify({
+            path: 'web/src/components/codex/composer/Composer.vue',
+            old_string: "function handleSend() {\n  steer(text);\n}",
+            new_string: "function handleSend() {\n  if (mode === 'steer') steer(text);\n  else queue(text);\n}",
+          }),
           status: 'ok',
           timing: '3.2s',
+          output: ['✓ 已应用 1 处替换', 'Composer.vue · +86 −24'],
         },
       },
     ],
@@ -207,7 +212,17 @@ export const runningTurns: ChatTurn[] = [
       { kind: 'text', text: '开始改 Composer.vue。先在输入框上方插入双模分段控件:' },
       {
         kind: 'tool',
-        tool: { id: 'tc2', name: 'edit_file', arg: 'Composer.vue · 写入中…', status: 'running' },
+        tool: {
+          id: 'tc2',
+          name: 'edit_file',
+          arg: JSON.stringify({
+            path: 'web/src/components/codex/composer/Composer.vue',
+            old_string: '<div class="input-wrap">',
+            new_string: '<ComposerModes v-if="running" />\n<div class="input-wrap">',
+          }),
+          status: 'running',
+          output: ['读取 Composer.vue(2200 行)…', '定位 .input-wrap 插入点…'],
+        },
       },
     ],
   },

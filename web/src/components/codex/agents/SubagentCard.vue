@@ -54,7 +54,15 @@ const pct = computed(() => {
 </script>
 
 <template>
-  <div class="subagent-card" :class="VARIANT[status]" @click="emit('inspect')">
+  <div
+    class="subagent-card"
+    :class="VARIANT[status]"
+    role="button"
+    tabindex="0"
+    @click="emit('inspect')"
+    @keydown.enter.self="emit('inspect')"
+    @keydown.space.prevent.self="emit('inspect')"
+  >
     <div class="sa-head">
       <span class="dot" :class="DOT[status]"></span>
       <span class="sa-name">{{ props.subagent.name }}</span>
@@ -76,3 +84,9 @@ const pct = computed(() => {
     <div class="sa-bar"><div class="sa-bar-fill" :style="{ width: pct + '%' }"></div></div>
   </div>
 </template>
+
+<style scoped>
+/* 卡片保留 div + role="button"(卡头嵌了 sa-cancel 按钮,换 <button> 会造成按钮套按钮);
+   键盘焦点可见性 */
+.subagent-card:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+</style>

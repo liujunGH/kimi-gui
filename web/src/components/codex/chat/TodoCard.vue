@@ -17,7 +17,7 @@ const STATE: Record<string, { cls: string; icon: string }> = {
 
 <template>
   <div class="todo-card">
-    <div v-for="(t, i) in props.todos" :key="i" class="todo-item" :class="STATE[t.status]?.cls">
+    <div v-for="t in props.todos" :key="t.title" class="todo-item" :class="STATE[t.status]?.cls">
       <span class="todo-state"><CodexIcon :name="STATE[t.status]?.icon ?? 'circle'" /></span>
       <span class="todo-text">{{ t.title }}</span>
     </div>

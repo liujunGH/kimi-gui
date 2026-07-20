@@ -55,11 +55,18 @@ function onDragEnd() {
 
 <template>
   <template v-if="count">
-    <div class="queue-indicator" :class="{ open }" title="查看队列" @click="open = !open">
+    <button
+      type="button"
+      class="queue-indicator"
+      :class="{ open }"
+      title="查看队列"
+      :aria-expanded="open"
+      @click="open = !open"
+    >
       <CodexIcon name="list" />
       <span class="qi-count">{{ count }} 条</span>排队中
       <span class="qi-chevron"><CodexIcon name="chevron-down" /></span>
-    </div>
+    </button>
 
     <div class="queue-panel" :class="{ open }">
       <div class="qp-head">
@@ -103,3 +110,13 @@ function onDragEnd() {
     </div>
   </template>
 </template>
+
+<style scoped>
+/* div → button 的 UA 样式 reset:类名未动,布局/配色仍由 composer.css 的 .queue-indicator 承担 */
+.queue-indicator {
+  border: none;
+  background: none;
+  font-family: inherit;
+}
+.queue-indicator:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+</style>

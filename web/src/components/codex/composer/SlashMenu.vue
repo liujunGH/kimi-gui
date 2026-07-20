@@ -44,10 +44,10 @@ const filteredBuiltin = computed(() =>
 const filteredSkills = computed(() =>
   props.skills.filter((s) => s.name.toLowerCase().includes(query.value)),
 );
-const items = computed<Array<BuiltinCommand | Skill>>(() => [
-  ...filteredBuiltin.value,
-  ...filteredSkills.value,
-]);
+const items = computed<Array<BuiltinCommand | Skill>>(() =>
+  // 上限 50:skills 多时全量渲染几百个 button 会卡(模糊过滤后通常远小于此)
+  [...filteredBuiltin.value, ...filteredSkills.value].slice(0, 50),
+);
 
 watch(items, () => {
   cursor.value = 0;

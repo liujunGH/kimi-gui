@@ -22,7 +22,8 @@ const meta = computed(() => threadMetaOf(props.session));
 </script>
 
 <template>
-  <div
+  <button
+    type="button"
     class="thread-row"
     :class="{ active: props.active, 'thread-child': props.child }"
     @click="emit('select')"
@@ -30,5 +31,17 @@ const meta = computed(() => threadMetaOf(props.session));
     <span :class="dotClass"></span>
     <span class="thread-title">{{ props.session.title }}</span>
     <span class="thread-meta">{{ meta }}</span>
-  </div>
+  </button>
 </template>
+
+<style scoped>
+/* div → button 的 UA 样式 reset:类名未动,布局/配色仍由 sidebar.css 的 .thread-row 承担 */
+.thread-row {
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: inherit;
+  text-align: left;
+}
+.thread-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+</style>

@@ -81,7 +81,11 @@ onUnmounted(() => document.removeEventListener('keydown', onDocKeydown));
         v-for="a in props.active"
         :key="a.id"
         class="aph-row"
+        role="button"
+        tabindex="0"
         @click="emit('inspect', a.id)"
+        @keydown.enter.self="emit('inspect', a.id)"
+        @keydown.space.prevent.self="emit('inspect', a.id)"
       >
         <span class="aph-icon" :class="iconVariant(a, 0)">{{ letterOf(a) }}</span>
         <span class="aph-main">
@@ -109,7 +113,11 @@ onUnmounted(() => document.removeEventListener('keydown', onDocKeydown));
         v-for="(a, i) in completedShown"
         :key="a.id"
         class="aph-row"
+        role="button"
+        tabindex="0"
         @click="emit('inspect', a.id)"
+        @keydown.enter.self="emit('inspect', a.id)"
+        @keydown.space.prevent.self="emit('inspect', a.id)"
       >
         <span class="aph-icon" :class="iconVariant(a, i)">{{ letterOf(a) }}</span>
         <span class="aph-main">
@@ -127,4 +135,7 @@ onUnmounted(() => document.removeEventListener('keydown', onDocKeydown));
 .ap-body .ap-label:not(:first-child) {
   margin-top: 14px;
 }
+/* aph-row 保留 div + role="button"(行内嵌了 aph-cancel 按钮,换 <button> 会造成按钮套按钮);
+   键盘焦点可见性 */
+.aph-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 </style>
