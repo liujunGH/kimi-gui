@@ -19,7 +19,10 @@ import TurnProgress from './TurnProgress.vue';
 import ConversationToc, { type ConversationTocItem } from '../../chat/ConversationToc.vue';
 
 const props = defineProps<ConversationPaneProps>();
-const emit = defineEmits<ConversationPaneEmits & { (e: 'inspect', tab: 'thinking' | 'tools'): void }>();
+const emit = defineEmits<ConversationPaneEmits & {
+  (e: 'inspect', tab: 'thinking' | 'tools'): void;
+  (e: 'load-older'): void;
+}>();
 
 const PAGE = 50;
 const scrollEl = ref<HTMLElement | null>(null);
@@ -87,13 +90,19 @@ function onScroll() {
 
 async function loadMore() {
   const el = scrollEl.value;
-  if (!el || hiddenCount.value <= 0) return;
-  const prevHeight = el.scrollHeight;
-  const prevTop = el.scrollTop;
-  visibleCount.value += PAGE;
-  await nextTick();
-  // 前插后保持视口:scrollTop 按新增高度补偿
-  el.scrollTop = prevTop + (el.scrollHeight - prevHeight);
+  if (!el) return;
+  // 先扩本地窗口(切片更多已有 turns)
+  if (hiddenCount.value > 0) {
+    const prevHeight = el.scrollHeight;
+    const prevTop = el.scrollTop;
+    visibleCount.value += PAGE;
+    await nextTick();
+    el.scrollTop = prevTop + (el.scrollHeight - prevHeight);
+  }
+  // 如果本地窗口已全展开(没有更多本地 turns),请求 daemon 加载更早消息
+  if (hiddenCount.value <= 0) {
+    emit('load-older');
+  }
 }
 
 async function maybeFollow() {

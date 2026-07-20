@@ -52,6 +52,7 @@ import OfficialModelPicker from '../components/settings/ModelPicker.vue';
 import Onboarding from '../components/settings/Onboarding.vue';
 import OfficialQuestionCard from '../components/chat/QuestionCard.vue';
 import OfficialGoalStrip from '../components/chat/GoalStrip.vue';
+import OfficialSearchDialog from '../components/dialogs/SearchSessionsDialog.vue';
 import type { UIQuestion } from '../types';
 import { toDiffHunks } from '../components/codex/diff/diffMapper';
 import CodexIcon from '../components/codex/layout/CodexIcon.vue';
@@ -86,6 +87,16 @@ function togglePin(id: string) {
 }
 
 useHotkeys([
+  {
+    key: 'k',
+    meta: true,
+    handler: () => {
+      // Cmd+K 搜索:加载所有会话 + 打开搜索弹层
+      void client.loadAllSessions();
+      showSearch.value = true;
+      return true;
+    },
+  },
   {
     key: 'i',
     meta: true,
@@ -497,6 +508,9 @@ function onSetEffort(lv: EffortLevel) {
 // 官方 ModelPicker 全屏弹层(更多模型)
 // 官方 components/settings/ModelPicker.vue 可直接 import(同项目 fork)
 const showModelPicker = ref(false);
+const showSearch = ref(false);
+// 搜索弹层用全部会话(不按 workspace 分组/过滤)
+const allSessions = computed(() => client.sessions.value ?? []);
 async function onPickModelOverlay(id: string) {
   showModelPicker.value = false;
   await onSetModel(id);
@@ -707,6 +721,7 @@ async function searchFiles(q: string) {
       :running="conversationRunning"
       :open-file="onOpenFile"
       @inspect="(tab) => ui.openDetail(tab)"
+      @load-older="() => { const sid = client.activeSessionId.value; if (sid && client.hasMoreMessages.value) void client.loadOlderMessages(sid); }"
     />
 
     <!-- Inspect 右栏 -->
@@ -881,6 +896,15 @@ async function searchFiles(q: string) {
       v-if="showOnboarding"
       @complete="() => { client.setOnboarded(true); showOnboarding = false; }"
       @skip="() => { client.setOnboarded(true); showOnboarding = false; }"
+    />
+
+    <!-- 搜索会话(Cmd+K) -->
+    <OfficialSearchDialog
+      v-if="showSearch"
+      :sessions="allSessions as any"
+      :active-id="sidebarCurrentSession"
+      @select="(id: string) => { onSelectSession(id); showSearch = false; }"
+      @close="showSearch = false"
     />
   </AppShell>
   <Toast />
