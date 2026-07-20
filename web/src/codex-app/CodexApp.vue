@@ -558,10 +558,15 @@ function handleCommand(cmd: string): void {
     case '/status':
       ui.openDetail('tasks');
       break;
+    case '/login':
+      toast('已通过 daemon token 自动登录');
+      break;
     default: {
-      // 未匹配 → 当 skill 激活
+      // 未匹配 → 当 skill 激活(排除已知非 skill)
       const stripped = cmd.slice(1).split(' ')[0];
-      if (stripped) void client.activateSkill(stripped);
+      if (stripped && !['login', 'status'].includes(stripped)) {
+        void client.activateSkill(stripped);
+      }
     }
   }
 }

@@ -85,8 +85,6 @@ function setFontSize(px: number) {
 }
 
 /* ---------- 权限(详细) ---------- */
-const netAccess = ref(true);
-const dangerConfirm = ref(true);
 
 /* ---------- 归档 ---------- */
 const archivedSessions = ref<any[]>([]);
@@ -104,7 +102,7 @@ async function loadArchive() {
 }
 onMounted(() => void loadArchive());
 
-const autoArchive = ref(false);
+
 </script>
 
 <template>
@@ -273,25 +271,19 @@ const autoArchive = ref(false);
             <div class="setting-row">
               <div class="setting-info">
                 <div class="setting-label">网络访问</div>
-                <div class="setting-desc">允许 agent 访问外网安装依赖</div>
+                <div class="setting-desc">由 daemon 权限模式控制(manual/auto/yolo)</div>
               </div>
               <div class="setting-control">
-                <label class="switch">
-                  <input v-model="netAccess" type="checkbox" />
-                  <span class="switch-slider"></span>
-                </label>
+                <span class="pill">跟随权限模式</span>
               </div>
             </div>
             <div class="setting-row">
               <div class="setting-info">
                 <div class="setting-label">危险命令额外确认</div>
-                <div class="setting-desc">rm -rf、git push --force 等</div>
+                <div class="setting-desc">rm -rf、git push --force 等始终需要确认</div>
               </div>
               <div class="setting-control">
-                <label class="switch">
-                  <input v-model="dangerConfirm" type="checkbox" />
-                  <span class="switch-slider"></span>
-                </label>
+                <span class="pill pill-success">已启用</span>
               </div>
             </div>
           </section>
@@ -364,18 +356,6 @@ const autoArchive = ref(false);
                 <button class="btn" @click="loadArchive" :disabled="archivedLoading">
                   {{ archivedLoading ? '加载中…' : '刷新' }}
                 </button>
-              </div>
-            </div>
-            <div class="setting-row">
-              <div class="setting-info">
-                <div class="setting-label">自动归档</div>
-                <div class="setting-desc">超过 30 天未活动自动归档</div>
-              </div>
-              <div class="setting-control">
-                <label class="switch">
-                  <input v-model="autoArchive" type="checkbox" />
-                  <span class="switch-slider"></span>
-                </label>
               </div>
             </div>
 
