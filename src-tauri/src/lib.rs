@@ -48,6 +48,7 @@ pub fn run() {
                     // (serverAuth 的 setCredential 是全局函数,写 localStorage + memory)
                     // 用 localStorage 直接写(serverAuth 的 initServerAuth 会读它)
                     let token = &launch.token;
+                    let base = &launch.base;
                     let js = format!(
                         r#"
                         try {{
@@ -57,12 +58,13 @@ pub fn run() {
                                 expiresAt: Date.now() + 7*24*60*60*1000
                             }});
                             localStorage.setItem('kimi-web.server-credential', cred);
-                            console.info('[kimi-gui] token injected via Rust eval');
+                            localStorage.setItem('kimi-gui.daemon-base', "{}");
+                            console.info('[kimi-gui] token + base injected via Rust eval');
                         }} catch(e) {{
                             console.error('[kimi-gui] token inject failed:', e);
                         }}
                         "#,
-                        token
+                        token, base
                     );
                     if let Some(window) = app_handle.get_webview_window("main") {
                         if let Err(e) = window.eval(&js) {

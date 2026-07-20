@@ -5,6 +5,7 @@ import { FileSystemIconLoader } from 'unplugin-icons/loaders';
 import { readFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 
 const webPort = Number(process.env.WEB_PORT) || 5175;
 // Dev-proxy backend presets: `default` is the kap-server started by the root
@@ -171,6 +172,14 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     target: 'es2022',
+    // kimi-gui 改:多页面 build(app.html 是 codex UI 入口,codex.html 是沙箱)
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        app: resolve(__dirname, 'app.html'),
+        codex: resolve(__dirname, 'codex.html'),
+      },
+    },
   },
   // Workers that import modules with code-splitting (e.g. mermaid's dynamic
   // diagram imports) need ES format — IIFE cannot split chunks. The app

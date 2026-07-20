@@ -19,7 +19,8 @@
         "minWidth": 1024,
         "minHeight": 700,
         "titleBarStyle": "Overlay",
-        "hiddenTitle": true
+        "hiddenTitle": true,
+        "url": "app.html"
       }
     ],
     "security": {

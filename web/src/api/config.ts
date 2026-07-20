@@ -29,13 +29,25 @@ export function readKimiApiConfig(): KimiApiConfig {
 //  - dev: the SPA is served by Vite; the Vite dev proxy forwards /v1, /healthz
 //    and /v1/ws to the server (see vite.config.ts), so the browser only ever
 //    talks to its own origin.
-//  - prod: `kimi web` serves this built SPA from the server itself, so the
-//    server's origin already is the API origin.
+//  - prod(kimi web): `kimi web` serves this built SPA from the server itself,
+//    so the server's origin already is the API origin.
+//  - prod(Tauri kimi-gui): the SPA is served from tauri://localhost, NOT from
+//    the daemon. Read the daemon base from localStorage (set by Rust eval in
+//    daemon.rs setup). Fallback to 127.0.0.1:58627.
 // Set VITE_KIMI_SERVER_HTTP_URL to connect directly to an absolute server
 // origin instead (that path does require the server to send CORS headers).
 function defaultServerOrigin(): string {
   if (typeof window !== 'undefined' && window.location?.origin) {
-    return window.location.origin;
+    const origin = window.location.origin;
+    // Tauri custom-protocol origin → 用 daemon 写入的 base URL
+    if (origin.startsWith('tauri://') || origin.startsWith('http://tauri') || origin === 'null') {
+      try {
+        const stored = localStorage.getItem('kimi-gui.daemon-base');
+        if (stored) return stored;
+      } catch { /* ignore */ }
+      return 'http://127.0.0.1:58627';
+    }
+    return origin;
   }
   return 'http://127.0.0.1:58627';
 }
