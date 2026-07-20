@@ -29,6 +29,7 @@ import type {
 import { useComposerDraft } from '../../../composables/useComposerDraft';
 import { useInputHistory } from '../../../composables/useInputHistory';
 import CodexIcon from '../layout/CodexIcon.vue';
+import { useToast } from '../layout/Toast.vue';
 import ComposerModes from './ComposerModes.vue';
 import PermPicker from './PermPicker.vue';
 import ModePicker from './ModePicker.vue';
@@ -66,6 +67,7 @@ const { text, textareaRef, autosize, loadForEdit, clearDraft } = useComposerDraf
 
 // shell 式 ↑/↓ 已发消息召回 —— 见 useInputHistory;键位编排留在本组件(见 onKeydown)
 const history = useInputHistory({ text, textareaRef, autosize, sessionId: () => props.sessionId });
+const { toast } = useToast();
 
 /** 补全检测:'/' 开头单 token → slash;最后 token 以 @ 起头 → mention */
 const assist = computed(() => {
@@ -209,9 +211,13 @@ const fileInputEl = ref<HTMLInputElement | null>(null);
 async function handleFiles(files: FileList | File[]) {
   if (!props.uploadImage) return;
   const arr = Array.from(files);
+  let rejected = 0;
   for (const file of arr) {
     const isImage = file.type.startsWith('image/') || file.type.startsWith('video/');
-    if (!isImage) continue;
+    if (!isImage) {
+      rejected++;
+      continue;
+    }
     const att: PendingAttachment = {
       localId: crypto.randomUUID(),
       name: file.name,
@@ -234,6 +240,8 @@ async function handleFiles(files: FileList | File[]) {
       att.uploading = false;
     }
   }
+  // 不支持的类型不再静默吞掉(普通文件上传是协议侧待排期项)
+  if (rejected) toast(`${rejected} 个文件暂不支持(仅图片/视频),可用 @ 引用文件`);
 }
 
 function removeAttachment(localId: string) {

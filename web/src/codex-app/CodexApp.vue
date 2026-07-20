@@ -565,6 +565,14 @@ function handleCommand(cmd: string): void {
     case '/login':
       toast('已通过 daemon token 自动登录');
       break;
+    case '/review':
+      if (changedFiles.value.length) ui.openReview();
+      else toast('暂无改动');
+      break;
+    case '/permissions':
+      settingsSection.value = 'permissions';
+      settingsOpen.value = true;
+      break;
     default: {
       // 未匹配 → 当 skill 激活(排除已知非 skill)
       const stripped = cmd.slice(1).split(' ')[0];
@@ -706,6 +714,7 @@ function onPaletteAction(id: string) {
       client.clearActiveSession();
       break;
     case 'settings':
+      settingsSection.value = 'general';
       settingsOpen.value = true;
       break;
     case 'theme':
@@ -796,6 +805,21 @@ const hunksByFile = computed<Record<string, DiffHunk[]>>(() => {
   return { [p]: toDiffHunks(client.fileDiff.value ?? []) };
 });
 
+/** 运行占位(TurnProgress):daemon 无步数源,显示「工作中」+ 真实文件增删统计 */
+const runProgress = computed(() => {
+  if (!conversationRunning.value) return undefined;
+  let add = 0;
+  let del = 0;
+  for (const f of changedFiles.value) {
+    add += f.additions ?? 0;
+    del += f.deletions ?? 0;
+  }
+  return { additions: add, deletions: del };
+});
+
+/** SettingsPage 初始分区(/permissions 命令直达权限页;其余入口回 general) */
+const settingsSection = ref<'general' | 'permissions'>('general');
+
 // 有改动时默认选第一个文件并拉它的 diff
 watch(
   () => client.changes.value,
@@ -861,7 +885,7 @@ async function searchFiles(q: string) {
         </button>
         <span class="toolbar-title">设置</span>
       </header>
-      <SettingsPage />
+      <SettingsPage :initial-section="settingsSection" />
     </AppShell>
   </template>
 
@@ -880,7 +904,7 @@ async function searchFiles(q: string) {
         @new-task="() => {}"
         @set-filter="(f: SessionFilter) => (filter = f)"
         @toggle-pin="togglePin"
-        @open-settings="settingsOpen = true"
+        @open-settings="settingsSection = 'general'; settingsOpen = true"
         @select-workspace="() => {}"
         @set-workspace-sort="(m: any) => client.setWorkspaceSortMode(m)"
         @rename-workspace="onRenameWorkspace"
@@ -955,6 +979,7 @@ async function searchFiles(q: string) {
       :turns="conversationTurns"
       :todos-by-turn="todosByTurn"
       :running="conversationRunning"
+      :turn-progress="runProgress"
       :open-file="onOpenFile"
       :has-more-messages="client.hasMoreMessages.value ?? false"
       :loading-more="client.loadingMoreMessages.value ?? false"

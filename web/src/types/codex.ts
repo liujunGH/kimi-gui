@@ -194,8 +194,9 @@ export interface ToolCallCardEmits {
 }
 
 export interface TurnProgressProps {
-  current: number;
-  total: number;
+  /** 步数(daemon 无步数源,真链路不传 → 显示「工作中」;demo 可传) */
+  current?: number;
+  total?: number;
   additions: number;
   deletions: number;
 }

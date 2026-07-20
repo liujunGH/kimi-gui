@@ -3,8 +3,13 @@
 //! 复用 kimi-ui 的 connect_daemon / kimi_home / find_kimi / home_dir 逻辑。
 //! 职责:确保本地 kimi daemon 在跑,拿到 host/port/token,组装 base URL。
 //! 这层不依赖 Tauri,纯 Rust,方便测试和后续抽出。
+//!
+//! 版本适配:
+//! - 0.27 及更早:`kimi server run` + 读 `~/.kimi-code/server/lock`
+//! - 0.28+:`kimi web`(foreground)+ 读 `~/.kimi-code/server/instances/*.json`(多实例)
+//! connect_daemon 同时支持两种,优先新格式。
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -52,31 +57,109 @@ pub fn find_kimi() -> Option<PathBuf> {
     candidates.into_iter().find(|p| p.is_file())
 }
 
+/// 新格式实例信息(0.28+:`server/instances/<ULID>.json`)
+#[derive(Deserialize)]
+struct InstanceInfo {
+    #[allow(dead_code)]
+    server_id: String,
+    #[allow(dead_code)]
+    pid: u64,
+    host: String,
+    port: u64,
+    #[allow(dead_code)]
+    started_at: f64,
+    #[allow(dead_code)]
+    heartbeat_at: f64,
+    #[allow(dead_code)]
+    host_version: String,
+}
+
+/// 旧格式 lock(0.27-:`server/lock`)
+#[derive(Deserialize)]
+struct LegacyLock {
+    host: Option<String>,
+    port: Option<u64>,
+}
+
+/// 尝试从 `server/instances/` 目录找到最新活着的实例。
+fn find_instance_from_instances_dir(home: &PathBuf) -> Option<(String, u64)> {
+    let instances_dir = home.join("server/instances");
+    let entries = fs::read_dir(&instances_dir).ok()?;
+    let mut latest: Option<(f64, String, u64)> = None;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("json") {
+            continue;
+        }
+        let content = fs::read_to_string(&path).ok()?;
+        let info: InstanceInfo = match serde_json::from_str(&content) {
+            Ok(i) => i,
+            Err(_) => continue,
+        };
+        // 选 heartbeat 最新的
+        match &latest {
+            Some((hb, _, _)) if *hb >= info.heartbeat_at => {}
+            _ => {
+                latest = Some((info.heartbeat_at, info.host, info.port));
+            }
+        }
+    }
+    latest.map(|(_, h, p)| (h, p))
+}
+
+/// 尝试从旧 `server/lock` 读取。
+fn find_instance_from_legacy_lock(home: &PathBuf) -> Option<(String, u64)> {
+    let lock_raw = fs::read_to_string(home.join("server/lock")).ok()?;
+    let lock: LegacyLock = serde_json::from_str(&lock_raw).ok()?;
+    let host = lock.host.unwrap_or_else(|| "127.0.0.1".to_string());
+    let port = lock.port.unwrap_or(58627);
+    Some((host, port))
+}
+
 /// Ensure the local daemon is running and discover its address/credentials.
 ///
-/// 1. 调 `kimi server run`(daemon 自启动,幂等)
-/// 2. 读 `~/.kimi-code/server/lock` 拿 host/port
-/// 3. 读 `~/.kimi-code/server.token` 拿 bearer
+/// 1. 尝试 `kimi web`(0.28+,foreground)启动 server
+/// 2. 如果 `kimi web` 不存在(旧版),fallback `kimi server run`
+/// 3. 优先读 `server/instances/`(0.28+ 多实例),fallback `server/lock`(0.27-)
+/// 4. 读 `server.token` 拿 bearer
 pub fn connect_daemon() -> Result<Launch, String> {
     let kimi = find_kimi().ok_or_else(|| "找不到 kimi CLI，请先安装 Kimi Code".to_string())?;
-    let output = Command::new(kimi)
-        .args(["server", "run"])
-        .output()
-        .map_err(|e| format!("执行 `kimi server run` 失败：{e}"))?;
-    if !output.status.success() {
-        return Err(format!(
-            "`kimi server run` 退出码非零：{}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        ));
-    }
 
     let home = kimi_home();
-    let lock_raw = fs::read_to_string(home.join("server/lock"))
-        .map_err(|e| format!("读取 server/lock 失败：{e}"))?;
-    let lock: serde_json::Value =
-        serde_json::from_str(&lock_raw).map_err(|e| format!("解析 server/lock 失败：{e}"))?;
-    let host = lock["host"].as_str().unwrap_or("127.0.0.1");
-    let port = lock["port"].as_u64().unwrap_or(58627);
+
+    // 先看是否已有实例在跑(不需要重复启动)
+    let already_running = find_instance_from_instances_dir(&home)
+        .or_else(|| find_instance_from_legacy_lock(&home));
+
+    if already_running.is_none() {
+        // 尝试启动 daemon
+        // 优先 `kimi web`(0.28+),fallback `kimi server run`(0.27-)
+        let web_result = Command::new(&kimi)
+            .args(["web"])
+            .output();
+
+        match web_result {
+            Ok(output) if output.status.success() => {}
+            _ => {
+                // fallback: kimi server run(旧版)
+                let output = Command::new(&kimi)
+                    .args(["server", "run"])
+                    .output()
+                    .map_err(|e| format!("执行 daemon 启动失败：{e}"))?;
+                if !output.status.success() {
+                    return Err(format!(
+                        "daemon 启动退出码非零：{}",
+                        String::from_utf8_lossy(&output.stderr).trim()
+                    ));
+                }
+            }
+        }
+    }
+
+    // 重新读取实例信息(启动后可能需要等一下)
+    let (host, port) = find_instance_from_instances_dir(&home)
+        .or_else(|| find_instance_from_legacy_lock(&home))
+        .unwrap_or(("127.0.0.1".to_string(), 58627));
 
     let token = fs::read_to_string(home.join("server.token"))
         .map_err(|e| format!("读取 server.token 失败（可先运行一次 `kimi web`）：{e}"))?;
