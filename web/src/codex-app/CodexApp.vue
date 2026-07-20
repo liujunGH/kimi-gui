@@ -46,6 +46,7 @@ import SideTask from '../components/codex/layout/SideTask.vue';
 import ThreadMenu from '../components/codex/layout/ThreadMenu.vue';
 import WorkspacePicker from '../components/codex/layout/WorkspacePicker.vue';
 import Toast, { useToast } from '../components/codex/layout/Toast.vue';
+import PromptDialog from '../components/codex/layout/PromptDialog.vue';
 import AgentPanel from '../components/codex/agents/AgentPanel.vue';
 import SettingsPage from '../components/codex/settings/SettingsPage.vue';
 import ReviewPane from '../components/codex/diff/ReviewPane.vue';
@@ -74,7 +75,23 @@ const { toast } = useToast();
 
 // 3. 侧栏 + Composer 状态
 const filter = ref<SessionFilter>('all');
-const pinnedIds = ref<string[]>([]);
+// 置顶持久化(localStorage;无 daemon 端点,纯客户端偏好)
+const PIN_KEY = 'codex.pinned-sessions';
+const pinnedIds = ref<string[]>((() => {
+  try {
+    const v = JSON.parse(localStorage.getItem(PIN_KEY) ?? '[]');
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+})());
+watch(pinnedIds, (v) => {
+  try {
+    localStorage.setItem(PIN_KEY, JSON.stringify(v));
+  } catch {
+    /* ignore */
+  }
+}, { deep: true });
 const composerMode = ref<ComposerMode>('queue');
 const settingsOpen = ref(false);
 const showOnboarding = ref(!client.onboarded.value);
@@ -87,14 +104,18 @@ function togglePin(id: string) {
   toast(pinnedIds.value.includes(id) ? '已置顶' : '已取消置顶');
 }
 
+/** Cmd+K / 侧栏搜索框点击:加载所有会话 + 打开搜索弹层 */
+function openSearch() {
+  void client.loadAllSessions();
+  showSearch.value = true;
+}
+
 useHotkeys([
   {
     key: 'k',
     meta: true,
     handler: () => {
-      // Cmd+K 搜索:加载所有会话 + 打开搜索弹层
-      void client.loadAllSessions();
-      showSearch.value = true;
+      openSearch();
       return true;
     },
   },
@@ -133,7 +154,38 @@ useHotkeys([
       return true;
     },
   },
-  { key: 'Escape', handler: () => ui.escClose() },
+  {
+    key: 'r',
+    meta: true,
+    alt: true,
+    handler: () => {
+      // ⌥⌘R 重命名(ThreadMenu 里已标注该快捷键)
+      onRenameSession();
+      return true;
+    },
+  },
+  {
+    key: 'a',
+    meta: true,
+    shift: true,
+    handler: () => {
+      // ⇧⌘A 归档(ThreadMenu 里已标注该快捷键)
+      if (client.activeSessionId.value) void client.archiveSession(client.activeSessionId.value);
+      return true;
+    },
+  },
+  {
+    key: 'Escape',
+    handler: () => {
+      // 先分层关闭浮层;无浮层可关时,运行中则中断当前轮(对齐官方 ConversationPane 的 Esc)
+      if (ui.escClose()) return true;
+      if (conversationRunning.value) {
+        void client.abortCurrentPrompt();
+        return true;
+      }
+      return false;
+    },
+  },
 ]);
 
 // ---------------------------------------------------------------- 侧栏数据
@@ -201,6 +253,8 @@ watch(unreadCount, (n) => {
 const thinkingFullText = computed(() => {
   // 文件预览内容优先(点文件路径时临时显示)
   if (filePreviewContent.value) return filePreviewContent.value;
+  // 面板关闭时不做全会话重算(流式期间每个 token 都触发 computed 求值)
+  if (!ui.detailPaneOpen.value) return '';
   return conversationTurns.value
     .flatMap((t) => (t.blocks ?? []).filter((b) => b.kind === 'thinking'))
     .map((b) => (b.kind === 'thinking' ? b.thinking : ''))
@@ -209,12 +263,13 @@ const thinkingFullText = computed(() => {
 
 // 文件预览内容(简化版:复用 DetailPane thinking tab 的 pre 渲染)
 const filePreviewContent = ref('');
-const toolCalls = computed(() =>
-  conversationTurns.value
+const toolCalls = computed(() => {
+  if (!ui.detailPaneOpen.value) return []; // 同上:面板关闭零成本
+  return conversationTurns.value
     .flatMap((t) => (t.blocks ?? []).filter((b) => b.kind === 'tool'))
     .map((b) => (b.kind === 'tool' ? b.tool : null))
-    .filter((x): x is NonNullable<typeof x> => x !== null),
-);
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+});
 
 // ---------------------------------------------------------------- Composer 数据
 
@@ -361,9 +416,19 @@ function onSend(text: string, mode: ComposerMode, attachments?: PromptAttachment
   if (!text.trim() && !attachments?.length) return;
   if (mode === 'steer' && conversationRunning.value) {
     void client.steerPrompt(text, attachments as any);
-  } else {
-    void client.sendPrompt(text, attachments as any);
+    // B4:steer 反馈(原型有气泡,真 app 至少给 toast;思考块 steerMark 待数据侧接线)
+    toast('已插话到当前轮');
+    return;
   }
+  // 无 active session:走 startSessionAndSendPrompt 开新会话发首条(对齐官方 App.vue handleSubmit;
+  // 直接 sendPrompt 会在 useWorkspaceState 里静默丢弃,新任务流程断链)
+  if (!client.activeSessionId.value) {
+    const wsId = client.activeWorkspaceId.value;
+    if (wsId) void client.startSessionAndSendPrompt(wsId, text, attachments as any);
+    else toast('请先在左侧选择工作区');
+    return;
+  }
+  void client.sendPrompt(text, attachments as any);
 }
 function onSelectSession(id: string) {
   void client.selectSession(id);
@@ -410,8 +475,10 @@ function handleCommand(cmd: string): void {
   }
   if (cmd.startsWith('/btw')) {
     const arg = cmd.slice('/btw'.length).trim();
+    // 裸 /btw 是 toggle(对齐官方):开着就关,关着就开侧边分栏
     if (arg) void client.openSideChat(arg);
-    else client.closeSideChat();
+    else if (ui.sideTaskOpen.value) client.closeSideChat();
+    else ui.openSideTask('thread');
     return;
   }
   switch (cmd) {
@@ -451,25 +518,53 @@ function handleCommand(cmd: string): void {
   }
 }
 
+/** 应用内输入/确认弹层状态(WKWebView 无 window.prompt,统一走 PromptDialog) */
+interface PromptDialogState {
+  title: string;
+  description?: string;
+  placeholder?: string;
+  initial?: string;
+  confirmLabel?: string;
+  danger?: boolean;
+  input: boolean;
+  onConfirm: (v: string) => void;
+}
+const promptDialog = ref<PromptDialogState | null>(null);
+
 /** 重命名当前 session */
 function onRenameSession() {
   const id = client.activeSessionId.value;
   if (!id) return;
-  const title = window.prompt('新标题', activeSession.value?.title ?? '');
-  if (title) void client.renameSession(id, title);
+  promptDialog.value = {
+    title: '重命名任务',
+    initial: activeSession.value?.title ?? '',
+    confirmLabel: '重命名',
+    input: true,
+    onConfirm: (v) => void client.renameSession(id, v),
+  };
 }
 function onRenameWorkspace() {
   const id = client.activeWorkspaceId.value;
   if (!id) return;
-  const name = window.prompt('工作区新名称', sidebarCurrentWs.value);
-  if (name) void client.renameWorkspace(id, name);
+  promptDialog.value = {
+    title: '重命名工作区',
+    initial: sidebarCurrentWs.value,
+    confirmLabel: '重命名',
+    input: true,
+    onConfirm: (v) => void client.renameWorkspace(id, v),
+  };
 }
 function onDeleteWorkspace() {
   const id = client.activeWorkspaceId.value;
   if (!id) return;
-  if (window.confirm('确定移除工作区?会话数据保留,可重新添加。')) {
-    void client.deleteWorkspace(id);
-  }
+  promptDialog.value = {
+    title: '移除工作区?',
+    description: '会话数据保留,可重新添加。',
+    confirmLabel: '移除',
+    danger: true,
+    input: false,
+    onConfirm: () => void client.deleteWorkspace(id),
+  };
 }
 
 /** 文件路径链接点击 → 读文件内容 → 在 DetailPane 显示 */
@@ -497,12 +592,9 @@ function onOpenFile(target: { path: string; line?: number }) {
   });
 }
 
-/** 切模型:setModel + 设 daemon 默认(fire-and-forget) */
+/** 切模型:client.setModel(updateSession 内已刷新状态,一次调用即可) */
 async function onSetModel(id: string) {
-  const switched = await client.setModel(id);
-  if (switched && id !== client.defaultModel.value) {
-    void client.setModel(id); // 设默认(fire-and-forget,不阻塞 UI)
-  }
+  await client.setModel(id);
 }
 
 /** 切思考强度:EffortLevel → ThinkingLevel → client.setThinking */
@@ -525,6 +617,9 @@ async function onPickModelOverlay(id: string) {
 function qSteer(i: number) {
   const q = queueItems.value[i];
   if (!q) return;
+  // ⚠️ 语义限制:client.steerPrompt 会把「整队 + 本条」合并插话并清空队列
+  // (useWorkspaceState.ts:1627 对齐 TUI ctrl+s),所以单行「引导」实际是全部引导。
+  // 单条 steer 需 client 加新路径(已报 ZCode),unqueue(i) 在队列已清后是空转,保留无害。
   void client.steerPrompt(q.text);
   client.unqueue(i);
 }
@@ -618,6 +713,7 @@ async function searchFiles(q: string) {
           @new-task="() => {}"
           @set-filter="(f: SessionFilter) => (filter = f)"
           @toggle-pin="togglePin"
+          @search="openSearch"
           @open-settings="settingsOpen = false"
           @select-workspace="() => {}"
           @rename-workspace="onRenameWorkspace"
@@ -633,7 +729,6 @@ async function searchFiles(q: string) {
       </header>
       <SettingsPage />
     </AppShell>
-    <Toast />
   </template>
 
   <AppShell v-else>
@@ -762,9 +857,7 @@ async function searchFiles(q: string) {
     <div v-if="activeGoal" class="dock-goal-strip">
       <OfficialGoalStrip
         :goal="activeGoal"
-        @pause="client.controlGoal('pause')"
-        @resume="client.controlGoal('resume')"
-        @cancel="client.controlGoal('cancel')"
+        @control-goal="(a: 'pause' | 'resume' | 'cancel') => client.controlGoal(a)"
       />
     </div>
 
@@ -909,4 +1002,18 @@ async function searchFiles(q: string) {
     />
   </AppShell>
   <Toast />
+
+  <!-- 应用内输入/确认弹层(重命名/移除工作区等,替代 window.prompt) -->
+  <PromptDialog
+    v-if="promptDialog"
+    :title="promptDialog.title"
+    :description="promptDialog.description"
+    :placeholder="promptDialog.placeholder"
+    :initial="promptDialog.initial"
+    :confirm-label="promptDialog.confirmLabel"
+    :danger="promptDialog.danger"
+    :input="promptDialog.input"
+    @confirm="(v: string) => { const cb = promptDialog!.onConfirm; promptDialog = null; cb(v); }"
+    @cancel="promptDialog = null"
+  />
 </template>

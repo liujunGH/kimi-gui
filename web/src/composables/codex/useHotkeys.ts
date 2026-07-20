@@ -72,8 +72,10 @@ function onKeydown(e: KeyboardEvent) {
 
   for (const spec of registry) {
     if (!match(spec, e)) continue;
-    // 在输入框里,除非带 meta/ctrl 修饰,否则不触发
-    if (inEditable && !spec.meta && !spec.ctrl) continue;
+    // 在输入框里,除非带 meta/ctrl 修饰,否则不触发;
+    // Escape 例外:不产生文本,输入中也应能 Esc 分层关闭浮层
+    // (组件级菜单的 Esc 在 bubble 相先处理并 stopPropagation,不会双触发)
+    if (inEditable && !spec.meta && !spec.ctrl && spec.key !== 'Escape') continue;
 
     const handled = spec.handler(e);
     // 只有 handler 显式返回 true 才阻止默认 + 停止冒泡。

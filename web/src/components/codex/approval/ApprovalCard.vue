@@ -132,7 +132,11 @@ function toggleFeedback() {
   }
 }
 
+/** 已响应标记:防连点/连按 y 对同一 approvalId 重复 respond(daemon 清除前卡仍在) */
+const responded = ref(false);
+
 function act(key: ApprovalActKey) {
+  if (responded.value) return;
   pressed.value = key;
   clearTimeout(pressTimer);
   pressTimer = setTimeout(() => (pressed.value = null), 120);
@@ -141,6 +145,7 @@ function act(key: ApprovalActKey) {
     return;
   }
   if (client && props.approvalId) {
+    responded.value = true;
     void client.respondApproval(props.approvalId, {
       decision: key === 'reject' ? 'rejected' : 'approved',
       scope: key === 'session' ? 'session' : undefined,
@@ -219,6 +224,7 @@ useHotkeys([
         class="act-btn primary"
         :class="{ pressed: pressed === 'approve' }"
         data-key="approve"
+        :disabled="responded"
         @click="act('approve')"
       >
         批准 <span class="kbd">Y</span>
@@ -227,6 +233,7 @@ useHotkeys([
         class="act-btn"
         :class="{ pressed: pressed === 'session' }"
         data-key="session"
+        :disabled="responded"
         @click="act('session')"
       >
         本会话 <span class="kbd">A</span>
@@ -235,6 +242,7 @@ useHotkeys([
         class="act-btn reject"
         :class="{ pressed: pressed === 'reject' }"
         data-key="reject"
+        :disabled="responded"
         @click="act('reject')"
       >
         拒绝 <span class="kbd">N</span>
@@ -243,6 +251,7 @@ useHotkeys([
         class="act-btn feedback"
         :class="{ pressed: pressed === 'feedback' }"
         data-key="feedback"
+        :disabled="responded"
         @click="act('feedback')"
       >
         反馈 <span class="kbd">P</span>

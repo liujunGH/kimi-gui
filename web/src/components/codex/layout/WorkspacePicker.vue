@@ -8,6 +8,7 @@
 import { onMounted, onUnmounted, ref } from 'vue';
 import type { WorkspaceView } from '../../../types';
 import CodexIcon from './CodexIcon.vue';
+import PromptDialog from './PromptDialog.vue';
 
 const props = defineProps<{ workspaces: WorkspaceView[]; currentId: string }>();
 const emit = defineEmits<{
@@ -16,20 +17,22 @@ const emit = defineEmits<{
 }>();
 
 const open = ref(false);
+/** 添加工作区的路径输入(WKWebView 无 window.prompt,走应用内弹层) */
+const addOpen = ref(false);
 
 function onAddWorkspace() {
-  const path = window.prompt('输入工作区路径(如 ~/project/my-app)');
-  if (path?.trim()) {
-    emit('add-workspace', path.trim());
-  }
   open.value = false;
+  addOpen.value = true;
 }
 
 function onDocClick(e: MouseEvent) {
   if (!(e.target as HTMLElement | null)?.closest('.workspace-picker')) open.value = false;
 }
 function onDocKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') open.value = false;
+  if (e.key === 'Escape') {
+    e.stopPropagation(); // 防穿透:全局 escClose 在 window 相,别连带关底层浮层
+    open.value = false;
+  }
 }
 onMounted(() => {
   document.addEventListener('click', onDocClick);
@@ -73,6 +76,14 @@ onUnmounted(() => {
         <span class="mp-name">添加工作区…</span>
       </button>
     </div>
+    <PromptDialog
+      v-if="addOpen"
+      title="添加工作区"
+      placeholder="输入工作区路径(如 ~/project/my-app)"
+      confirm-label="添加"
+      @confirm="(p: string) => { addOpen = false; emit('add-workspace', p); }"
+      @cancel="addOpen = false"
+    />
   </div>
 </template>
 

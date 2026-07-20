@@ -7,7 +7,8 @@
  * 快捷键走 GLM 的 useHotkeys 注册表(handler 显式 return true):
  *   ⌘B review / ⌘I inspect / ⌥⌘S 侧边任务 / ⌥⌘P 置顶 / Esc 分层关闭
  */
-import { computed, reactive, ref } from 'vue';
+import { computed, provide, reactive, ref } from 'vue';
+import { KIMI_CLIENT_KEY } from '../composables/codex/useKimiClient';
 import type { ChatTurn, PermissionMode } from '../types';
 import type {
   ComposerMode,
@@ -138,6 +139,11 @@ function togglePin(id: string) {
 
 const ui = useUIState();
 
+// 沙箱无真 daemon:给 SettingsPage/ApprovalCard 提供 mock client(见 mock.ts 尾部)
+provide(KIMI_CLIENT_KEY, M.mockKimiClient);
+// 官方 Markdown 的本地图片解析:沙箱直通(产品 app 由 CodexApp provide client.resolveImageUrl)
+provide('resolveImage', (p: string) => p);
+
 // 轮次 3 阶段 C:挂载时调 daemon wire-up(Tauri 环境拿真 base,浏览器走 no-tauri)
 const tauri = useTauriDaemon();
 tauri.fetch().catch(() => {/* 静默:浏览器环境/daemon 未启动都正常 */});
@@ -235,6 +241,14 @@ useHotkeys([
       return true;
     },
   },
+  {
+    key: 'k',
+    meta: true,
+    handler: () => {
+      toast('⌘K 会话搜索(演示:真弹层见产品 app)');
+      return true;
+    },
+  },
   { key: 'Escape', handler: () => ui.escClose() },
 ]);
 
@@ -302,6 +316,7 @@ function openFM(e: MouseEvent, file: string) {
         @new-task="toast('新建任务(原型)')"
         @set-filter="(f: SessionFilter) => (filter = f)"
         @toggle-pin="togglePin"
+        @search="toast('⌘K 会话搜索(演示:真弹层见产品 app)')"
         @open-settings="go('settings')"
       />
     </template>

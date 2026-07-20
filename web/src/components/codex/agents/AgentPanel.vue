@@ -53,9 +53,12 @@ function sumOf(a: Subagent): string {
   return s ? `${s} ${tail}` : tail;
 }
 
-/* Esc 关闭(组件自管;面板未开时不吞事件) */
+/* Esc 关闭(组件自管;面板未开时不吞事件;stopPropagation 防连带关底层浮层) */
 function onDocKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && props.open) emit('close');
+  if (e.key === 'Escape' && props.open) {
+    e.stopPropagation();
+    emit('close');
+  }
 }
 onMounted(() => document.addEventListener('keydown', onDocKeydown));
 onUnmounted(() => document.removeEventListener('keydown', onDocKeydown));

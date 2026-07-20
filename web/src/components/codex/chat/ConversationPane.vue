@@ -82,11 +82,15 @@ function onTocSelect(turnId: string) {
   if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-// 会话切换(turns 引用变化且不是单纯增长)时重置窗口
+// 会话切换(旧首 turn 已不在列表 = 真切换)时重置窗口并回滚贴底;
+// 旧首 turn 仍在 = daemon 前插了更早消息(加载更早),保持窗口与滚动位置
 watch(
   () => props.turns[0]?.id,
-  () => {
+  (_first, prevFirst) => {
+    if (prevFirst && props.turns.some((t) => t.id === prevFirst)) return;
     visibleCount.value = PAGE;
+    nearBottom.value = true;
+    void maybeFollow();
   },
 );
 
@@ -156,6 +160,12 @@ onUnmounted(() => {
   resizeObserver?.disconnect();
 });
 
+// 哨兵在 v-if="canLoadMore" 内,初始短会话时不存在;渲染出来后要补观察,
+// 否则「滚动到顶自动加载更早」只剩手点按钮
+watch(sentinelEl, (el) => {
+  if (el && observer) observer.observe(el);
+});
+
 // 保持 emit 声明被使用(契约):取消当前轮由 Composer stop 触发,这里转发给外部备用
 void emit;
 </script>
@@ -175,6 +185,17 @@ void emit;
       <template v-for="t in shownTurns" :key="t.id">
         <div v-if="t.role === 'user'" :data-turn-id="t.id">
           <MessageUser :turn="t" />
+        </div>
+        <!-- 压缩分隔线(transcript 持久 divider;摘要点击入口在 dock 上方分隔线条) -->
+        <div v-else-if="t.role === 'compaction'" class="compaction-divider">
+          <span class="cd-line"></span>
+          <span class="cd-text">上下文已压缩</span>
+          <span class="cd-line"></span>
+        </div>
+        <!-- cron 定时触发 notice(简单行,官方 CronNotice 的极简版) -->
+        <div v-else-if="t.role === 'cron'" class="cron-notice">
+          <CodexIcon name="clock" size="sm" />
+          <span>{{ t.text || '定时任务触发' }}</span>
         </div>
         <MessageAssistant
           v-else-if="t.role === 'assistant'"
@@ -229,5 +250,27 @@ void emit;
 .load-earlier-btn .ic {
   width: 13px;
   height: 13px;
+}
+.compaction-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.cd-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border-soft);
+}
+.cd-text {
+  flex: none;
+  font-size: var(--text-sm);
+  color: var(--text-3);
+}
+.cron-notice {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--text-sm);
+  color: var(--text-3);
 }
 </style>

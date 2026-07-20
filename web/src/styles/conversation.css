@@ -11,6 +11,7 @@
   background: var(--bubble);
   font-size: var(--content-fs);
   line-height: 1.6;
+  overflow-wrap: anywhere; /* 超长无空格串(URL/base64)不撑破布局 */
 }
 .u-meta { margin-top: 5px; font-size: 11px; color: var(--text-3); }
 

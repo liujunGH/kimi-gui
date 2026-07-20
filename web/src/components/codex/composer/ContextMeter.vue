@@ -65,7 +65,10 @@ function onDocClick(e: MouseEvent) {
   if (!(e.target as HTMLElement | null)?.closest('.ctx-meter')) open.value = false;
 }
 function onDocKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && open.value) open.value = false;
+  if (e.key === 'Escape' && open.value) {
+    e.stopPropagation(); // 防穿透:全局 escClose 在 window 相,别连带关底层浮层
+    open.value = false;
+  }
 }
 onMounted(() => {
   document.addEventListener('click', onDocClick);

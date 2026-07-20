@@ -20,6 +20,8 @@ const emit = defineEmits<SidebarEmits & {
   (e: 'open-settings'): void;
   (e: 'select-workspace', name: string): void;
   (e: 'set-workspace-sort', mode: WorkspaceSortMode): void;
+  (e: 'rename-workspace', name: string): void;
+  (e: 'delete-workspace', name: string): void;
 }>();
 
 /** 工作区排序模式:接 client.setWorkspaceSortMode(持久化) */
@@ -67,7 +69,7 @@ function sessionsOf(wsName: string): Session[] {
       </slot>
     </div>
 
-    <div class="sidebar-search">
+    <div class="sidebar-search" title="搜索线程 ⌘K" @click="emit('search')">
       <div class="search-box">
         <CodexIcon name="search" />
         <span>搜索线程</span>
@@ -110,6 +112,8 @@ function sessionsOf(wsName: string): Session[] {
         @toggle-pin="(id) => emit('toggle-pin', id)"
         @set-sort="(m) => onSetSort(ws.name, m)"
         @select-workspace="emit('select-workspace', ws.name)"
+        @rename-workspace="emit('rename-workspace', ws.name)"
+        @delete-workspace="emit('delete-workspace', ws.name)"
       />
     </div>
 

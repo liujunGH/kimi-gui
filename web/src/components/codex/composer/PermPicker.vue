@@ -35,17 +35,10 @@ const OPTIONS: PermOption[] = [
   { id: 'yolo', name: '完全自主', desc: '完全自主运行,智能体自己做决定,不再询问', cls: 'perm-danger' },
 ];
 
-const STORAGE_KEY = 'proto-perm';
-
 const open = ref(false);
 const cur = computed(() => OPTIONS.find((o) => o.id === props.permission) ?? (OPTIONS[0] as PermOption));
 
 function pick(p: PermissionMode) {
-  try {
-    localStorage.setItem(STORAGE_KEY, p);
-  } catch {
-    /* ignore */
-  }
   emit('set-permission', p);
   open.value = false;
 }
@@ -54,17 +47,12 @@ function onDocClick(e: MouseEvent) {
   if (!(e.target as HTMLElement | null)?.closest('.perm-picker')) open.value = false;
 }
 function onDocKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && open.value) open.value = false;
+  if (e.key === 'Escape' && open.value) {
+    e.stopPropagation(); // 防穿透:全局 escClose 在 window 相,别连带关底层浮层
+    open.value = false;
+  }
 }
 onMounted(() => {
-  try {
-    const s = localStorage.getItem(STORAGE_KEY);
-    if (s && OPTIONS.some((o) => o.id === s) && s !== props.permission) {
-      emit('set-permission', s as PermissionMode);
-    }
-  } catch {
-    /* ignore */
-  }
   document.addEventListener('click', onDocClick);
   document.addEventListener('keydown', onDocKeydown);
 });

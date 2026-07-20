@@ -10,7 +10,8 @@
  * 行为(组件内):
  * - pill 点击开关弹层;点外部 / Esc 关闭(document 监听在 onUnmounted 移除)
  * - 选模型后关弹层;切思考深度不收起(可继续对比)
- * - localStorage('proto-model')持久化 { model, effort };挂载时读回经 emit 同步父级
+ * - 真源是 daemon(client.models/defaultModel);不做 localStorage 回写,
+ *   避免挂载时拿缓存覆盖会话真实模型(原型 proto-model 残留已清)
  */
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import type { EffortLevel, ModelInfo } from '../../../types/codex';
@@ -29,7 +30,6 @@ const emit = defineEmits<{
 
 /** EffortLevel 联合类型的全部成员(类型域,非 mock 数据) */
 const EFFORTS: EffortLevel[] = ['Low', 'High', 'Max'];
-const STORAGE_KEY = 'proto-model';
 
 const open = ref(false);
 
@@ -37,22 +37,11 @@ const currentName = computed(
   () => props.models.find((m) => m.id === props.current)?.name ?? props.current,
 );
 
-function persist(patch: { model?: string; effort?: EffortLevel }) {
-  try {
-    const prev = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as Record<string, string>;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...prev, ...patch }));
-  } catch {
-    /* ignore */
-  }
-}
-
 function pickModel(id: string) {
-  persist({ model: id });
   emit('set-model', id);
   open.value = false;
 }
 function pickEffort(lv: EffortLevel) {
-  persist({ effort: lv });
   emit('set-effort', lv);
   /* 切深度不收起,可继续对比 */
 }
@@ -61,31 +50,12 @@ function onDocClick(e: MouseEvent) {
   if (!(e.target as HTMLElement | null)?.closest('.model-picker')) open.value = false;
 }
 function onDocKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && open.value) open.value = false;
+  if (e.key === 'Escape' && open.value) {
+    e.stopPropagation(); // 防穿透:全局 escClose 在 window 相,别连带关底层浮层
+    open.value = false;
+  }
 }
 onMounted(() => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const s = JSON.parse(raw) as { model?: unknown; effort?: unknown };
-      if (
-        typeof s.model === 'string' &&
-        props.models.some((m) => m.id === s.model) &&
-        s.model !== props.current
-      ) {
-        emit('set-model', s.model);
-      }
-      if (
-        typeof s.effort === 'string' &&
-        (EFFORTS as string[]).includes(s.effort) &&
-        s.effort !== props.effort
-      ) {
-        emit('set-effort', s.effort as EffortLevel);
-      }
-    }
-  } catch {
-    /* ignore */
-  }
   document.addEventListener('click', onDocClick);
   document.addEventListener('keydown', onDocKeydown);
 });

@@ -36,6 +36,14 @@ function send() {
   draft.value = '';
 }
 
+/** 迷你 Composer Enter 发送:Shift+Enter 换行;IME  composing 中按 Enter 确认候选不发送 */
+function onEnter(e: KeyboardEvent) {
+  if (e.shiftKey) return; // 换行交给默认行为
+  if (e.isComposing || e.keyCode === 229) return;
+  e.preventDefault();
+  send();
+}
+
 /** 真分栏让位:open 时主区 .app-main 加 .side-open(padding-right 让出分栏宽) */
 function appMain(): HTMLElement | null {
   return document.querySelector('.app-main');
@@ -80,7 +88,7 @@ onUnmounted(() => {
             rows="1"
             :placeholder="`给「${props.title}」发消息…`"
             :disabled="props.running"
-            @keydown.enter.prevent="send"
+            @keydown.enter="onEnter"
           ></textarea>
         </div>
         <div class="composer-toolbar">

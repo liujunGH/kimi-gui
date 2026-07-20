@@ -4,7 +4,9 @@
  * 轮次 3 由 ZCode 的 composable 接真源(daemon);本文件标注"动态"的字段
  * 届时来自对应端点(见 prototype/README.md 数据来源表)。
  */
+import { ref } from 'vue';
 import type { ChatTurn, Session, TodoView, ToolCall, Workspace } from '../types';
+import type { KimiClient } from '../composables/codex/useKimiClient';
 import type {
   ApprovalRequestSummary,
   BuiltinCommand,
@@ -473,3 +475,42 @@ export const sideThreadTurns: ChatTurn[] = [
     ],
   },
 ];
+
+// ---------------------------------------------------------------- 设置页演示 mock client(沙箱无真 daemon)
+
+/**
+ * 只覆盖 SettingsPage / ApprovalCard(inject 兜底)读取的键:
+ * 读的都是 ref,写的都是 setter;respondApproval 空操作(演示不真审批)。
+ * DemoApp 顶层 provide(KIMI_CLIENT_KEY, mockKimiClient),沙箱设置页不再崩。
+ */
+function rw<T>(v: T) {
+  const r = ref(v);
+  return [r, (x: T) => { r.value = x; }] as const;
+}
+const [permission, setPermission] = rw('manual');
+const [defaultModel, setModel] = rw('kimi-k3');
+const [notifyOnComplete, setNotifyOnComplete] = rw(true);
+const [notifyOnQuestion, setNotifyOnQuestion] = rw(true);
+const [notifyOnApproval, setNotifyOnApproval] = rw(true);
+const [soundOnComplete, setSoundOnComplete] = rw(false);
+const [uiFontSize, setUiFontSize] = rw(14);
+
+export const mockKimiClient = {
+  permission, setPermission,
+  models: ref([
+    { id: 'kimi-k2.7', displayName: 'K2.7' },
+    { id: 'kimi-k3', displayName: 'K3' },
+  ]),
+  defaultModel, setModel,
+  notifyOnComplete, setNotifyOnComplete,
+  notifyOnQuestion, setNotifyOnQuestion,
+  notifyOnApproval, setNotifyOnApproval,
+  soundOnComplete, setSoundOnComplete,
+  uiFontSize, setUiFontSize,
+  loadArchivedSessions: async () => {},
+  archivedSessions: ref([]),
+  connection: ref('connected'),
+  serverVersion: ref('2.1.0-demo'),
+  backend: ref('local(演示)'),
+  respondApproval: async () => {},
+} as unknown as KimiClient;

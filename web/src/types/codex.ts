@@ -68,6 +68,8 @@ export interface SidebarEmits {
   (e: 'set-filter', f: SessionFilter): void;
   (e: 'collapse'): void;
   (e: 'toggle-pin', id: string): void;
+  /** 点击搜索框(⌘K 的鼠标入口)→ 父级开搜索弹层 */
+  (e: 'search'): void;
 }
 
 export interface WorkspaceGroupProps {

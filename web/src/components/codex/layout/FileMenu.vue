@@ -68,7 +68,10 @@ function onDocContextMenu(e: MouseEvent) {
   close();
 }
 function onDocKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape') close();
+  if (e.key === 'Escape') {
+    e.stopPropagation(); // 防穿透:全局 escClose 在 window 相,别连带关底层浮层
+    close();
+  }
 }
 async function bindGlobalListeners() {
   if (listening) return;
