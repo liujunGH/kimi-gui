@@ -572,6 +572,7 @@ function openFM(e: MouseEvent, file: string) {
                 :key="sa.id"
                 :subagent="sa"
                 @inspect="openTranscript(sa.id)"
+                @cancel="toast(`已请求取消「${sa.name}」(演示)`)"
               />
             </div>
           </div>
@@ -608,6 +609,7 @@ function openFM(e: MouseEvent, file: string) {
         :completed="M.agentPanelCompleted"
         :open="agentPanelOpen"
         @inspect="openTranscript"
+        @cancel="(id: string) => toast(`已请求取消 ${id}(演示)`)"
         @close="agentPanelOpen = false"
       />
     </template>
@@ -672,7 +674,7 @@ function openFM(e: MouseEvent, file: string) {
   </AppShell>
 
   <!-- ================= 全局覆盖物 ================= -->
-  <SideTask v-bind="sideTaskProps">
+  <SideTask v-bind="sideTaskProps" @send="(t: string) => toast(`已发送:「${t}」(演示)`)">
     <AgentTranscript
       v-if="sideKind === 'agent-transcript' && sideSubId"
       :subagent-id="sideSubId"

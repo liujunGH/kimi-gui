@@ -388,6 +388,8 @@ export interface AgentPanelProps {
 
 export interface AgentPanelEmits {
   (e: 'inspect', id: string): void;
+  /** 行内 stop 按钮(仅 working 行显示)→ client.cancelTask(id) */
+  (e: 'cancel', id: string): void;
 }
 
 export interface SubagentCardProps {
@@ -396,6 +398,8 @@ export interface SubagentCardProps {
 
 export interface SubagentCardEmits {
   (e: 'inspect'): void;
+  /** 卡头 stop 按钮(仅 working 显示)→ client.cancelTask(subagent.id) */
+  (e: 'cancel'): void;
 }
 
 export interface AgentTranscriptProps {

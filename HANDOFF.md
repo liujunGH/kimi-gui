@@ -787,3 +787,47 @@ permission: 'manual' | 'auto' | 'yolo';
 ## 待用户操作
 
 把 HANDOFF.md(含轮次 4b)转给 ZCode:复核入库;quota 端点向上游/daemon 提需求;`7ff12aa` 的思考组件改动 kimi3 待复核。
+
+### 轮次 5 · kimi3 五件待办全闭环 · 2026-07-20
+
+ROADMAP 给 kimi3 的 5 项全部完成，vue-tsc 全绿，`verify5.mjs` 10 断言全绿，截图目检通过。
+
+**1. split/词级 diff**(`DiffLines.vue` + `diff.css`，重活派子 agent 做、我验收):
+- 词级高亮:相邻 del→add 连续块按序配对，先裁公共前/后缀(停在词中间回退到词边界，不切半个标识符),中段按词 LCS 对齐，变化词包 `.dl-word-add/.dl-word-del`(深于行底色，token 配色保持优先);单侧词数 >120 退化为整段标变防 LCS 病态开销
+- split 双栏视图:左旧右新各带行号，context 双侧相同、缺侧留空;`.dl-viewbar` 统一/分栏切换(组件内状态，不改数据);折叠状态两视图共享
+- `compact?: boolean` 新 prop:审批卡 mini diff 不渲染切换条;ApprovalCard 未传时由 `.body-diff .dl-viewbar { display:none }` CSS 兜底
+
+**2. SideTask 迷你 Composer 做活**(`SideTask.vue` + `CodexApp.vue`):
+- draft ref + v-model + Enter/按钮发送 → `emit('send', text)` + `running?: boolean` prop(running 禁用输入与发送)
+- CodexApp:`<SideTask :running="sideChatRunning" @send="onSideChatSend">`,**删掉轮次 4 遗留的原生 `<input class="side-chat-input">` 裸输入块**
+- DemoApp:`@send` 接 toast 占位
+
+**3. AgentPanel/SubagentCard 取消按钮**(契约 additive):
+- `SubagentCardEmits` + `(e:'cancel'): void`;`AgentPanelEmits` + `(e:'cancel', id: string): void`
+- SubagentCard 卡头、AgentPanel 进行中行行尾，各加 stop 按钮(仅 `status==='working'` 显示,`@click.stop` 不触发 inspect;面板行 hover 才显形)
+- CodexApp 新增 `onCancelTask(id) → client.cancelTask(id)` 接到 AgentPanel;DemoApp 两边接 toast
+- **顺带修的连带 bug**:`conversation.css` 里 `.ap-main/.ap-name/.ap-sum/.ap-time/.ap-bar/.ap-bar-fill/.ap-more` 是改名遗留死类(模板实为 `.aph-*`,无任何模板引用),已全部改为 `.aph-*`,AgentPanel 行布局此前实际无样式
+
+**4. ConversationPane 滚锚换 ResizeObserver**(`ConversationPane.vue`):
+- RO 同时观察内层 `.conversation`(流式文本/图片/思考块展开致高度变化)与滚动容器(窗口缩放),回调:贴底则 `scrollTop = scrollHeight`;比 watch(turns/blocks 数量)覆盖更全，修快速连续消息视口抖动
+- 窗口化渲染(PAGE=50)+ 哨兵自动 loadMore + 前插 scrollTop 补偿**全部保留**;`scrollcheck.mjs` 回归通过(52→102→152,scrollTop 20007)
+
+**5. 附件 chip 样式**(`composer.css` 追加):
+- `.att-strip/.att-chip/.att-thumb/.att-name/.att-status(.err)/.att-remove`,翻译自官方 `chat/AttachmentChip.vue` scoped 样式换 codex token
+- 纠正 ROADMAP 指引错误:官方样式**不在** `style.css`,在 `components/chat/AttachmentChip.vue` 与 `chat/Composer.vue` 的 scoped 块里
+
+**验证**:
+- `cd web && corepack pnpm exec vue-tsc --noEmit` 零错误
+- `.zcode/e2e/verify5.mjs`(新,10 断言):取消按钮数=working 卡数(2/2)、点取消弹 toast、AgentPanel 打开+行内按钮、SideTask ⌥⌘S 打开+Enter 发送+清空、unified 词级高亮(add=8 del=8)、split 12 行、审批卡无切换条、att-chip 胶囊圆角生效 —— 全绿
+- `scrollcheck.mjs` 回归通过
+- 截图目检:`/tmp/v5-{multi,agentpanel,sidetask,diff-unified,diff-split,approval,attach}.png`
+
+**git 状态**:`DiffLines.vue`、`SideTask.vue`、`SubagentCard.vue`、`AgentPanel.vue`、`ConversationPane.vue`、`CodexApp.vue`、`DemoApp.vue`、`types/codex.ts`、`styles/{conversation,composer,diff}.css`、`ROADMAP.md`、`.zcode/e2e/verify5.mjs`,**未提交**,等 ZCode 统一入库。
+
+**给 ZCode 的提醒**:
+1. 契约 `types/codex.ts` 本轮 additive 加了 3 条 emit(SubagentCard/AgentPanel 各一条 cancel;轮次 4d 的 pick-model 一条),client 侧无需改动,cancelTask 已存在
+2. ROADMAP kimi3 待办清单已清零,可进下一轮(spec 剩余项或打磨)
+
+## 待用户操作
+
+把 HANDOFF.md(含轮次 5)转给 ZCode:复核入库;轮次 5 五项全闭环。

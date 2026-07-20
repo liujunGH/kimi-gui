@@ -7,6 +7,7 @@
  * - dot:working→dot-running / completed→dot-done / suspended·queued→dot-waiting
  * - failed(契约里有、原型未展示):无变体 + dot-error(契约外补充,已报备)
  * 点击卡片 emit('inspect') → 父级钻取该 agent 的 transcript 分栏。
+ * working 卡卡头有 stop 按钮(@click.stop)→ emit('cancel') 取消子任务。
  * 结构对齐 prototype/multi-agent.html;样式类全部在 conversation.css。
  */
 import { computed } from 'vue';
@@ -15,6 +16,7 @@ import type {
   SubagentCardEmits,
   SubagentStatus,
 } from '../../../types/codex';
+import CodexIcon from '../layout/CodexIcon.vue';
 
 const props = defineProps<SubagentCardProps>();
 const emit = defineEmits<SubagentCardEmits>();
@@ -61,6 +63,14 @@ const pct = computed(() => {
         {{ props.subagent.progress.current }}/{{ props.subagent.progress.total }}
       </span>
       <span v-if="props.subagent.elapsed" class="sa-elapsed">· {{ props.subagent.elapsed }}</span>
+      <button
+        v-if="status === 'working'"
+        class="sa-cancel"
+        title="取消该子任务"
+        @click.stop="emit('cancel')"
+      >
+        <CodexIcon name="stop" size="sm" />
+      </button>
     </div>
     <div v-if="props.subagent.summary" class="sa-body">{{ props.subagent.summary }}</div>
     <div class="sa-bar"><div class="sa-bar-fill" :style="{ width: pct + '%' }"></div></div>

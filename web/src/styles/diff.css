@@ -42,6 +42,53 @@
 .dl-hunk { background: var(--bg-subtle); }
 .dl-hunk .dl-text { color: var(--accent); font-size: 11px; }
 
+/* 词级高亮:行内真正变化的片段用比行底色更深的底(套在 tk-* token 外层,
+   只加底色不改字色,token 配色保持优先) */
+.dl-word { border-radius: 3px; }
+.dl-word-add { background: rgba(26, 158, 84, 0.32); }
+.dl-word-del { background: rgba(214, 69, 69, 0.32); }
+[data-theme="dark"] .dl-word-add { background: rgba(63, 185, 112, 0.32); }
+[data-theme="dark"] .dl-word-del { background: rgba(229, 99, 106, 0.32); }
+
+/* 视图切换条(unified/split);审批卡 mini diff(.body-diff 内嵌)不显示 */
+.dl-viewbar {
+  display: flex; justify-content: flex-end; gap: 4px;
+  padding: 0 8px 6px; margin-bottom: 4px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.body-diff .dl-viewbar { display: none; }
+.dl-view-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 8px;
+  border: 1px solid transparent; border-radius: var(--r-sm);
+  background: none;
+  color: var(--text-3);
+  font-family: var(--font-ui); font-size: 11px;
+  cursor: pointer;
+}
+.dl-view-btn .ic { width: 13px; height: 13px; }
+.dl-view-btn:hover { background: var(--hover); color: var(--text-2); }
+.dl-view-btn.active { background: var(--accent-soft); border-color: var(--accent-bd); color: var(--accent); }
+
+/* split 双栏:左旧右新,各自行号列;格子软换行避免横向滚动 */
+.dl-split { display: grid; grid-template-columns: 42px minmax(0, 1fr) 42px minmax(0, 1fr); }
+.dl-split .dl-gutter { width: auto; padding-right: 8px; }
+.dl-cell { min-width: 0; }
+.dl-cell .dl-text { display: block; padding-right: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.dl-cell-add { background: var(--success-soft); box-shadow: inset 2px 0 0 var(--success); }
+.dl-cell-del { background: var(--danger-soft); box-shadow: inset 2px 0 0 var(--danger); }
+.dl-cell-empty { background: var(--bg-subtle); }
+.dl-gutter-add { background: var(--success-soft); }
+.dl-gutter-del { background: var(--danger-soft); }
+.dl-gutter-empty { background: var(--bg-subtle); }
+.dl-split-hunk {
+  grid-column: 1 / -1;
+  padding-left: 8px;
+  background: var(--bg-subtle);
+  color: var(--accent); font-size: 11px;
+  white-space: pre;
+}
+
 /* 折叠 hunk:点击展开(行用 data-hunk 配对) */
 .dl-hidden { display: none; }
 .dl-collapsed {

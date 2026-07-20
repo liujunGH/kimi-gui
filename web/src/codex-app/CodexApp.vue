@@ -350,6 +350,11 @@ function openTranscript(id: string) {
   ui.openSideTask('agent-transcript', id);
 }
 
+/** AgentPanel/SubagentCard 行内 stop → 取消子任务 */
+function onCancelTask(id: string) {
+  void client.cancelTask(id);
+}
+
 // ---------------------------------------------------------------- 事件处理
 
 function onSend(text: string, mode: ComposerMode, attachments?: PromptAttachment[]) {
@@ -825,7 +830,7 @@ async function searchFiles(q: string) {
     </div>
 
     <!-- 侧边任务(分栏) -->
-    <SideTask v-bind="sideTaskProps">
+    <SideTask v-bind="sideTaskProps" :running="sideChatRunning" @send="onSideChatSend">
       <!-- agent-transcript 模式:子 agent 详情 -->
       <div v-if="sideSubTask" class="msg-assistant">
         <div class="a-content">
@@ -855,15 +860,6 @@ async function searchFiles(q: string) {
             <p style="color: var(--text-3)">侧边对话:在这里问问题,不影响主线程。</p>
           </div>
         </div>
-        <!-- 迷你输入 -->
-        <div class="side-chat-input">
-          <input
-            type="text"
-            placeholder="给侧边对话发消息…"
-            @keydown.enter="(e) => { const t = (e.target as HTMLInputElement).value; if (t.trim()) { onSideChatSend(t); (e.target as HTMLInputElement).value = ''; } }"
-            :disabled="sideChatRunning"
-          />
-        </div>
       </template>
     </SideTask>
 
@@ -873,6 +869,7 @@ async function searchFiles(q: string) {
       :completed="completedSubagents"
       :open="agentPanelOpen"
       @inspect="openTranscript"
+      @cancel="onCancelTask"
       @close="agentPanelOpen = false"
     />
 

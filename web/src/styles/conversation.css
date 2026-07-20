@@ -132,6 +132,13 @@
 .sa-head { display: flex; align-items: center; gap: 8px; }
 .sa-name { font-family: var(--font-mono); font-size: var(--text-sm); font-weight: 600; }
 .sa-status { margin-left: auto; font-size: var(--text-sm); color: var(--text-2); white-space: nowrap; }
+/* 取消按钮:仅 working 卡渲染(SubagentCard),点击 @click.stop 不触发卡片 inspect */
+.sa-cancel {
+  flex: none; display: grid; place-items: center;
+  width: 20px; height: 20px; border-radius: var(--r-md);
+  color: var(--text-3);
+}
+.sa-cancel:hover { background: var(--hover); color: var(--danger); }
 .sa-progress { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
 .sa-body { margin-top: 6px; font-size: var(--text-sm); line-height: 1.55; color: var(--text-2); }
 .sa-bar { margin-top: 10px; height: 3px; border-radius: var(--r-full); background: var(--bg-soft); overflow: hidden; }
@@ -184,17 +191,26 @@
 .aph-icon.v1 { background: var(--accent-soft); color: var(--accent); }
 .aph-icon.v2 { background: var(--success-soft); color: var(--success); }
 .aph-icon.v3 { background: var(--warning-soft); color: var(--warning); }
-.ap-main { flex: 1; min-width: 0; }
-.ap-name { display: flex; align-items: center; gap: 7px; font-size: var(--text-md); font-weight: 550; }
-.ap-sum { margin-top: 2px; font-size: var(--text-sm); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ap-time { flex: none; font-size: 11px; color: var(--text-3); }
-.ap-bar { margin-top: 7px; height: 3px; border-radius: var(--r-full); background: var(--bg-soft); overflow: hidden; }
-.ap-bar-fill { height: 100%; border-radius: inherit; background: var(--accent); }
-.ap-more {
+.aph-main { flex: 1; min-width: 0; }
+.aph-name { display: flex; align-items: center; gap: 7px; font-size: var(--text-md); font-weight: 550; }
+.aph-sum { margin-top: 2px; font-size: var(--text-sm); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aph-time { flex: none; font-size: 11px; color: var(--text-3); }
+.aph-bar { margin-top: 7px; height: 3px; border-radius: var(--r-full); background: var(--bg-soft); overflow: hidden; }
+.aph-bar-fill { height: 100%; border-radius: inherit; background: var(--accent); }
+/* 行内取消按钮:仅 working 行渲染,hover 行才显形,点击 @click.stop 不触发 inspect */
+.aph-cancel {
+  flex: none; align-self: center; display: grid; place-items: center;
+  width: 22px; height: 22px; border-radius: var(--r-md);
+  color: var(--text-3); opacity: 0;
+  transition: opacity var(--dur-2);
+}
+.aph-row:hover .aph-cancel { opacity: 1; }
+.aph-cancel:hover { background: var(--bg-soft); color: var(--danger); }
+.aph-more {
   display: block; width: 100%;
   margin-top: 6px; padding: 8px;
   border-radius: var(--r-md);
   text-align: center;
   font-size: var(--text-sm); color: var(--accent);
 }
-.ap-more:hover { background: var(--accent-soft); }
+.aph-more:hover { background: var(--accent-soft); }

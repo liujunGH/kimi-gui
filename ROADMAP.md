@@ -34,40 +34,22 @@ quota(PTY抓取) / context用量 / resolveImage /
 - diff/ReviewPane 数据流（diffMapper）
 - @文件树（fs:search）
 - editQueued
+- split/词级 diff（DiffLines：词边界裁剪 + 词 LCS + 双栏视图）
+- SideTask 迷你 Composer（v-model + send + running）
+- AgentPanel/SubagentCard 取消按钮（→ client.cancelTask）
+- ConversationPane ResizeObserver 滚锚
+- 附件 chip 样式（composer.css）
 
 ## kimi3 待办清单（2026-07-20 最终版）
 
 > ZCode 已把所有能做的 client API 全部接通（39 项）。
-> 以下是纯组件行为/UI 改动，需要 kimi3 在 `web/src/components/codex/` 下改：
-
-### P1（影响体验）
-
-1. **split diff / 词级 diff**（`DiffLines.vue`）
-   - 当前只支持 unified diff（单栏 +/- 行）
-   - 需要：加 split 模式（左右并排 old/new），按文件类型做词级 diff
-   - spec 编号：F6/F7（P2，但用户高频看 diff）
-   - 参考：GitHub PR diff 的 split view
-
-2. **SideTask 迷你 Composer 视觉统一**（`SideTask` slot 内容 / `CodexApp.vue`）
-   - 当前用原生 `<input>` 元素，跟 codex Composer 风格不一致
-   - 需要：做一个 codex 风格的迷你 Composer 组件（圆角 + toolbar + 发送按钮）
-   - 数据已接通（`onSideChatSend` → `client.sendSideChatPrompt`），只需换 UI
-
-3. **AgentPanel 取消任务按钮**（`AgentPanel.vue` / `SubagentCard.vue`）
-   - 子 agent 卡住时没有停止按钮
-   - ZCode 已声明 `onCancelTask(taskId)` 函数（调 `client.cancelTask`），但没接 UI
-   - 需要：SubagentCard 加一个 stop 按钮（仅 running 状态显示）→ emit cancel → CodexApp 调 onCancelTask
-
-### P2（锦上添花）
-
-4. **ConversationPane 滚动锚定细节**（`ConversationPane.vue`）
-   - 新消息追加时 `maybeFollow` 的 nextTick 时机偶尔不准（快速连续消息时视口抖动）
-   - 需要：用 `ResizeObserver` 或 `MutationObserver` 替代 watch turns.length
-
-5. **附件 chip 样式**（`Composer.vue`）
-   - ZCode 加的 `att-strip` / `att-chip` 只有基本结构，没写 CSS
-   - 需要：在 `composer.css` 加 `.att-strip` / `.att-chip` / `.att-thumb` / `.att-remove` 样式
-   - 参考官方 Composer 的 `.att-strip`（在 `web/src/style.css` 里）
+> ~~原 5 项纯组件待办~~ **全部完成（轮次 5，2026-07-20）**：
+>
+> 1. ✅ **split diff / 词级 diff**（`DiffLines.vue`）— 词边界公共前后缀裁剪 + 中段词 LCS；unified/split 双视图；审批卡 mini diff 自动隐藏切换条
+> 2. ✅ **SideTask 迷你 Composer**（`SideTask.vue` / `CodexApp.vue`）— codex 风格 Composer，v-model + Enter 发送 + running 禁用
+> 3. ✅ **AgentPanel 取消任务按钮**（`AgentPanel.vue` / `SubagentCard.vue`）— 仅 working 显示 stop → emit cancel → `client.cancelTask`
+> 4. ✅ **ConversationPane 滚动锚定**（`ConversationPane.vue`）— ResizeObserver 观察内容/视口尺寸，贴底自动跟随
+> 5. ✅ **附件 chip 样式**（`composer.css`）— 翻译自官方 `chat/AttachmentChip.vue` scoped（官方样式不在 style.css，在其组件里）
 
 ### 已完成（不需要 kimi3 做）
 

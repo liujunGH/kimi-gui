@@ -305,3 +305,32 @@
 /* 通用小图标容器(弹层/菜单项,与 sidebar 的 menu-item 配合) */
 .mi-ic { width: 16px; height: 16px; flex: none; display: grid; place-items: center; color: var(--text-2); }
 .mi-ic .ic { width: 14px; height: 14px; }
+
+/* ---------- 附件 chips(翻译自官方 chat/AttachmentChip.vue scoped,换 codex token) ---------- */
+.att-strip { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0 6px; }
+.att-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  max-width: 220px;
+  padding: 4px 9px 4px 5px;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-full);
+  font-size: var(--text-sm);
+  transition: border-color var(--dur-1);
+}
+.att-chip:hover { border-color: var(--border); }
+.att-chip.uploading { opacity: 0.72; }
+.att-chip.error { border-color: var(--danger-bd); }
+.att-thumb { width: 20px; height: 20px; flex: none; border-radius: 50%; object-fit: cover; display: block; }
+.att-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.att-status { flex: none; font-size: 11px; color: var(--text-3); }
+.att-status.err { color: var(--danger); }
+.att-remove {
+  flex: none; display: grid; place-items: center;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  color: var(--text-3);
+  transition: background var(--dur-1), color var(--dur-1);
+}
+.att-remove:hover { background: var(--hover); color: var(--text); }
+.att-remove .ic { width: 11px; height: 11px; }

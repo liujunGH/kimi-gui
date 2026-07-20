@@ -5,23 +5,36 @@
  * 行为(组件内,kimi3 域):
  * - open 状态:useUIState().sideTaskOpen;× 关闭调 ui.closeSideTask()
  * - 分栏让位:open 时给 .app-main 加 .side-open class(watch + onUnmounted 清理)
- * - 迷你 Composer 纯展示(placeholder 跟随 title);⌥⌘S 开合在 DemoApp 层注册
+ * - 迷你 Composer 可用(轮次 5):v-model + Enter/按钮发送 → emit('send', text);
+ *   running 时禁用;⌥⌘S 开合在 DemoApp 层注册
  *
  * 内容(slot)两种形态由 useUIState().sideTaskKind 区分:
  * 'thread'(侧边线程) | 'agent-transcript'(子 agent 钻取),由父组件组装。
  */
-import { computed, onUnmounted, watch } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 import type { SideTaskProps } from '../../../types/codex';
 import CodexIcon from './CodexIcon.vue';
 import { useUIState } from '../../../composables/codex/useUIState';
 
-const props = defineProps<SideTaskProps>();
+const props = withDefaults(defineProps<SideTaskProps & { running?: boolean }>(), {
+  running: false,
+});
+const emit = defineEmits<{ (e: 'send', text: string): void }>();
 
 const ui = useUIState();
 const shown = computed(() => ui.sideTaskOpen.value);
 
 const dotClass = computed(() => `dot-${props.thread.dot}`);
 const pillClass = computed(() => `pill-${props.status.kind}`);
+
+/** 迷你 Composer 输入(轮次 5:从装饰改成可用) */
+const draft = ref('');
+function send() {
+  const text = draft.value.trim();
+  if (!text || props.running) return;
+  emit('send', text);
+  draft.value = '';
+}
 
 /** 真分栏让位:open 时主区 .app-main 加 .side-open(padding-right 让出分栏宽) */
 function appMain(): HTMLElement | null {
@@ -62,7 +75,13 @@ onUnmounted(() => {
     <div class="st-composer">
       <div class="composer">
         <div class="composer-input">
-          <textarea rows="1" :placeholder="`给「${props.title}」发消息…`"></textarea>
+          <textarea
+            v-model="draft"
+            rows="1"
+            :placeholder="`给「${props.title}」发消息…`"
+            :disabled="props.running"
+            @keydown.enter.prevent="send"
+          ></textarea>
         </div>
         <div class="composer-toolbar">
           <div class="toolbar-group">
@@ -71,7 +90,7 @@ onUnmounted(() => {
             </button>
           </div>
           <div class="toolbar-group right">
-            <button class="composer-send" title="发送">
+            <button class="composer-send" title="发送" :disabled="!draft.trim() || props.running" @click="send">
               <CodexIcon name="arrow-up" />
             </button>
           </div>

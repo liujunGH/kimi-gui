@@ -32,6 +32,7 @@ const emit = defineEmits<ConversationPaneEmits & {
 
 const PAGE = 50;
 const scrollEl = ref<HTMLElement | null>(null);
+const contentEl = ref<HTMLElement | null>(null);
 const sentinelEl = ref<HTMLElement | null>(null);
 const nearBottom = ref(true);
 const visibleCount = ref(PAGE);
@@ -126,6 +127,13 @@ watch(
 
 // 顶部哨兵:进入视口自动加载更早
 let observer: IntersectionObserver | null = null;
+// 滚锚 ResizeObserver(轮次 5):内容高度变化(流式文本/图片/思考块展开)或
+// 视口尺寸变化时,用户贴底则直接跟到底;比 watch(turns/blocks 数量)覆盖更全
+let resizeObserver: ResizeObserver | null = null;
+function followBottom() {
+  const el = scrollEl.value;
+  if (el && nearBottom.value) el.scrollTop = el.scrollHeight;
+}
 onMounted(() => {
   maybeFollow();
   if (sentinelEl.value && typeof IntersectionObserver !== 'undefined') {
@@ -137,8 +145,16 @@ onMounted(() => {
     );
     observer.observe(sentinelEl.value);
   }
+  if (typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(followBottom);
+    if (contentEl.value) resizeObserver.observe(contentEl.value);
+    if (scrollEl.value) resizeObserver.observe(scrollEl.value);
+  }
 });
-onUnmounted(() => observer?.disconnect());
+onUnmounted(() => {
+  observer?.disconnect();
+  resizeObserver?.disconnect();
+});
 
 // 保持 emit 声明被使用(契约):取消当前轮由 Composer stop 触发,这里转发给外部备用
 void emit;
@@ -146,7 +162,7 @@ void emit;
 
 <template>
   <div ref="scrollEl" class="app-conversation" @scroll="onScroll">
-    <div class="conversation">
+    <div ref="contentEl" class="conversation">
       <!-- 更早加载哨兵/按钮 -->
       <div v-if="canLoadMore" ref="sentinelEl" class="load-earlier">
         <button class="load-earlier-btn" @click="loadMore">

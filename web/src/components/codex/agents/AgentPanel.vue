@@ -10,6 +10,7 @@
  * 行为翻译自 prototype/mock/shared.js bindAgentPanel/apRow:
  * - 行 = 字母图标(v1=进行中组 / v2·v3=完成组交替)+ 状态点 + 名 + summary(尾拼进度)+ 进度条
  * - 完成组默认 10 条,「再显示 10 个」递增;行点击 emit('inspect', id) 钻取 transcript
+ * - working 行行尾有 stop 按钮(hover 显形,@click.stop)→ emit('cancel', id) 取消子任务
  *
  * 契约缺口(已报备):Subagent 无耗时/完成时间字段,原型行的 .ap-time 暂不渲染。
  */
@@ -89,6 +90,14 @@ onUnmounted(() => document.removeEventListener('keydown', onDocKeydown));
             <span class="aph-bar-fill" :style="{ width: pctOf(a) + '%' }"></span>
           </span>
         </span>
+        <button
+          v-if="a.status === 'working'"
+          class="aph-cancel"
+          title="取消该子任务"
+          @click.stop="emit('cancel', a.id)"
+        >
+          <CodexIcon name="stop" size="sm" />
+        </button>
       </div>
 
       <div class="aph-label">完成 · {{ props.completed.length }}</div>
