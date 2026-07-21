@@ -13,14 +13,14 @@
   border-right: 1px solid var(--border-soft);
 }
 
-/* ---------- 品牌区 ---------- */
+/* ---------- 品牌区(左移 76px 预留 macOS 交通灯 close/min/zoom 区域) ---------- */
 .sidebar-brand {
   flex: none;
   height: var(--toolbar-h);
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 10px 0 14px;
+  padding: 0 10px 0 76px;
 }
 .brand-logo {
   width: 22px; height: 22px; flex: none;
@@ -175,9 +175,9 @@
 .footer-link:hover { background: var(--hover); color: var(--text); }
 .footer-link.active { background: var(--active); color: var(--text); }
 
-/* ---------- 折叠态:唯一浮动展开按钮(修复旧版双元素重叠) ---------- */
+/* ---------- 折叠态:唯一浮动展开按钮(修复旧版双元素重叠;避开交通灯) ---------- */
 .sidebar-expand-btn {
-  position: fixed; top: 11px; left: 12px; z-index: 200;
+  position: fixed; top: 11px; left: 76px; z-index: 200;
   display: none;
   width: 30px; height: 30px;
   place-items: center;
@@ -203,3 +203,81 @@
 .sf-chip.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-bd); }
 .thread-row.filtered-out, .workspace-group.filtered-out { display: none; }
 .pin-group .ws-name { color: var(--accent); }
+
+/* ---------- 账号区(OAuth 登录整合,侧栏底部) ---------- */
+.acct-wrap { position: relative; }
+.acct-backdrop { position: fixed; inset: 0; z-index: 60; }
+.acct-row {
+  width: 100%;
+  display: flex; align-items: center; gap: 9px;
+  height: 34px; padding: 0 9px;
+  border-radius: var(--r-md);
+  font-size: var(--text-md);
+  color: var(--text-2);
+  transition: background var(--dur-1), color var(--dur-1);
+}
+.acct-row:hover { background: var(--hover); color: var(--text); }
+.acct-avatar {
+  width: 22px; height: 22px; flex: none;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px; font-weight: 700;
+}
+.acct-avatar.out { background: var(--bg-soft); color: var(--text-3); }
+.acct-avatar .ic { width: 13px; height: 13px; }
+.acct-name { flex: 1; min-width: 0; text-align: left; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.acct-caret { display: grid; color: var(--text-3); }
+.acct-menu {
+  position: absolute; left: 8px; right: 8px; bottom: calc(100% + 4px); z-index: 70;
+  display: flex; flex-direction: column;
+  padding: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-md);
+  animation: fade-up var(--dur-2) var(--ease);
+}
+
+/* 筛选零匹配空态 */
+.sf-empty { padding: 14px 10px; font-size: var(--text-sm); color: var(--text-3); text-align: center; }
+
+/* ---------- 新建任务:主按钮 + 工作区选择 caret 分体 ---------- */
+.new-task-split { display: flex; gap: 6px; align-items: stretch; }
+.new-task-split .new-task { flex: 1; }
+.new-task-split .workspace-picker { flex: none; display: flex; }
+.wp-caret-btn {
+  width: 30px; height: 32px; flex: none;
+  display: grid; place-items: center;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-2);
+  transition: border-color var(--dur-1), color var(--dur-1);
+}
+.wp-caret-btn:hover { border-color: var(--accent-bd); color: var(--accent); }
+
+/* ---------- 「工作区」标题行 + 添加按钮 ---------- */
+.ws-list-head {
+  flex: none;
+  display: flex; align-items: center;
+  height: 24px;
+  padding: 0 12px 0 16px;
+}
+.ws-list-label {
+  flex: 1;
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
+}
+.ws-add {
+  width: 22px; height: 22px;
+  display: grid; place-items: center;
+  border-radius: var(--r-sm);
+  color: var(--text-3);
+  transition: background var(--dur-1), color var(--dur-1);
+}
+.ws-add:hover { background: var(--hover); color: var(--text); }
+.ws-add .ic { width: 13px; height: 13px; }

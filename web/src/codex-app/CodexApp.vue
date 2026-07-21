@@ -6,7 +6,7 @@
  * 把轮次 2 的组件全部挂上真 client 数据:
  * - DetailPane(⌘I)/ SideTask(⌥⌘S)/ ThreadMenu / AgentPanel(子智能体)/ SettingsPage(覆盖层)
  * - 审批卡随 turn.approval 在对话流内联渲染(approve/reject 走 client.respondApproval)
- * - 新建任务 = WorkspacePicker(openWorkspace 切换工作区)
+ * - 新建任务 = 一键草稿态 + 聚焦;工作区选择 = 侧栏组名点选,「工作区」标题行 + 添加(原生文件夹选择)
  * - Composer 数据:skills(真)/ builtin(i18n)/ queue(真)/ context(真 usage)
  *
  * 数据边界:组件零 mock;context quota、文件树、diff/review 数据流等轮次 4(ZCode)。
@@ -45,7 +45,6 @@ import QueuePanel from '../components/codex/composer/QueuePanel.vue';
 import DetailPane from '../components/codex/detail/DetailPane.vue';
 import SideTask from '../components/codex/layout/SideTask.vue';
 import ThreadMenu from '../components/codex/layout/ThreadMenu.vue';
-import WorkspacePicker from '../components/codex/layout/WorkspacePicker.vue';
 import Toast, { useToast } from '../components/codex/layout/Toast.vue';
 import PromptDialog from '../components/codex/layout/PromptDialog.vue';
 import AgentPanel from '../components/codex/agents/AgentPanel.vue';
@@ -89,8 +88,23 @@ const showServerAuth = computed(
   () => !client.dangerousBypassAuth.value && authRequired.value,
 );
 
+// 双击标题栏放大/还原(macOS Overlay 标题栏样式下没有原生行为,手动实现):
+// 模板级 @dblclick 绑定在 .app-toolbar / .sidebar-brand,非交互元素时才触发
+const { toggleWindowZoom } = useTauriDaemon();
+function onTitlebarDblClick(e: MouseEvent) {
+  const t = e.target as HTMLElement | null;
+  if (
+    t?.closest(
+      'button, a, input, textarea, select, [role="button"], .toolbar-thinking-toggle, .thread-menu, .ws-menu, .wp-pop, .model-pop',
+    )
+  )
+    return;
+  void toggleWindowZoom();
+}
+
 // 3. 侧栏 + Composer 状态
-const filter = ref<SessionFilter>('all');
+const filter = ref<SessionFilter>((localStorage.getItem('kimi-ui.session-filter') as SessionFilter) || 'all');
+watch(filter, (f) => localStorage.setItem('kimi-ui.session-filter', f));
 // 置顶持久化(localStorage;无 daemon 端点,纯客户端偏好)
 const PIN_KEY = 'codex.pinned-sessions';
 const pinnedIds = ref<string[]>((() => {
@@ -485,9 +499,26 @@ function onSend(text: string, mode: ComposerMode, attachments?: PromptAttachment
 function onSelectSession(id: string) {
   void client.selectSession(id);
 }
-function onPickWorkspace(id: string) {
-  client.openWorkspace(id);
-  toast('已切换到工作区(原型路径,新会话从首条消息开始)');
+/** 新建任务:一键进当前工作区的草稿态(首条消息自动开新会话),并聚焦输入框 */
+function onNewTask() {
+  settingsOpen.value = false; // 设置页开着时先回主界面
+  client.clearActiveSession();
+  composerRef.value?.focus?.();
+}
+/** 点工作区组名 = 切换活跃工作区(对齐 kimi web:列表即选择器) */
+function onSelectWorkspace(name: string) {
+  const ws = (client.workspacesView.value ?? []).find((w) => w.name === name);
+  if (ws) client.openWorkspace(ws.id);
+}
+/** 「工作区」标题行 + → 原生文件夹选择 → 添加 */
+async function onAddWorkspace() {
+  try {
+    const { open: openDialog } = await import('@tauri-apps/plugin-dialog');
+    const picked = await openDialog({ directory: true, multiple: false, title: '选择工作区文件夹' });
+    if (typeof picked === 'string' && picked) void client.addWorkspaceByPath(picked);
+  } catch {
+    toast('当前环境不支持文件夹选择');
+  }
 }
 function onComposerMode(m: ComposerMode) {
   composerMode.value = m;
@@ -868,17 +899,18 @@ async function searchFiles(q: string) {
           :pinned-ids="pinnedIds"
           @collapse="toggleCollapsed"
           @select-session="onSelectSession"
-          @new-task="() => {}"
+          @new-task="onNewTask"
           @set-filter="(f: SessionFilter) => (filter = f)"
           @toggle-pin="togglePin"
           @search="openSearch"
           @open-settings="settingsOpen = false"
-          @select-workspace="() => {}"
+          @select-workspace="onSelectWorkspace"
+          @add-workspace="onAddWorkspace"
           @rename-workspace="onRenameWorkspace"
           @delete-workspace="onDeleteWorkspace"
         />
       </template>
-      <header class="app-toolbar">
+      <header class="app-toolbar" @dblclick="onTitlebarDblClick">
         <button class="btn" @click="settingsOpen = false">
           <CodexIcon name="chevron-right" style="transform: rotate(180deg)" />
           返回
@@ -901,28 +933,28 @@ async function searchFiles(q: string) {
         :pinned-ids="pinnedIds"
         @collapse="toggleCollapsed"
         @select-session="onSelectSession"
-        @new-task="() => {}"
+        @new-task="onNewTask"
         @set-filter="(f: SessionFilter) => (filter = f)"
         @toggle-pin="togglePin"
         @open-settings="settingsSection = 'general'; settingsOpen = true"
-        @select-workspace="() => {}"
+        @select-workspace="onSelectWorkspace"
+        @add-workspace="onAddWorkspace"
         @set-workspace-sort="(m: any) => client.setWorkspaceSortMode(m)"
         @rename-workspace="onRenameWorkspace"
         @delete-workspace="onDeleteWorkspace"
       >
         <template #new-task>
-          <WorkspacePicker
-            :workspaces="client.workspacesView.value ?? []"
-            :current-id="client.activeWorkspaceId.value ?? ''"
-            @select="onPickWorkspace"
-            @add-workspace="(path: string) => void client.addWorkspaceByPath(path)"
-          />
+          <button class="new-task" @click="onNewTask">
+            <CodexIcon name="plus" />
+            新建任务
+          </button>
         </template>
       </Sidebar>
     </template>
 
     <!-- toolbar -->
-    <header class="app-toolbar">
+    <header class="app-toolbar" @dblclick="onTitlebarDblClick">
+      <!-- toolbar -->
       <span class="toolbar-title">{{ activeSession?.title || sidebarCurrentWs || 'Kimi Code' }}</span>
       <ThreadMenu
         @pin="togglePin(client.activeSessionId.value)"
@@ -994,7 +1026,10 @@ async function searchFiles(q: string) {
       <p class="es-title">
         {{ client.activeSessionId.value ? '开始你的第一句话' : '选择左侧会话,或在下方输入开始新对话' }}
       </p>
-      <p class="es-sub">⌘K 命令面板 · / 斜杠命令 · @ 引用文件</p>
+      <p class="es-sub">
+        <template v-if="sidebarCurrentWs">当前工作区「{{ sidebarCurrentWs }}」 · 输入框左下角可切换 · </template>
+        <template v-else>先在输入框左下角选择工作区 · </template>⌘K 命令面板 · / 斜杠命令 · @ 引用文件
+      </p>
     </div>
 
     <!-- Inspect 右栏 -->
@@ -1085,6 +1120,8 @@ async function searchFiles(q: string) {
           :upload-image="(file: Blob, name?: string) => client.uploadImage(file, name)"
           :session-title="activeSession?.title ?? sidebarCurrentWs"
           :session-id="client.activeSessionId.value ?? ''"
+          :workspaces="client.workspacesView.value ?? []"
+          :current-workspace-id="client.activeWorkspaceId.value ?? ''"
           @send="onSend"
           @set-mode="onComposerMode"
           @cancel="() => client.abortCurrentPrompt()"
@@ -1098,6 +1135,8 @@ async function searchFiles(q: string) {
           @set-effort="onSetEffort"
           @pick-model="showModelPicker = true"
           @command="handleCommand"
+          @select-workspace="(id: string) => client.openWorkspace(id)"
+          @add-workspace="(path: string) => void client.addWorkspaceByPath(path)"
         />
       </div>
     </div>

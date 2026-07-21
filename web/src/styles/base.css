@@ -57,7 +57,7 @@ a { color: inherit; text-decoration: none; }
   border-bottom: 1px solid var(--border-soft);
   transition: padding var(--dur-3) var(--ease);
 }
-.app.sidebar-collapsed .app-toolbar { padding-left: 56px; }
+.app.sidebar-collapsed .app-toolbar { padding-left: 118px; }
 .toolbar-title {
   font-size: var(--text-lg);
   font-weight: 600;
@@ -404,3 +404,60 @@ a { color: inherit; text-decoration: none; }
 .empty-state .ic { width: 28px; height: 28px; opacity: 0.5; }
 .es-title { font-size: var(--text-lg); color: var(--text-2); }
 .es-sub { font-size: var(--text-sm); }
+
+/* ---------- 登录设备码弹窗 ---------- */
+.login-overlay {
+  position: fixed; inset: 0; z-index: 500;
+  display: none;
+  place-items: center;
+  background: rgba(15, 18, 22, 0.36);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+.login-overlay.open { display: grid; animation: fade-up var(--dur-2) var(--ease); }
+.login-card {
+  width: 340px;
+  padding: 28px 26px 20px;
+  border-radius: 16px;
+  background: var(--bg);
+  box-shadow: var(--shadow-lg);
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center;
+}
+.login-logo {
+  width: 44px; height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #4a9fff 0%, #1783ff 55%, #0a5fd7 100%);
+  color: #fff;
+  font-size: 22px; font-weight: 700;
+  display: grid; place-items: center;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 2px 6px rgba(10, 95, 215, 0.35);
+}
+.login-title { margin-top: 14px; font-size: var(--text-xl); font-weight: 650; }
+.login-desc { margin-top: 6px; font-size: var(--text-sm); color: var(--text-3); line-height: 1.6; }
+.login-code {
+  margin-top: 14px;
+  padding: 8px 16px;
+  border-radius: var(--r-md);
+  background: var(--bg-soft);
+  font-family: var(--font-mono);
+  font-size: 18px; font-weight: 600;
+  letter-spacing: 0.12em;
+}
+.login-btn {
+  margin-top: 18px;
+  width: 100%; height: 36px;
+  border-radius: var(--r-md);
+  background: var(--accent);
+  color: #fff;
+  font-size: var(--text-md); font-weight: 600;
+}
+.login-btn:hover { background: var(--accent-hover); }
+.login-cancel {
+  margin-top: 6px;
+  width: 100%; height: 32px;
+  border-radius: var(--r-md);
+  font-size: var(--text-md);
+  color: var(--text-2);
+}
+.login-cancel:hover { background: var(--hover); }

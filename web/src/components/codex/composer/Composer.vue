@@ -33,6 +33,7 @@ import { useToast } from '../layout/Toast.vue';
 import ComposerModes from './ComposerModes.vue';
 import PermPicker from './PermPicker.vue';
 import ModePicker from './ModePicker.vue';
+import WorkspacePicker from '../layout/WorkspacePicker.vue';
 import ContextMeter from './ContextMeter.vue';
 import ModelPicker from './ModelPicker.vue';
 import SlashMenu from './SlashMenu.vue';
@@ -122,7 +123,7 @@ const placeholder = computed(() => {
   if (props.placeholder) return props.placeholder;
   if (props.running && props.mode === 'steer') return '输入将立即插话到当前运行的轮次…';
   if (props.running) return '输入会排队 · 当前轮结束后自动发送下一条';
-  return '给 Kimi 下达任务,⌘+Enter 发送';
+  return '给 Kimi 下达任务,Enter 发送';
 });
 
 /** ContextMeter 展示用的模型名:优先 models 里的 displayName,否则剥掉 provider 前缀 */
@@ -132,6 +133,12 @@ const displayModelName = computed(() => {
   return props.currentModel.includes('/')
     ? (props.currentModel.split('/').pop() ?? props.currentModel)
     : props.currentModel;
+});
+
+/** 当前工作区名(静态展示用:有会话时不可切换,草稿态才可点选) */
+const currentWsName = computed(() => {
+  if (!props.currentWorkspaceId) return '';
+  return props.workspaces?.find((w) => w.id === props.currentWorkspaceId)?.name ?? props.currentWorkspaceId;
 });
 
 const canSend = computed(() => text.value.trim().length > 0 || attachments.value.some((a) => a.fileId && !a.uploading && !a.error));
@@ -154,6 +161,13 @@ function onKeydown(e: KeyboardEvent) {
   if (e.isComposing || e.keyCode === 229) return;
 
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+    e.preventDefault();
+    submit();
+    return;
+  }
+
+  // Enter 直接发送(Shift+Enter 换行;补全菜单开着时 Enter 归菜单)
+  if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !assistVisible.value) {
     e.preventDefault();
     submit();
     return;
@@ -297,12 +311,17 @@ function clearAttachments() {
   attachments.value = [];
 }
 
+/** 聚焦输入框(新建任务后调用) */
+function focus() {
+  textareaRef.value?.focus();
+}
+
 onMounted(() => {
   // 挂载时若有恢复出来的草稿,先拟合一次高度(autosize 平时由 text watcher 驱动)
   if (text.value) void nextTick(autosize);
 });
 
-defineExpose({ setText });
+defineExpose({ setText, focus });
 </script>
 
 <template>
@@ -375,6 +394,22 @@ defineExpose({ setText });
         <button v-if="props.uploadImage" class="attach-btn" title="添加图片附件" @click="pickFile">
           <CodexIcon name="paperclip" />
         </button>
+        <WorkspacePicker
+          v-if="props.workspaces && props.workspaces.length && !props.sessionId"
+          trigger="pill"
+          :workspaces="props.workspaces as any"
+          :current-id="props.currentWorkspaceId ?? ''"
+          @select="(id: string) => emit('select-workspace', id)"
+          @add-workspace="(p: string) => emit('add-workspace', p)"
+        />
+        <span
+          v-else-if="props.workspaces && props.workspaces.length && props.sessionId && currentWsName"
+          class="perm-pill ws-static"
+          title="工作区在会话创建后固定,不可切换"
+        >
+          <CodexIcon name="file" />
+          <span class="ellipsis wp-pill-name">{{ currentWsName }}</span>
+        </span>
         <PermPicker :permission="props.permission" @set-permission="(p) => emit('set-permission', p)" />
         <ModePicker :modes="props.modes" @toggle-mode="(m) => emit('toggle-mode', m)" />
       </div>

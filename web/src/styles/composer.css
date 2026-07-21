@@ -334,3 +334,7 @@
 }
 .att-remove:hover { background: var(--hover); color: var(--text); }
 .att-remove .ic { width: 11px; height: 11px; }
+
+/* 工作区静态标签(会话中不可切换):pill 形态但不可点 */
+.perm-pill.ws-static { cursor: default; }
+.perm-pill.ws-static:hover { background: transparent; color: var(--text-2); }

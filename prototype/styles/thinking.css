@@ -103,3 +103,17 @@
 }
 .toolbar-thinking-toggle.on .tt-switch { background: var(--accent); }
 .toolbar-thinking-toggle.on .tt-switch::after { transform: translateX(11px); }
+
+/* 流式跟随暂停时的「↓ 最新」回跳按钮(用户上滚后出现) */
+.think-scroll-pill {
+  position: absolute;
+  right: 12px; bottom: 12px; z-index: 5;
+  padding: 3px 10px;
+  border-radius: var(--r-full);
+  background: var(--accent);
+  color: #fff;
+  font-size: 11.5px; font-weight: 600;
+  box-shadow: var(--shadow-md);
+  animation: fade-up var(--dur-2) var(--ease);
+}
+.think-scroll-pill:hover { background: var(--accent-hover); }

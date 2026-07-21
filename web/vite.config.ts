@@ -30,6 +30,46 @@ let backendProxyOpts: { target?: unknown } | null = null;
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8')) as {
   version: string;
 };
+/** 应用版本号:单一事实来源是 src-tauri/tauri.conf.json 的 version(打包同名)。 */
+const appVersion = (
+  JSON.parse(
+    readFileSync(new URL('../src-tauri/tauri.conf.json', import.meta.url), 'utf-8'),
+  ) as { version: string }
+).version;
+
+/**
+ * kimi-gui 改:MPA 下会话深链的 fallback 目标修正(修"reload 回到 kimi web")。
+ *
+ * 背景:vite 默认 appType 'spa',history fallback 会把 `/sessions/<id>` 这类
+ * 无扩展名路径 rewrite 到 /index.html(**官方 UI**)。Tauri dev 里点进会话后
+ * URL 变成 /sessions/<id>,右键 Reload 就加载了官方页,看起来"我们的页面没了"。
+ * kimi-gui 的产品页是 /app.html,所以在 vite 内部 fallback 之前,把无扩展名的
+ * 导航路径统一 rewrite 到 /app.html。
+ * 取舍:官方 index.html 的深链在 dev 下也会回到 app.html(官方页仅作 fork 参考)。
+ */
+function appHtmlFallbackPlugin(): Plugin {
+  const PASSTHROUGH = ['/api/', '/v1', '/@', '/node_modules/', '/src/', '/__kimi-dev/', '/assets/'];
+  const PAGES = ['/app.html', '/index.html', '/codex.html'];
+  const rewrite = (req: IncomingMessage, _res: ServerResponse, next: () => void): void => {
+    if (req.method !== 'GET') return next();
+    const url = (req.url || '').split('?')[0];
+    if (PAGES.includes(url)) return next();
+    if (PASSTHROUGH.some((p) => url.startsWith(p))) return next();
+    const last = url.split('/').pop() || '';
+    if (last.includes('.')) return next(); // 静态资源(有扩展名)不动
+    req.url = '/app.html'; // 无扩展名的导航路径(含 /sessions/<id> 和 /)→ 产品页
+    return next();
+  };
+  return {
+    name: 'kimi-app-html-fallback',
+    configureServer(server) {
+      server.middlewares.use(rewrite);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(rewrite);
+    },
+  };
+}
 
 /**
  * Dev-only backend switcher. Two endpoints let the web UI read and move the
@@ -123,6 +163,7 @@ export default defineConfig({
   plugins: [
     vue(),
     backendSwitcherPlugin(),
+    appHtmlFallbackPlugin(),
     Icons({
       compiler: 'vue3',
       // Local Kimi Design System icons (24×24 outlined, fill="currentColor"),
@@ -142,6 +183,8 @@ export default defineConfig({
     // Named backend presets for the Sidebar switcher menu (dev only).
     __KIMI_DEV_BACKENDS__: JSON.stringify(backendPresets),
     __KIMI_WEB_VERSION__: JSON.stringify(pkg.version),
+    /** 应用版本(= tauri.conf.json version),关于页/状态栏展示用 */
+    __APP_VERSION__: JSON.stringify(appVersion),
     // True only for the web bundle embedded in the Kimi Desktop app (set by the
     // desktop-build workflow). Gates an "internal testing build" banner. When
     // false (default) the banner is tree-shaken out of the production bundle.

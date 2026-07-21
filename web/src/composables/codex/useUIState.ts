@@ -30,7 +30,7 @@ const sideTaskSubagentId = ref<string | null>(null);
  * - false:新出现的思考块默认折叠
  * 不影响已手动 toggle 过的思考块(ThinkingBlock 内部 open ref 独立)。
  */
-const globalThinking = ref(true);
+const globalThinking = ref(localStorage.getItem('kimi-ui.global-thinking') !== 'off');
 
 /** 覆盖物 z 顺序:Review pane 最高 > Detail pane > AgentPanel > SideTask(分栏,非覆盖)。 */
 const overlayStack = ref<('review' | 'detail' | 'agent')[]>([]);
@@ -112,9 +112,10 @@ export function useUIState() {
       pushOverlay('agent');
     },
     closeAgentPanel: closeAgentPanelImpl,
-    /** 全局思考默认展开 toggle:只影响新出现的思考块,不影响已手动 toggle 的。 */
+    /** 全局思考默认展开 toggle:只影响新出现的思考块,不影响已手动 toggle 的。持久化(localStorage)。 */
     toggleGlobalThinking() {
       globalThinking.value = !globalThinking.value;
+      localStorage.setItem('kimi-ui.global-thinking', globalThinking.value ? 'on' : 'off');
     },
 
     /**

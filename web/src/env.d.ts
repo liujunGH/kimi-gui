@@ -14,6 +14,8 @@ declare const __KIMI_DEV_BACKENDS__: { default: string; multi: string };
 
 // Injected by Vite `define` from apps/kimi-web/package.json.
 declare const __KIMI_WEB_VERSION__: string;
+/** 应用版本(= src-tauri/tauri.conf.json 的 version,构建期注入) */
+declare const __APP_VERSION__: string;
 
 // Injected by Vite `define`: true only in the web bundle embedded in the Kimi
 // Desktop app. Gates the internal-build banner (see InternalBuildBanner.vue).

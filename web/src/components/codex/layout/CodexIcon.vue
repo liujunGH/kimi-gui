@@ -69,6 +69,8 @@ const ICONS: Record<string, IconDef> = {
   paperclip: { body: '<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>' },
   'git-branch': { body: '<circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="8" r="2.5"/><path d="M6 8.5v7"/><path d="M18 10.5c0 4-4 4-6.5 5.5"/>' },
   spinner: { body: '<path d="M12 3a9 9 0 1 0 9 9"/>', sw: 2.4 },
+  user: { body: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/>' },
+  'chevron-up': { body: '<path d="M18 15l-6-6-6 6"/>' },
 };
 
 const props = withDefaults(defineProps<{ name: string; size?: 'sm' | 'md' | 'lg' }>(), {

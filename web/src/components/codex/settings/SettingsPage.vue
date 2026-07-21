@@ -88,17 +88,24 @@ function setFontSize(px: number) {
 
 /* ---------- 归档 ---------- */
 const archivedSessions = ref<any[]>([]);
+/** 应用版本(构建期注入,单一来源 tauri.conf.json) */
+const appVersion = __APP_VERSION__;
 const archivedLoading = ref(false);
 async function loadArchive() {
   archivedLoading.value = true;
   try {
-    await client.loadArchivedSessions();
-    archivedSessions.value = (client as any).archivedSessions?.value ?? [];
+    const res: any = await client.loadArchivedSessions();
+    archivedSessions.value = res?.items ?? res ?? [];
   } catch {
     /* ignore */
   } finally {
     archivedLoading.value = false;
   }
+}
+/** 恢复归档会话(返回成功则移出列表) */
+async function onRestore(id: string) {
+  const ok = await client.restoreSession(id);
+  if (ok) archivedSessions.value = archivedSessions.value.filter((s: any) => s.id !== id);
 }
 onMounted(() => void loadArchive());
 
@@ -367,8 +374,10 @@ onMounted(() => void loadArchive());
                   <div class="ai-name">{{ s.title || s.id }}</div>
                   <div class="ai-meta">归档于 {{ s.archivedAt?.slice(0, 10) ?? '未知' }}</div>
                 </div>
+                <button class="ai-restore" @click="onRestore(s.id)">恢复</button>
               </div>
             </div>
+            <div v-else-if="!archivedLoading" class="archive-empty">暂无归档对话</div>
           </section>
 
           <!-- 关于 -->
@@ -376,7 +385,7 @@ onMounted(() => void loadArchive());
             <h2>关于</h2>
             <div class="setting-row">
               <div class="setting-info"><div class="setting-label">版本</div></div>
-              <div class="setting-control"><span>0.1.0</span></div>
+              <div class="setting-control"><span>Kimi Code v{{ appVersion }}</span></div>
             </div>
             <div class="setting-row">
               <div class="setting-info"><div class="setting-label">Daemon</div></div>

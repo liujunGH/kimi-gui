@@ -1038,12 +1038,238 @@
             (f === "waiting" && $(".dot-waiting", row));
           row.classList.toggle("filtered-out", !show);
         });
+        var visibleGroups = 0;
         $all(".workspace-group", list).forEach(function (g) {
           var anyVisible = $all(".thread-row", g).some(function (r) { return !r.classList.contains("filtered-out"); });
           g.classList.toggle("filtered-out", !anyVisible);
+          if (anyVisible) visibleGroups++;
         });
+        /* 零匹配空态:筛选的是会话,项目无匹配会话时不展示;一个都没有就给提示 */
+        var empty = $(".sf-empty", list);
+        if (visibleGroups === 0 && f !== "all") {
+          if (!empty) {
+            empty = document.createElement("div");
+            empty.className = "sf-empty";
+            empty.textContent = "没有符合筛选的会话";
+            list.appendChild(empty);
+          }
+        } else if (empty) {
+          empty.parentNode.removeChild(empty);
+        }
       });
     });
+  }
+
+  /* ---------- Composer 发送(Enter 发送 / Shift+Enter 换行 / ⌘+Enter 同效) ---------- */
+  var SVG_GRIP = '<svg class="ic" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="18" r="1.4"/></svg>';
+  var SVG_TURN = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 6 6v2"/></svg>';
+  var SVG_PENCIL_SM = '<svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>';
+  var SVG_TRASH_SM = '<svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
+
+  function appendUserBubble(text) {
+    var conv = $(".conversation");
+    if (!conv) return;
+    var msg = document.createElement("div");
+    msg.className = "msg-user";
+    var bubble = document.createElement("div");
+    bubble.className = "u-bubble";
+    bubble.textContent = text;
+    var meta = document.createElement("div");
+    meta.className = "u-meta";
+    meta.textContent = "刚刚";
+    msg.appendChild(bubble);
+    msg.appendChild(meta);
+    conv.appendChild(msg);
+    var sc = $(".app-conversation");
+    if (sc) sc.scrollTop = sc.scrollHeight;
+  }
+  function appendQueueRow(dock, text) {
+    var panel = $(".queue-panel", dock);
+    if (!panel) return;
+    var row = document.createElement("div");
+    row.className = "qp-row";
+    row.innerHTML =
+      '<span class="qp-grip">' + SVG_GRIP + '</span>' +
+      '<span class="qp-num">' + ($all(".qp-row", panel).length + 1) + "</span>" +
+      '<span class="qp-text"></span>' +
+      '<span class="qp-actions">' +
+        '<button class="qp-steer" data-action="qp-steer" title="转为引导:立即插话到当前轮">' + SVG_TURN + '引导</button>' +
+        '<button class="icon-btn" data-action="qp-edit" title="编辑">' + SVG_PENCIL_SM + '</button>' +
+        '<button class="icon-btn" data-action="qp-del" title="删除">' + SVG_TRASH_SM + '</button>' +
+      "</span>";
+    $(".qp-text", row).textContent = text;
+    panel.appendChild(row);
+    var ind = $(".queue-indicator", dock);
+    if (ind) ind.style.display = "";
+    syncQueueCount(dock);
+  }
+  function bindComposerSend() {
+    var composer = $(".composer");
+    var ta = composer ? $("textarea", composer) : null;
+    if (!composer || !ta) return;
+    function send() {
+      /* 补全菜单开着时,Enter 归菜单 */
+      if ($(".assist-pop.open")) return;
+      var text = ta.value.trim();
+      if (!text) return;
+      var dock = composer.closest(".dock-inner") || document;
+      if (composer.classList.contains("is-running")) {
+        if (composer.classList.contains("mode-steer-on")) {
+          /* 插话:反馈气泡 + 思考块打引导标记(复用队列引导链路) */
+          showSteerFeedback(dock);
+          markSteerInThinking(text);
+        } else {
+          /* 排队:进队列面板 + 计数联动 */
+          appendQueueRow(dock, text);
+        }
+      } else {
+        appendUserBubble(text);
+      }
+      ta.value = "";
+      ta.focus();
+    }
+    ta.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter" || e.shiftKey || e.isComposing) return;
+      e.preventDefault();
+      send();
+    });
+    var sendBtn = $(".composer-send", composer);
+    if (sendBtn && !sendBtn.classList.contains("stop")) {
+      sendBtn.addEventListener("click", send);
+    }
+  }
+
+  /* ---------- 账号 / 登录整合(侧栏底部账号行 + 登录弹窗) ---------- */
+  var AUTH_KEY = "proto-auth";
+  var SVG_PERSON = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></svg>';
+  var SVG_CARET = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 15l4-4 4 4"/></svg>';
+  function authState() {
+    try { return localStorage.getItem(AUTH_KEY) === "out" ? "out" : "in"; } catch (e) { return "in"; }
+  }
+  function setAuth(s) {
+    try { localStorage.setItem(AUTH_KEY, s); } catch (e) { /* ignore */ }
+    renderAccount();
+  }
+  function renderAccount() {
+    var row = $(".acct-row");
+    if (!row) return;
+    if (authState() === "in") {
+      row.innerHTML = '<span class="acct-avatar">J</span><span class="acct-name">jun</span><span class="acct-caret">' + SVG_CARET + "</span>";
+    } else {
+      row.innerHTML = '<span class="acct-avatar out">' + SVG_PERSON + '</span><span class="acct-name">未登录</span><span class="acct-caret">' + SVG_CARET + "</span>";
+    }
+  }
+  function closeLoginModal() {
+    var ov = $(".login-overlay");
+    if (ov) ov.classList.remove("open");
+  }
+  function openLoginModal() {
+    var ov = $(".login-overlay");
+    if (!ov) {
+      ov = document.createElement("div");
+      ov.className = "login-overlay";
+      ov.innerHTML =
+        '<div class="login-card">' +
+          '<span class="login-logo">K</span>' +
+          '<div class="login-title">登录 Kimi Code</div>' +
+          '<div class="login-desc">将跳转到浏览器完成授权<br>授权成功后自动返回应用</div>' +
+          '<button class="login-btn">使用 Kimi 账号登录</button>' +
+          '<button class="login-cancel">取消</button>' +
+        "</div>";
+      document.body.appendChild(ov);
+      $(".login-btn", ov).addEventListener("click", function () {
+        toast("已打开浏览器授权(原型)");
+        setTimeout(function () {
+          closeLoginModal();
+          setAuth("in");
+          toast("登录成功,欢迎回来,jun");
+        }, 1200);
+      });
+      $(".login-cancel", ov).addEventListener("click", closeLoginModal);
+      ov.addEventListener("click", function (e) { if (e.target === ov) closeLoginModal(); });
+    }
+    ov.classList.add("open");
+  }
+  function bindAccount() {
+    var footer = $(".sidebar-footer");
+    if (!footer) return;
+    var row = document.createElement("button");
+    row.className = "acct-row";
+    footer.insertBefore(row, footer.firstChild);
+    renderAccount();
+
+    var menu = document.createElement("div");
+    menu.className = "acct-menu";
+    footer.appendChild(menu);
+
+    row.addEventListener("click", function (e) {
+      e.stopPropagation();
+      if (authState() === "out") { openLoginModal(); return; }
+      menu.innerHTML =
+        '<div class="acct-head">jun@moonshot.cn</div>' +
+        '<button class="menu-item" data-acct="settings"><span class="mi-label">账号设置</span></button>' +
+        '<button class="menu-item" data-acct="switch"><span class="mi-label">切换账号</span></button>' +
+        '<div class="menu-sep"></div>' +
+        '<button class="menu-item" data-acct="logout"><span class="mi-label">退出登录</span></button>';
+      menu.classList.toggle("open");
+    });
+    menu.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var item = e.target.closest ? e.target.closest("[data-acct]") : null;
+      if (!item) return;
+      menu.classList.remove("open");
+      var act = item.getAttribute("data-acct");
+      if (act === "logout") { setAuth("out"); toast("已退出登录"); }
+      else if (act === "switch") openLoginModal();
+      else toast("账号设置(原型)");
+    });
+    document.addEventListener("click", function () { menu.classList.remove("open"); });
+  }
+
+  /* ---------- 流式思考:自动跟随最新 + 用户上滚暂停 + 「↓ 最新」回跳 ----------
+     原型用定时器 mock 流式;真实产品由 thinking.delta 驱动,滚锚行为不变 */
+  var STREAM_POOL = [
+    "继续读 handleSend 的分支处理,确认 queue 与 steer 的边界…",
+    "检查双模状态放组件本地 ref 是否影响既有快照…",
+    "对照 Codex 队列指示器的展开态与计数口径…",
+    "确认 placeholder 与模式切换的联动顺序…",
+    "定位 thinking.css 的限高规则与滚动锚点…",
+    "梳理本轮改动涉及的样式文件与 token 依赖…",
+    "准备写分段控件激活态的样式与动效…"
+  ];
+  function bindThinkingStream() {
+    var body = $(".think.thinking .think-body");
+    if (!body) return;
+    var contents = $all(".think-content", body);
+    var content = contents[contents.length - 1];
+    if (!content) return;
+    var follow = true;
+    var pill = null;
+    body.addEventListener("scroll", function () {
+      follow = body.scrollTop + body.clientHeight >= body.scrollHeight - 24;
+      if (follow && pill) { pill.parentNode.removeChild(pill); pill = null; }
+    });
+    function showPill() {
+      if (pill) return;
+      pill = document.createElement("button");
+      pill.className = "think-scroll-pill";
+      pill.textContent = "↓ 最新";
+      pill.addEventListener("click", function (e) {
+        e.stopPropagation();
+        body.scrollTop = body.scrollHeight;
+        follow = true;
+        pill.parentNode.removeChild(pill);
+        pill = null;
+      });
+      body.parentNode.appendChild(pill);
+    }
+    var i = 0;
+    var timer = setInterval(function () {
+      if (i >= STREAM_POOL.length) { clearInterval(timer); return; }
+      content.appendChild(document.createTextNode(" " + STREAM_POOL[i++]));
+      if (follow) body.scrollTop = body.scrollHeight;
+      else showPill();
+    }, 450);
   }
 
   /* ---------- 审批单键 y/a/n/p(作用于页面全部审批卡) ---------- */
@@ -1188,6 +1414,7 @@
       if (e.key === "Escape") {
         closeMenus();
         closeAllPops();
+        closeLoginModal();
         toggleReview(false);
         toggleDetail(false);
         toggleSideTask(false);
@@ -1226,9 +1453,12 @@
     bindPermPicker();
     bindModePicker();
     bindComposerAssist();
+    bindComposerSend();
+    bindThinkingStream();
     bindQueueActions();
     bindThreadChrome();
     bindSidebarFilter();
+    bindAccount();
     bindAgentPanel();
     bindFileContextMenu();
     bindApprovalKeys();
@@ -1270,6 +1500,8 @@
     } else if (popParam === "mode") {
       var mP = $(".mode-pill");
       if (mP) mP.click();
+    } else if (popParam === "login") {
+      openLoginModal();
     } else if (popParam === "filemenu") {
       var di = $(".diff-inline");
       if (di && openFileMenu) {
@@ -1278,6 +1510,13 @@
       }
     } else if (popParam === "side") {
       toggleSideTask(true);
+    }
+    /* ?filter=running|waiting 直接应用侧栏筛选(演示/截图用) */
+    var filterParam = null;
+    try { filterParam = new URLSearchParams(location.search).get("filter"); } catch (e) { /* noop */ }
+    if (filterParam) {
+      var chip = $('.sf-chip[data-filter="' + filterParam + '"]');
+      if (chip) chip.click();
     }
   });
 })();

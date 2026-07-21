@@ -10,9 +10,11 @@
 import { ref } from 'vue';
 import CodexIcon from './layout/CodexIcon.vue';
 
-const collapsed = ref(false);
+const COLLAPSED_KEY = 'kimi-ui.sidebar-collapsed';
+const collapsed = ref(localStorage.getItem(COLLAPSED_KEY) === '1');
 function toggleCollapsed() {
   collapsed.value = !collapsed.value;
+  localStorage.setItem(COLLAPSED_KEY, collapsed.value ? '1' : '0');
 }
 </script>
 

@@ -13,7 +13,16 @@ import CodexIcon from '../layout/CodexIcon.vue';
 import WorkspaceGroup from './WorkspaceGroup.vue';
 import ThreadRow from './ThreadRow.vue';
 import StatusFilter from './StatusFilter.vue';
+import AccountRow from './AccountRow.vue';
 import { sessionToThreadStatus } from './threadStatus';
+import { useTauriDaemon } from '../../../composables/codex/useTauriDaemon';
+
+const { toggleWindowZoom } = useTauriDaemon();
+/** 品牌区双击放大/还原窗口(折叠按钮不算) */
+function onBrandDblclick(e: MouseEvent) {
+  if ((e.target as HTMLElement | null)?.closest('button')) return;
+  void toggleWindowZoom();
+}
 
 const props = defineProps<SidebarProps & { pinnedIds?: string[] }>();
 const emit = defineEmits<SidebarEmits & {
@@ -45,6 +54,14 @@ const pinnedSessions = computed(() =>
   filteredSessions.value.filter((s) => props.pinnedIds?.includes(s.id)),
 );
 
+/** 筛选态下没有匹配会话的项目不展示(会话级筛选);all 态保留空项目 */
+const visibleWorkspaces = computed(() => {
+  if (props.filter === 'all') return props.workspaces;
+  return props.workspaces.filter((ws) => sessionsOf(ws.name).length > 0);
+});
+/** 筛选零匹配空态 */
+const showFilterEmpty = computed(() => props.filter !== 'all' && filteredSessions.value.length === 0);
+
 /** 失败/待输入优先(C9):稳定分区排序,不打乱组内原有顺序 */
 function rankOf(s: Session): number {
   const st = sessionToThreadStatus(s);
@@ -63,7 +80,7 @@ function sessionsOf(wsName: string): Session[] {
 
 <template>
   <aside class="app-sidebar">
-    <div class="sidebar-brand">
+    <div class="sidebar-brand" @dblclick="onBrandDblclick">
       <span class="brand-logo">K</span>
       <span class="brand-name">Kimi Code</span>
       <button class="icon-btn brand-collapse" title="折叠侧栏" @click="emit('collapse')">
@@ -90,6 +107,13 @@ function sessionsOf(wsName: string): Session[] {
 
     <StatusFilter :filter="props.filter" @set-filter="(f) => emit('set-filter', f)" />
 
+    <div class="ws-list-head">
+      <span class="ws-list-label">工作区</span>
+      <button class="ws-add" title="添加工作区" @click="emit('add-workspace')">
+        <CodexIcon name="plus" />
+      </button>
+    </div>
+
     <div class="sidebar-list">
       <!-- 置顶组 -->
       <section v-if="pinnedSessions.length" class="workspace-group pin-group">
@@ -111,7 +135,7 @@ function sessionsOf(wsName: string): Session[] {
       </section>
 
       <WorkspaceGroup
-        v-for="ws in props.workspaces"
+        v-for="ws in visibleWorkspaces"
         :key="(ws as unknown as { id?: string }).id ?? ws.name"
         :workspace="ws"
         :sessions="sessionsOf(ws.name)"
@@ -126,9 +150,11 @@ function sessionsOf(wsName: string): Session[] {
         @rename-workspace="emit('rename-workspace', ws.name)"
         @delete-workspace="emit('delete-workspace', ws.name)"
       />
+      <div v-if="showFilterEmpty" class="sf-empty">没有符合筛选的会话</div>
     </div>
 
     <div class="sidebar-footer">
+      <AccountRow />
       <a class="footer-link" href="#" @click.prevent="emit('open-settings')">
         <CodexIcon name="settings" />
         设置

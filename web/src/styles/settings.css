@@ -116,3 +116,5 @@ select.control:focus { border-color: var(--accent-bd); box-shadow: 0 0 0 3px var
   text-align: center;
 }
 .ap-footer:hover { background: var(--accent-soft); }
+
+.archive-empty { padding: 18px 10px; font-size: var(--text-sm); color: var(--text-3); text-align: center; }

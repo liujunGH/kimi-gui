@@ -166,6 +166,72 @@
 }
 .rp-file:hover { background: var(--hover); }
 .rp-file.active { background: var(--accent-soft); border-color: var(--accent-bd); color: var(--accent); }
+/* ReviewPane:搜索过滤行(旧 .rp-files chip 行仍被 DiffView 复用,不动) */
+.rp-filter {
+  flex: none;
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.rp-filter > .ic { flex: none; width: 14px; height: 14px; color: var(--text-3); }
+.rp-filter .icon-btn { width: 24px; height: 24px; flex: none; }
+.rp-query {
+  flex: 1; min-width: 0;
+  height: 26px; padding: 0 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  font-size: var(--text-sm);
+  outline: none;
+  transition: border-color var(--dur-1);
+}
+.rp-query:focus { border-color: var(--accent-bd); }
+.rp-query::placeholder { color: var(--text-3); }
+/* ReviewPane:目录树(组可折叠;树区限高滚动,给 diff 区留空间) */
+.rp-tree {
+  flex: none;
+  max-height: 42%;
+  overflow-y: auto;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.rp-row,
+.rp-dir {
+  display: flex; align-items: center; gap: 7px;
+  width: 100%;
+  padding: 3px 8px;
+  border-radius: var(--r-md);
+  font-family: var(--font-mono); font-size: 11.5px;
+  color: var(--text-2);
+  text-align: left;
+  transition: background var(--dur-1), color var(--dur-1);
+}
+.rp-row:hover,
+.rp-dir:hover { background: var(--hover); }
+.rp-row.active { background: var(--accent-soft); color: var(--accent); }
+.rp-dir { font-weight: 600; color: var(--text); }
+.rd-chevron {
+  width: 14px; height: 14px; flex: none;
+  display: grid; place-items: center;
+  color: var(--text-3);
+}
+.rd-chevron .ic { width: 12px; height: 12px; transition: transform var(--dur-2) var(--ease); }
+.rd-chevron.open .ic { transform: rotate(90deg); }
+.rd-name,
+.rf-name {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rd-count {
+  flex: none;
+  padding: 0 6px;
+  border-radius: var(--r-full);
+  background: var(--bg-soft);
+  font-size: 10.5px; font-weight: 500;
+  color: var(--text-3);
+}
+.rp-children { padding-left: 15px; }
+.rp-empty { padding: 8px 10px; font-size: var(--text-sm); color: var(--text-3); }
 .rf-status {
   width: 15px; height: 15px;
   display: grid; place-items: center;

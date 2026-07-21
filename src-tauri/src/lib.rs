@@ -26,14 +26,33 @@ fn daemon_info(state: State<'_, SharedDaemon>) -> Result<Launch, String> {
         .ok_or_else(|| "daemon 未连接(可能仍在启动中,稍后重试)".to_string())
 }
 
+/// 双击自定义标题栏(顶栏/侧栏品牌区):放大/还原窗口。
+/// titleBarStyle=Overlay 下没有原生标题栏,双击 zoom 由前端 dblclick 手动触发。
+#[tauri::command]
+fn toggle_window_zoom(window: tauri::Window) {
+    if window.is_maximized().unwrap_or(false) {
+        let _ = window.unmaximize();
+    } else {
+        let _ = window.maximize();
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        // 原生文件/文件夹选择对话框(新建任务 → 添加工作区)
+        .plugin(tauri_plugin_dialog::init())
         // 全局快捷键 plugin(builder 构造,内部已注册 Cmd+Option+N)
         .plugin(shortcut::build_global_shortcut_plugin())
         .manage(SharedDaemon(Mutex::new(None)))
+        .invoke_handler(tauri::generate_handler![
+            daemon_info,
+            toggle_window_zoom,
+            dock_badge::set_dock_badge,
+            usage::plan_usage
+        ])
         .setup(|app| {
             let app_handle = app.handle().clone();
 

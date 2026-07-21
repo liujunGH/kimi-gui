@@ -10,7 +10,7 @@
  *   不受 .open 控制，导致流式中点折叠无效）
  * - 流式开始时：如果 globalShow=true 自动展开；globalShow=false 不抢展开
  */
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import type { ThinkingBlockProps, ThinkingBlockEmits } from '../../../types/codex';
 import CodexIcon from '../layout/CodexIcon.vue';
 
@@ -36,6 +36,41 @@ function toggle() {
   open.value = !open.value;
   emit('toggle');
 }
+
+// ---------- 流式跟随(滚锚):新思考内容自动滚到最新,用户上滚则暂停 ----------
+const bodyRef = ref<HTMLElement | null>(null);
+const follow = ref(true);
+const showJump = ref(false);
+
+function onBodyScroll() {
+  const el = bodyRef.value;
+  if (!el) return;
+  follow.value = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+  if (follow.value) showJump.value = false;
+}
+
+watch(
+  () => props.text,
+  () => {
+    const el = bodyRef.value;
+    if (!el) return;
+    if (follow.value) {
+      nextTick(() => {
+        el.scrollTop = el.scrollHeight;
+      });
+    } else {
+      showJump.value = true;
+    }
+  },
+);
+
+function jumpToLatest() {
+  const el = bodyRef.value;
+  if (!el) return;
+  el.scrollTop = el.scrollHeight;
+  follow.value = true;
+  showJump.value = false;
+}
 </script>
 
 <template>
@@ -46,7 +81,7 @@ function toggle() {
       <span class="think-teaser">{{ teaser }}</span>
       <span v-if="props.duration" class="think-time">{{ props.duration }}</span>
     </button>
-    <div class="think-body">
+    <div ref="bodyRef" class="think-body" @scroll.passive="onBodyScroll">
       <div v-if="props.steerMark" class="think-user-steer">
         <span class="steer-icon"><CodexIcon name="flag" /></span>
         <span class="steer-label">用户引导</span>
@@ -54,6 +89,7 @@ function toggle() {
       </div>
       <div v-for="(seg, i) in segments" :key="i" class="think-content">{{ seg }}</div>
     </div>
+    <button v-if="showJump" type="button" class="think-scroll-pill" @click.stop="jumpToLatest">↓ 最新</button>
   </div>
 </template>
 

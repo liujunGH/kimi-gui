@@ -33,7 +33,7 @@ python3 -m http.server 5180
 | 决策点 | 方案 |
 |-------|------|
 | 主布局 | Codex 两栏(左 Project+Threads / 右对话流+Composer) |
-| 思考展示 | 内联折叠 + 顶栏全局开关 + 流式中自动展开;全局关 = 全部折叠(含流式) |
+| 思考展示 | 内联折叠 + 顶栏全局开关 + 流式中自动展开;全局关 = 全部折叠(含流式);**流式自动跟随最新,用户上滚暂停跟随 +「↓ 最新」回跳** |
 | 审批 | 内联卡不替换 Composer + 单键 y(批准)/a(本会话)/n(拒绝)/p(反馈) |
 | steer/queue | Composer 双模分段控件(插话=warning 黄/排队=中性)+ steer 后反馈气泡 |
 | 归档 | 不进侧栏,在设置里管理(与 Kimi/Codex 一致) |
@@ -49,7 +49,9 @@ python3 -m http.server 5180
 | 文件提及 `@` | 同一补全组件换数据源:打 `@` 模糊搜文件,选中插入 |
 | 权限三档 | perm-pill 弹层:逐条确认 / 自动通过(琥珀)/ 完全自主(红),对齐官方语义 |
 | 模式开关 | Composer 模式 pill:计划 / Swarm / 目标开关行,激活模式显示在 pill 标签上 |
-| 侧栏 | 状态过滤 chips(全部/运行中/待审批)+ 置顶当前线程(任务菜单或 ⌥⌘P) |
+| 侧栏 | 状态过滤 chips(全部/运行中/待审批,零匹配项目自动隐藏 + 空态提示)+ 置顶当前线程(任务菜单或 ⌥⌘P);品牌区左移 76px 预留 macOS 交通灯 |
+| 发送 | Composer `Enter` 发送(`Shift+Enter` 换行;⌘+Enter 同效):空闲态追加气泡,运行态按模式进队列/转插话 |
+| 账号 | 侧栏底部账号行(jun):账号菜单(设置/切换/退出)+ 未登录态 + 登录弹窗(浏览器授权流程模拟) |
 
 ## 数据来源与 mock 标注(勿在 Vue 落地时写死)
 
@@ -67,7 +69,7 @@ python3 -m http.server 5180
 
 ## 演示用 URL 参数
 
-`?theme=dark|light` 指定主题;`?pop=model|queue|side|menu|ctx|agents|transcript|filemenu|slash|at|perm|mode` 页面加载后直接展开对应浮层。
+`?theme=dark|light` 指定主题;`?pop=model|queue|side|menu|ctx|agents|transcript|filemenu|slash|at|perm|mode|login` 页面加载后直接展开对应浮层;`?filter=running|waiting` 页面加载后应用侧栏筛选。
 
 ## 反馈方式
 
