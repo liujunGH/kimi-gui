@@ -12,6 +12,10 @@ on:
         description: '版本号(如 0.2.1,不带 v 前缀)'
         required: true
 
+# GITHUB_TOKEN 需要写权限才能创建 Release 和上传资产
+permissions:
+  contents: write
+
 jobs:
   release:
     runs-on: macos-14 # Apple Silicon(arm64);Intel 需另开 universal job
