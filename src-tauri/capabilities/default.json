@@ -8,6 +8,8 @@
     "opener:default",
     "notification:default",
     "dialog:default",
+    "updater:default",
+    "process:default",
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister"
   ]

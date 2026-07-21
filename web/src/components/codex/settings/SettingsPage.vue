@@ -10,6 +10,8 @@ import type { PermissionMode } from '../../../types';
 import CodexIcon from '../layout/CodexIcon.vue';
 import { useTheme } from '../../../composables/codex/useTheme';
 import { useKimiClient } from '../../../composables/codex/useKimiClient';
+import { useUpdater } from '../../../composables/codex/useUpdater';
+import { useToast } from '../layout/Toast.vue';
 
 type SectionId = 'general' | 'appearance' | 'permissions' | 'shortcuts' | 'archive' | 'about';
 
@@ -90,6 +92,16 @@ function setFontSize(px: number) {
 const archivedSessions = ref<any[]>([]);
 /** 应用版本(构建期注入,单一来源 tauri.conf.json) */
 const appVersion = __APP_VERSION__;
+
+/* ---------- 检查更新 ---------- */
+const { checking, error: updateError, checkForUpdate } = useUpdater();
+const { toast } = useToast();
+async function onCheckUpdate() {
+  const found = await checkForUpdate(false);
+  if (found) return; // available 有值,UpdateDialog 自动弹出
+  if (updateError.value) toast(`检查失败:${updateError.value}`);
+  else toast('已是最新版本');
+}
 const archivedLoading = ref(false);
 async function loadArchive() {
   archivedLoading.value = true;
@@ -386,6 +398,17 @@ onMounted(() => void loadArchive());
             <div class="setting-row">
               <div class="setting-info"><div class="setting-label">版本</div></div>
               <div class="setting-control"><span>Kimi Code v{{ appVersion }}</span></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">更新</div>
+                <div class="setting-desc">有新版本时查看功能描述并下载安装</div>
+              </div>
+              <div class="setting-control">
+                <button class="btn" :disabled="checking" @click="onCheckUpdate">
+                  {{ checking ? '检查中…' : '检查更新' }}
+                </button>
+              </div>
             </div>
             <div class="setting-row">
               <div class="setting-info"><div class="setting-label">Daemon</div></div>

@@ -1,0 +1,72 @@
+name: 发行构建
+
+# 触发方式:
+#   1. 打 tag 推送:git tag v0.2.1 && git push origin v0.2.1
+#   2. 手动:Actions → 发行构建 → Run workflow(填版本号)
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号(如 0.2.1,不带 v 前缀)'
+        required: true
+
+jobs:
+  release:
+    runs-on: macos-14 # Apple Silicon(arm64);Intel 需另开 universal job
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: 安装 Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust 构建缓存
+        uses: Swatinem/rust-cache@v2
+
+      - name: 安装前端依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 从 tag/输入取版本号并写回 tauri.conf.json
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            V="${{ inputs.version }}"
+          else
+            V="${GITHUB_REF#refs/tags/v}"
+          fi
+          echo "VERSION=$V" >> "$GITHUB_ENV"
+          node -e "const fs=require('fs');const p='src-tauri/tauri.conf.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.version='$V';fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n');"
+
+      - name: 从 CHANGELOG 提取本版本说明(用于 Release 正文)
+        id: notes
+        run: |
+          awk '/^## \[${{ env.VERSION }}\]/{flag=1;next}/^## \[/{flag=0}flag' CHANGELOG.md > release-notes.md || true
+          if [ ! -s release-notes.md ]; then
+            echo "本版本构建(Apple Silicon,arm64)。完整变更见仓库 CHANGELOG.md。" > release-notes.md
+          fi
+
+      - name: 构建并发布 GitHub Release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 自动更新签名密钥(secrets 里配置,私钥不要进仓库)
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: v${{ env.VERSION }}
+          releaseName: 'Kimi Code v${{ env.VERSION }}'
+          releaseBodyFile: release-notes.md
+          releaseDraft: false
+          prerelease: false
+          # tauri-action 会自动生成并上传 latest.json(自动更新清单)

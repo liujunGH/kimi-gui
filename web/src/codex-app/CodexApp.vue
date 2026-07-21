@@ -56,6 +56,8 @@ import OfficialQuestionCard from '../components/chat/QuestionCard.vue';
 import OfficialGoalStrip from '../components/chat/GoalStrip.vue';
 import OfficialServerAuthDialog from '../components/ServerAuthDialog.vue';
 import CommandPalette, { type PaletteAction } from '../components/codex/layout/CommandPalette.vue';
+import UpdateDialog from '../components/codex/layout/UpdateDialog.vue';
+import { useUpdater } from '../composables/codex/useUpdater';
 import type { UIQuestion } from '../types';
 import { toDiffHunks } from '../components/codex/diff/diffMapper';
 import CodexIcon from '../components/codex/layout/CodexIcon.vue';
@@ -87,6 +89,12 @@ onUnmounted(() => offAuthRequired?.());
 const showServerAuth = computed(
   () => !client.dangerousBypassAuth.value && authRequired.value,
 );
+
+// 启动静默检查更新(失败静默;发现新版本弹 UpdateDialog)
+const { checkForUpdate } = useUpdater();
+onMounted(() => {
+  setTimeout(() => void checkForUpdate(true), 5000);
+});
 
 // 双击标题栏放大/还原(macOS Overlay 标题栏样式下没有原生行为,手动实现):
 // 模板级 @dblclick 绑定在 .app-toolbar / .sidebar-brand,非交互元素时才触发
@@ -1220,6 +1228,9 @@ async function searchFiles(q: string) {
       @select-session="(id: string) => { onSelectSession(id); showSearch = false; }"
       @close="showSearch = false"
     />
+
+    <!-- 新版本提示(启动静默检查 / 设置页手动检查发现时弹出) -->
+    <UpdateDialog />
   </AppShell>
   <Toast />
 
