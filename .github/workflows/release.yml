@@ -49,12 +49,16 @@ jobs:
           node -e "const fs=require('fs');const p='src-tauri/tauri.conf.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.version='$V';fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n');"
 
       - name: 从 CHANGELOG 提取本版本说明(用于 Release 正文)
-        id: notes
         run: |
           awk '/^## \[${{ env.VERSION }}\]/{flag=1;next}/^## \[/{flag=0}flag' CHANGELOG.md > release-notes.md || true
           if [ ! -s release-notes.md ]; then
             echo "本版本构建(Apple Silicon,arm64)。完整变更见仓库 CHANGELOG.md。" > release-notes.md
           fi
+          {
+            echo 'RELEASE_BODY<<EOF'
+            cat release-notes.md
+            echo 'EOF'
+          } >> "$GITHUB_ENV"
 
       - name: 构建并发布 GitHub Release
         uses: tauri-apps/tauri-action@v0
@@ -66,7 +70,7 @@ jobs:
         with:
           tagName: v${{ env.VERSION }}
           releaseName: 'Kimi Code v${{ env.VERSION }}'
-          releaseBodyFile: release-notes.md
+          releaseBody: ${{ env.RELEASE_BODY }}
           releaseDraft: false
           prerelease: false
           # tauri-action 会自动生成并上传 latest.json(自动更新清单)
