@@ -4,6 +4,17 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.2.1] - 2026-07-21
+
+### 新增
+
+- **自动更新**:应用启动时静默检查新版本;发现新版本时弹出中文更新说明(功能描述),支持一键下载安装并自动重启。设置 → 关于 中也可手动「检查更新」
+- **发行流水线**:GitHub Actions 云端构建 macOS 发行包,打 tag 即可发布;更新包带签名校验,防篡改
+
+### 修复
+
+- 版本号在多处不一致的问题,统一为单一来源并在关于页动态展示
+
 ## [0.2.0] - 2026-07-21
 
 首个可对外分享的功能完整版。从官方 kimi-web 分支出发,完成全新「codex UI」的全部核心链路并打通打包/发行通道。
@@ -42,5 +53,6 @@
 - 项目骨架:官方 kimi-web fork(vite 多页面)+ Tauri 2 壳(daemon 拉起/token 注入/托盘)
 - 静态交互原型 `prototype/`(视觉契约:SVG 图标体系、token 配色、双主题)
 
+[0.2.1]: https://github.com/liujunGH/kimi-gui/releases/tag/v0.2.1
 [0.2.0]: https://github.com/liujunGH/kimi-gui/releases/tag/v0.2.0
 [0.1.0]: https://github.com/liujunGH/kimi-gui/releases/tag/v0.1.0
