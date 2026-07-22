@@ -38,6 +38,8 @@ jobs:
 
       - name: Rust 构建缓存
         uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
 
       - name: 安装前端依赖
         run: pnpm install --frozen-lockfile
@@ -77,4 +79,21 @@ jobs:
           releaseBody: ${{ env.RELEASE_BODY }}
           releaseDraft: false
           prerelease: false
-          # tauri-action 会自动生成并上传 latest.json(自动更新清单)
+
+      # tauri-action 的 latest.json 启发式在带空格的 app 名下不可靠(找不到 .sig 就跳过),
+      # 改为自生成:读 .sig 内容写清单并上传到 Release。app.tar.gz.sig 由构建期签名产出。
+      - name: 生成并上传 latest.json(自动更新清单)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SIG=$(cat "src-tauri/target/release/bundle/macos/Kimi Code.app.tar.gz.sig")
+          URL="https://github.com/${{ github.repository }}/releases/download/v${{ env.VERSION }}/Kimi.Code_aarch64.app.tar.gz"
+          jq -n \
+            --arg v "${{ env.VERSION }}" \
+            --rawfile notes release-notes.md \
+            --arg sig "$SIG" \
+            --arg url "$URL" \
+            --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{version:$v, notes:$notes, pub_date:$date, platforms:{"darwin-aarch64":{url:$url, signature:$sig}}}' \
+            > latest.json
+          gh release upload "v${{ env.VERSION }}" latest.json --clobber
