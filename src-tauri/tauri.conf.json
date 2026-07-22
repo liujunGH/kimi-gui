@@ -42,7 +42,8 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhEQUE3RDUyNEVEMkZBMjYKUldRbSt0Sk9VbjJxalVlcEIwQnJZdEN6WFFkRGx3NXQ4KzJTU2E2UTZpNWNYKzRqWmcrNUI3QVYK",
       "endpoints": [
-        "https://raw.githubusercontent.com/liujunGH/kimi-gui/main/latest.json"
+        "https://cdn.jsdelivr.net/gh/liujunGH/kimi-gui@main/updates/latest.json",
+        "https://raw.githubusercontent.com/liujunGH/kimi-gui/main/updates/latest.json"
       ]
     }
   }
