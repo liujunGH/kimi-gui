@@ -80,15 +80,17 @@ jobs:
           releaseDraft: false
           prerelease: false
 
-      # tauri-action 的 latest.json 启发式在带空格的 app 名下不可靠(找不到 .sig 就跳过),
-      # 改为自生成:读 .sig 内容写清单,连同更新包一起回传 updates/(jsDelivr CDN 直供,
-      # 解决部分网络下 github release 下载链不通的问题),并上传 Release 备份。
+      # tauri-action 会重新打包 app.tar.gz 并清掉 bundler 产出的 .sig(过期签名),
+      # 所以签名要在这步自己做,别指望 bundle 目录里的 .sig 还在。
       - name: 生成并发布更新清单与更新包(updates/ + Release)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           mkdir -p updates
           cp "src-tauri/target/release/bundle/macos/Kimi Code.app.tar.gz" updates/
+          pnpm tauri signer sign "src-tauri/target/release/bundle/macos/Kimi Code.app.tar.gz"
           SIG=$(cat "src-tauri/target/release/bundle/macos/Kimi Code.app.tar.gz.sig")
           URL="https://cdn.jsdelivr.net/gh/${{ github.repository }}@main/updates/Kimi.Code_aarch64.app.tar.gz"
           jq -n \
