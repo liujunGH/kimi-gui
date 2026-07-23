@@ -1,2 +1,2 @@
-dde92fe5abf1f5eb7d246abe8ed9ced7ae4b6640
-dde92fe5 2026-07-20 20:08:52 +0800 feat: support max and exact version targeting for tips banner (#1960)
+66f611aae99887ad2076aa3482a0df5e415d3511
+66f611aa 2026-07-23 21:15:00 +0800 fix: echo thinking under the reasoning field the endpoint actually uses (#2104)
