@@ -82,3 +82,11 @@
 **原因**:`segments` computed 依赖 `resolvedImages`,N 张本地图 = N 次整条消息 rewriteImageSrcs + markstream 重解析(图片多的会话流式/加载时明显卡顿)。批量后同帧 resolve 只触发 1 次重算,行为不变(未 flush 前仍是 placeholder,与原"in-flight 占位"一致)。
 
 **冲突风险**:低。改动只在 `resolvedImages` 声明块和 `queueImageResolution` 的两个 promise 回调里,上游同区域改动时按"批量写回"语义手工合。
+
+### `web/src/api/daemon/client.ts` + `web/src/api/types.ts` + `web/src/composables/useKimiWebClient.ts`（2026-07-24 · ZCode · 0.29 新端点接入）
+
+**改动**：加 `getOAuthUsage()` + `getFsContent(path)` 方法到 KimiWebApi 接口
+
+**原因**：daemon 0.29 新增 `GET /api/v1/oauth/usage`（REST 额度，替代 PTY 抓取）+ `GET /api/v1/fs:content`（读宿主机文件，替代 readFileContent 的 workspace 限制）
+
+**冲突风险**：低。纯 additive（新方法），不修改现有方法。

@@ -1196,6 +1196,46 @@ export class DaemonKimiWebApi implements KimiWebApi {
   }
 
   // -------------------------------------------------------------------------
+  // OAuth Usage (GET /v1/oauth/usage) — managed account plan usage
+  // Available in daemon 0.29+. Returns quota info without PTY scraping.
+  // -------------------------------------------------------------------------
+
+  async getOAuthUsage(): Promise<{
+    kind: string;
+    summary: { label: string; used: number; limit: number; reset_hint: string };
+    limits: { label: string; used: number; limit: number; reset_hint: string }[];
+    extra_usage: { label: string; used: number; limit: number; reset_hint: string } | null;
+  } | null> {
+    try {
+      return await this.http.get('/oauth/usage');
+    } catch {
+      return null; // daemon < 0.29 or not logged in → null (caller falls back to PTY)
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Host File Content (GET /v1/fs:content) — read absolute path from host
+  // Available in daemon 0.29+. Returns raw file content for preview.
+  // -------------------------------------------------------------------------
+
+  async getFsContent(path: string): Promise<{
+    path: string;
+    content: string;
+    encoding: string;
+    mime: string;
+    languageId?: string;
+    isBinary: boolean;
+    size: number;
+    lineCount?: number;
+  } | null> {
+    try {
+      return await this.http.get('/fs:content', { path });
+    } catch {
+      return null;
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // Models + Providers
   // PRESUMED — not in current daemon docs; isolated here, swap when backend defines them.
   // -------------------------------------------------------------------------

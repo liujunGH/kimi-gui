@@ -2928,6 +2928,8 @@ export function useKimiWebClient() {
     // File system actions
     listDir: workspaceState.listDir,
     readFileContent: workspaceState.readFileContent,
+    getOAuthUsage: () => getKimiWebApi().getOAuthUsage(),
+    getFsContent: (path: string) => getKimiWebApi().getFsContent(path),
     getFileDownloadUrl: workspaceState.getFileDownloadUrl,
     openWorkspaceFile: workspaceState.openWorkspaceFile,
     openInApp: workspaceState.openInApp,

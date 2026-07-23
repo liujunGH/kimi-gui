@@ -801,6 +801,26 @@ export interface KimiWebApi {
   } | null>;
   cancelOAuthLogin(): Promise<{ cancelled: boolean; status: string }>;
   logout(): Promise<{ loggedOut: boolean }>;
+
+  // OAuth Usage — daemon 0.29+ (GET /oauth/usage)
+  getOAuthUsage(): Promise<{
+    kind: string;
+    summary: { label: string; used: number; limit: number; reset_hint: string };
+    limits: { label: string; used: number; limit: number; reset_hint: string }[];
+    extra_usage: { label: string; used: number; limit: number; reset_hint: string } | null;
+  } | null>;
+
+  // Host File Content — daemon 0.29+ (GET /fs:content?path=<absolute>)
+  getFsContent(path: string): Promise<{
+    path: string;
+    content: string;
+    encoding: string;
+    mime: string;
+    languageId?: string;
+    isBinary: boolean;
+    size: number;
+    lineCount?: number;
+  } | null>;
 }
 
 /** Result of `startOAuthLogin()`, mirroring the wire discriminated union. */

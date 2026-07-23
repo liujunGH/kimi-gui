@@ -376,11 +376,32 @@ const ctxInfo = computed<ContextInfo>(() => {
   };
 });
 
-// ---------------------------------------------------------------- 计划额度(Tauri PTY 抓 /usage,浏览器为 0 占位)
+// ---------------------------------------------------------------- 计划额度
+// 优先用 daemon 0.29+ 的 REST 端点 GET /oauth/usage(更稳定);
+// fallback 到 Tauri PTY 抓取(0.28 及更早);浏览器为 0 占位。
 
 const quotaInfo = ref<QuotaInfo>({ q5h: 0, q5hReset: '', qWeek: 0, qWeekReset: '' });
 const { fetchPlanUsage } = useTauriDaemon();
+
 async function pollPlanUsage() {
+  // 优先 REST(daemon 0.29+)
+  try {
+    const usage = await client.getOAuthUsage();
+    if (usage && usage.kind === 'ok') {
+      const weekly = usage.summary;
+      const hourly = usage.limits?.find((l) => l.label.includes('5h'));
+      quotaInfo.value = {
+        q5h: hourly?.used ?? 0,
+        q5hReset: hourly?.reset_hint ?? '',
+        qWeek: weekly.used,
+        qWeekReset: weekly.reset_hint,
+      };
+      return;
+    }
+  } catch {
+    // daemon 不支持 REST → fallback PTY
+  }
+  // Fallback: Tauri PTY 抓取(0.28 及更早)
   const u = await fetchPlanUsage();
   if (u && !u.loading) {
     quotaInfo.value = {
@@ -686,11 +707,23 @@ function onDismissWarning(idx: number) {
 }
 
 function onOpenFile(target: { path: string; line?: number }) {
-  void client.readFileContent(target.path).then((data) => {
+  // 优先用 daemon 0.29+ 的 fs:content(支持任意绝对路径);
+  // fallback 到 readFileContent(只支持 workspace 相对路径)
+  client.getFsContent(target.path).then((data) => {
     if (data?.content) {
       filePreviewContent.value = `// ${target.path}${target.line ? ':' + target.line : ''}\n\n${data.content}`;
       ui.openDetail('thinking');
+      return;
     }
+    // fallback
+    return client.readFileContent(target.path).then((d) => {
+      if (d?.content) {
+        filePreviewContent.value = `// ${target.path}${target.line ? ':' + target.line : ''}\n\n${d.content}`;
+        ui.openDetail('thinking');
+      } else {
+        toast(`无法读取 ${target.path}`);
+      }
+    });
   }).catch(() => {
     toast(`无法读取 ${target.path}`);
   });
