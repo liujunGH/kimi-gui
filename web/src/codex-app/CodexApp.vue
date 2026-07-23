@@ -706,27 +706,18 @@ function onDismissWarning(idx: number) {
   client.dismissWarning(idx);
 }
 
-function onOpenFile(target: { path: string; line?: number }) {
-  // 优先用 daemon 0.29+ 的 fs:content(支持任意绝对路径);
-  // fallback 到 readFileContent(只支持 workspace 相对路径)
-  client.getFsContent(target.path).then((data) => {
-    if (data?.content) {
-      filePreviewContent.value = `// ${target.path}${target.line ? ':' + target.line : ''}\n\n${data.content}`;
-      ui.openDetail('thinking');
-      return;
-    }
-    // fallback
-    return client.readFileContent(target.path).then((d) => {
-      if (d?.content) {
-        filePreviewContent.value = `// ${target.path}${target.line ? ':' + target.line : ''}\n\n${d.content}`;
-        ui.openDetail('thinking');
-      } else {
-        toast(`无法读取 ${target.path}`);
-      }
-    });
-  }).catch(() => {
-    toast(`无法读取 ${target.path}`);
-  });
+async function onOpenFile(target: { path: string; line?: number }) {
+  const show = (content: string) => {
+    filePreviewContent.value = `// ${target.path}${target.line ? ':' + target.line : ''}\n\n${content}`;
+    ui.openDetail('thinking');
+  };
+  // 优先 daemon 0.29+ 的 fs:content(任意绝对路径);
+  // 不支持或读不到时 fallback readFileContent(workspace 相对路径)
+  const data = await client.getFsContent(target.path).catch(() => null);
+  if (data?.content) return show(data.content);
+  const d = await client.readFileContent(target.path).catch(() => null);
+  if (d?.content) return show(d.content);
+  toast(`无法读取 ${target.path}`);
 }
 
 /** 切模型:client.setModel(updateSession 内已刷新状态,一次调用即可) */
