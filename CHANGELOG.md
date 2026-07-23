@@ -4,6 +4,25 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.0] - 2026-07-24
+
+正式发布版。功能完整度对标官方 kimi-web 0.29 + Codex 桌面 App 交互风格。
+
+### 新增（相对 0.2.1）
+
+- **上游 0.29 sync**:thinking per-session 重构 + thinking reasoning field + 视频预览 + 透明图片棋盘格
+- **daemon 0.29 新端点**:
+  - `GET /api/v1/oauth/usage` REST 额度查询（替代 PTY 抓取，更稳定）
+  - `GET /api/v1/fs:content` 宿主机文件读取（替代 readFileContent，支持绝对路径）
+- **daemon 0.28 多实例兼容**:`kimi web` foreground 启动 + `server/instances/*.json` 多实例注册
+- **prod 模式修复**:多页面 build（app.html 入口）+ tauri:// origin 连 daemon
+
+### 技术细节
+
+- baseline: `66f611aa`（kimi-code 0.29.0）
+- fork 卫生:10 文件改动（含协议层 3 + 入口 3 + 配置 2 + 组件 2），全部记 PATCHES.md
+- 协议层零改动:sync.sh merge 自动带入上游更新
+
 ## [0.2.1] - 2026-07-21
 
 ### 新增
@@ -53,6 +72,7 @@
 - 项目骨架:官方 kimi-web fork(vite 多页面)+ Tauri 2 壳(daemon 拉起/token 注入/托盘)
 - 静态交互原型 `prototype/`(视觉契约:SVG 图标体系、token 配色、双主题)
 
+[1.0.0]: https://github.com/liujunGH/kimi-gui/releases/tag/v1.0.0
 [0.2.1]: https://github.com/liujunGH/kimi-gui/releases/tag/v0.2.1
 [0.2.0]: https://github.com/liujunGH/kimi-gui/releases/tag/v0.2.0
 [0.1.0]: https://github.com/liujunGH/kimi-gui/releases/tag/v0.1.0
