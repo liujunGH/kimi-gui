@@ -1,15 +1,15 @@
 {
-  "version": "1.0.4",
-  "notes": "\n### 修复\n\n- 发行流水线末端回传 main 分支前自动 rebase,避免 tag 后有新提交导致的非快进推送失败;发行链全程(双平台构建/签名/清单/回传)验证通过\n\n",
-  "pub_date": "2026-07-24T12:12:45Z",
+  "version": "1.0.5",
+  "notes": "\n### 修复\n\n- **macOS「已损坏」拦截改为可放行**:发行产物剥除 adhoc 占位签名,Gatekeeper 提示从「已损坏」降级为「无法验证开发者」,可右键打开或在系统设置中允许(无需再跑 xattr)\n\n",
+  "pub_date": "2026-07-24T13:00:11Z",
   "platforms": {
     "darwin-aarch64": {
       "url": "https://raw.githubusercontent.com/liujunGH/kimi-gui/main/updates/Kimi.Code_aarch64.app.tar.gz",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxalVqMDMxc3JaQ09ZZUtkVnhMV2Rwa2pHK1JJc0tNSGFxM2tRSEl1SHBmZGNmckNvMnhKa2tweTRrZVdNc1htQUFQUWhjcno4aFEybEU1QTBOT0RVT0FnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0ODk1MTY1CWZpbGU6S2ltaS5Db2RlX2FhcmNoNjQuYXBwLnRhci5nego3N1lPUml4S2RxMnlEbVRORll3anF3WTkxbktHRjQ1cHhjT25yZmpHVDEwZk5SNnBQaDA3aTBuM0EyNFlSbnlmR0oxYngycmF5TWhIS0c0akFVVGJEQT09Cg=="
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxalpSVVNHbG5RV1JXQ1BGVlhTWEhFSkM0dzRrTTFGUDQyZWtUTkVXeCt4eVA3RXM2M05WMWI4eTY4SEFSNzRheFdCeG43am5JbWNDdEJMUEFCU0ttaGdRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0ODk4MDEwCWZpbGU6S2ltaS5Db2RlX2FhcmNoNjQuYXBwLnRhci5negppNFJtUTd0Vzg4MVpmQnZTTEI0cjJvcWFkdDJENFZpS21neHNvRUN3RUlkZFJ1d2MzOUhFWVZKQ2x2WE5rODlHcnUzRHJTUHhHdG1rMGtjNlBuek1Cdz09Cg=="
     },
     "windows-x86_64": {
       "url": "https://raw.githubusercontent.com/liujunGH/kimi-gui/main/updates/Kimi.Code_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxalJwTlRrODZBUnJHU3F1MFlsVkRnaVZaSFROeDVtZWpJa3VHVVNONXBMcGc0WEtDbzFCblltTjhLQS9mams5OVBhV0RTRkI5eGFpd1g1a280a1FsSXdjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0ODk1MTY1CWZpbGU6S2ltaS5Db2RlXzEuMC40X3g2NC1zZXR1cC5leGUKb1ZZMkJkT05KY2xzMTRYS1NIbGlJNjUvRjFUS1M5OHBLMHZJYzJjOEZWbWl2NXJqZHlFdEJnQk1qU2toMUEyaXZhZFpINHgyaU1ta045UkdZUXFIQ1E9PQo="
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxalRlbHZkUUk3NHpLMXl6RjQyYkZIK1R5Z3NVTktweFNlM3hud0ZhamtSWGRIeXpRMVJwTlFrUXhCaVo0bGdUeGVOVjhmUEJhOWVPamhzcmora3NIRlFFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0ODk4MDExCWZpbGU6S2ltaS5Db2RlXzEuMC41X3g2NC1zZXR1cC5leGUKRVFWYVE2V21vSFZCN1E1MW16OCtxTDEwNDRWTVF3Y1pyQURKanlyVnBDY05RejBoeTBhQVQ5cWkzc21sYmNSTTdEalc1SnlaSVMzQjVUUnp6aXJTQlE9PQo="
     }
   }
 }
