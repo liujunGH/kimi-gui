@@ -1,15 +1,15 @@
 {
-  "version": "1.0.6",
-  "notes": "\n### 修复\n\n- **Windows 托盘菜单**:右键托盘图标现在能弹出菜单(显示/退出);此前菜单绑在左键,右键无响应导致无法退出\n- **Windows daemon 无法自启**:启动 daemon 从阻塞等待改为后台 spawn + 轮询实例文件(此前在 Windows 上首启永久挂起,必须手动 `kimi web`);启动不再弹控制台黑窗\n- daemon 连接失败时给出明确提示(找不到 kimi CLI 请先安装并登录)\n\n",
-  "pub_date": "2026-07-24T13:31:13Z",
+  "version": "1.0.7",
+  "notes": "\n### 修复\n\n- **回滚 1.0.5 的剥签名**(方向性错误):macOS 26 实测无签名应用直接 SIGKILL 且 provenance 不可删,adhoc 签名才能跑;「已损坏」用 `xattr -dr com.apple.quarantine` 一次可解\n- **Windows daemon 仍不自启**:find_kimi 补 npm 全局安装的 `kimi.cmd` 查找(此前只找 kimi.exe,npm 装 CLI 的机器永远找不到)\n- **Windows 托盘菜单闪退**:托盘点击事件改为只响应左键(此前右键同时触发显示窗口抢焦,菜单被瞬间挤掉)\n- **新增退出入口**:设置 → 关于 →「退出应用」+ 命令面板「退出应用」(托盘菜单之外的兜底路径;daemon 保持后台运行)\n\n",
+  "pub_date": "2026-07-24T14:11:37Z",
   "platforms": {
     "darwin-aarch64": {
       "url": "https://raw.githubusercontent.com/liujunGH/kimi-gui/main/updates/Kimi.Code_aarch64.app.tar.gz",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxaldIYk9qMzRKRXNvUkJHQzBtRFhqWEpSUitrenBMWk1qWkw3Q08vOXhndUw4NWxFelNvNC9JU2cwNHVxLzN4L1cyL09YRElHV2VPUE5VSUtoOW9lb2dBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0ODk5ODczCWZpbGU6S2ltaS5Db2RlX2FhcmNoNjQuYXBwLnRhci5negpMVGpOa243L1duOW9JNGxEcGJGeW9hdE9mQXNJdW1MWERjNVJua3hKR29EcVdpVWxtMkVwMldRcDJnckcvOUdCRkJuY3grc0VEdUhlRFZRZnZVSitEUT09Cg=="
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxalkyWU1WU0VYQWpvd0NBbjFQSmFJUUpSNnh2cHAyUHVlSGxtckVsK0dHQ3M3blI2S3FwczVhcUlISUhjbXpsNUNMVjFRRFgxQlZ6eXgvT0wyUG1obnc4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0OTAyMjk3CWZpbGU6S2ltaS5Db2RlX2FhcmNoNjQuYXBwLnRhci5negpTdjh4dWVLYjdxK0dNdTcvMFlWUk5LUC9PS1U5TzFuMVhOY3dQUXJFcTNHdk1pMGtHV3RKVTBDc0psM2lGK05IZWl5UzYzeENQT0s3ZUFBNmdMY2hEQT09Cg=="
     },
     "windows-x86_64": {
       "url": "https://raw.githubusercontent.com/liujunGH/kimi-gui/main/updates/Kimi.Code_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxalZITjJENXpxdzYxTDhreDREZDVFNWpUbVRYMlMvb1d3aEh2c2luY2dmcnk1N0lyUFRUZ0h6UGhiQm5RTDErUEFsNTZUSzYyemFxbUFQaDJtcUF1dHdnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0ODk5ODczCWZpbGU6S2ltaS5Db2RlXzEuMC42X3g2NC1zZXR1cC5leGUKWHdEOUhYV1lMNmZLbVcvU3RudGZuWVNiMlBmRVNPUFJxS0FpYUFlR2Q5ZWlPQkhWOUt6OWoyT2NwUmlkNTRKb0pRTFNmdksycFdseUEweFlreVc5QkE9PQo="
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxamZ4dCtObDJmSjJzZEFPY2RvT3M0RnZkMm9oZ0NTd0R4OWZoTWZwZjQ2aUE2TUhML25EcEJBN1pLTkZsSG5aV2dLR2YzLzZYQlRyQThWWkZuV1NjQXdnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0OTAyMjk3CWZpbGU6S2ltaS5Db2RlXzEuMC43X3g2NC1zZXR1cC5leGUKSUdOZGVHeUlKS0RGZ2M2ZG5iUE1OMXhqekhMY2htUlZZZVo5cnAzQUpIcFFuQVc1RTRmRUVqclFNcDk2ejR3M1NoMXlPMUllenBUSHhRS3o2TEVuRHc9PQo="
     }
   }
 }
