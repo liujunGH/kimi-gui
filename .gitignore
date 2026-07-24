@@ -29,3 +29,6 @@ src-tauri/gen/
 # 工具缓存(playwright 截图 / ZCode session 状态)
 .playwright-mcp/
 .zcode/
+
+# CI 签名工作目录
+sigs/
