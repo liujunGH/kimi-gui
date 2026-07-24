@@ -144,10 +144,12 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          cd sigs
-          pnpm tauri signer sign *.app.tar.gz
-          pnpm tauri signer sign *x64-setup.exe
-          ls -la
+          # pnpm 会把 cwd 切回包根,相对路径会找不到文件,必须绝对路径
+          MACPKG=$(realpath sigs/*.app.tar.gz)
+          WINPKG=$(realpath sigs/*x64-setup.exe)
+          pnpm tauri signer sign "$MACPKG"
+          pnpm tauri signer sign "$WINPKG"
+          ls -la sigs/
 
       - name: 更新包入仓(canonical 名,CDN 直链稳定)+ 生成双平台 latest.json
         run: |
