@@ -4,6 +4,12 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.5] - 2026-07-24
+
+### 修复
+
+- **macOS「已损坏」拦截改为可放行**:发行产物剥除 adhoc 占位签名,Gatekeeper 提示从「已损坏」降级为「无法验证开发者」,可右键打开或在系统设置中允许(无需再跑 xattr)
+
 ## [1.0.4] - 2026-07-24
 
 ### 修复

@@ -101,6 +101,29 @@ jobs:
           releaseDraft: false
           prerelease: false
 
+      # Gatekeeper 策略(没有 Apple 开发者证书时的最优解):
+      # 链接器默认打的 adhoc 占位签名 + 网络下载 quarantine = macOS 判「已损坏」(不给放行按钮)。
+      # 剥掉签名降级为「无法验证开发者」,用户可右键打开/设置允许。
+      # 更新包装进 DMG 与 app.tar.gz 并覆盖上传;更新通道的 minisign 签名不受影响。
+      - name: 剥 adhoc 签名并重打产物(仅 macOS)
+        if: matrix.os == 'macos-14'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          APP="src-tauri/target/release/bundle/macos/Kimi Code.app"
+          codesign --remove-signature "$APP"
+          codesign -dv "$APP" 2>&1 | head -2 || true
+          # 重打 DMG(ZCode 的 make-dmg.sh 自带清源+staging)
+          bash scripts/make-dmg.sh
+          V="${{ needs.prepare.outputs.version }}"
+          mv "src-tauri/target/release/bundle/dmg/Kimi Code_${V}_aarch64.dmg" \
+             "src-tauri/target/release/bundle/dmg/Kimi.Code_${V}_aarch64.dmg"
+          # 重打更新包(tar 用 canonical 名)
+          (cd src-tauri/target/release/bundle/macos && tar -czf Kimi.Code_aarch64.app.tar.gz "Kimi Code.app")
+          gh release upload "v${V}" --clobber \
+            "src-tauri/target/release/bundle/dmg/Kimi.Code_${V}_aarch64.dmg" \
+            "src-tauri/target/release/bundle/macos/Kimi.Code_aarch64.app.tar.gz"
+
   # ---------- 2. 双平台签名聚合:更新包入仓 + latest.json 双平台 ----------
   manifest:
     needs: [prepare, build]
