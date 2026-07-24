@@ -1,24 +1,64 @@
 name: 发行构建
 
 # 触发方式:
-#   1. 打 tag 推送:git tag v0.2.1 && git push origin v0.2.1
+#   1. 打 tag 推送:git tag v1.0.2 && git push origin v1.0.2
 #   2. 手动:Actions → 发行构建 → Run workflow(填版本号)
+#
+# 产物:
+#   - GitHub Release:macOS DMG / NSIS exe(手动下载用)
+#   - 仓库 updates/:latest.json(双平台自动更新清单)+ 双平台更新包
+#     (raw.githubusercontent 主端点,jsDelivr 备;更新包随仓走是因为
+#     本机网络直连 github 下载链不通)
+#
+# 关键经验(别删):
+#   - tauri-action 会重打包并清掉 bundler 产出的 .sig → 签名必须本 job 自己
+#     对最终上传的 tar/exe 重新 sign,不能用 bundle 目录里的旧 .sig
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号(如 0.2.1,不带 v 前缀)'
+        description: '版本号(如 1.0.2,不带 v 前缀)'
         required: true
 
-# GITHUB_TOKEN 需要写权限才能创建 Release 和上传资产
 permissions:
   contents: write
 
 jobs:
-  release:
-    runs-on: macos-14 # Apple Silicon(arm64);Intel 需另开 universal job
+  # ---------- 0. 先建 Release(避免矩阵两个平台抢建) ----------
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: 取版本号
+        id: v
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            V="${{ inputs.version }}"
+          else
+            V="${GITHUB_REF#refs/tags/v}"
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+      - name: 创建 Release(已存在则跳过)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "v${{ steps.v.outputs.version }}" >/dev/null 2>&1 \
+            || gh release create "v${{ steps.v.outputs.version }}" \
+                 --title "Kimi Code v${{ steps.v.outputs.version }}" \
+                 --notes "构建中,产物稍后自动上传。"
+
+  # ---------- 1. 双平台构建 + 上传资产 ----------
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -44,66 +84,91 @@ jobs:
       - name: 安装前端依赖
         run: pnpm install --frozen-lockfile
 
-      - name: 从 tag/输入取版本号并写回 tauri.conf.json
+      - name: 版本号写回 tauri.conf.json
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            V="${{ inputs.version }}"
-          else
-            V="${GITHUB_REF#refs/tags/v}"
-          fi
-          echo "VERSION=$V" >> "$GITHUB_ENV"
-          node -e "const fs=require('fs');const p='src-tauri/tauri.conf.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.version='$V';fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n');"
+          node -e "const fs=require('fs');const p='src-tauri/tauri.conf.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.version='${{ needs.prepare.outputs.version }}';fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n');"
+        shell: bash
 
-      - name: 从 CHANGELOG 提取本版本说明(用于 Release 正文)
-        run: |
-          awk '/^## \[${{ env.VERSION }}\]/{flag=1;next}/^## \[/{flag=0}flag' CHANGELOG.md > release-notes.md || true
-          if [ ! -s release-notes.md ]; then
-            echo "本版本构建(Apple Silicon,arm64)。完整变更见仓库 CHANGELOG.md。" > release-notes.md
-          fi
-          {
-            echo 'RELEASE_BODY<<EOF'
-            cat release-notes.md
-            echo 'EOF'
-          } >> "$GITHUB_ENV"
-
-      - name: 构建并发布 GitHub Release
+      - name: 构建并上传资产
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # 自动更新签名密钥(secrets 里配置,私钥不要进仓库)
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v${{ env.VERSION }}
-          releaseName: 'Kimi Code v${{ env.VERSION }}'
-          releaseBody: ${{ env.RELEASE_BODY }}
+          tagName: v${{ needs.prepare.outputs.version }}
+          releaseName: 'Kimi Code v${{ needs.prepare.outputs.version }}'
           releaseDraft: false
           prerelease: false
 
-      # tauri-action 会重新打包 app.tar.gz 并清掉 bundler 产出的 .sig(过期签名),
-      # 所以签名要在这步自己做,别指望 bundle 目录里的 .sig 还在。
-      - name: 生成并发布更新清单与更新包(updates/ + Release)
+  # ---------- 2. 双平台签名聚合:更新包入仓 + latest.json 双平台 ----------
+  manifest:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 提取本版本说明
+        run: |
+          awk '/^## \[${{ needs.prepare.outputs.version }}\]/{flag=1;next}/^## \[/{flag=0}flag' CHANGELOG.md > release-notes.md || true
+          if [ ! -s release-notes.md ]; then
+            echo "本版本构建。完整变更见仓库 CHANGELOG.md。" > release-notes.md
+          fi
+
+      - name: 下载 Release 资产(双平台包 + 自备签名材料)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p sigs
+          gh release download "v${{ needs.prepare.outputs.version }}" --dir sigs --clobber \
+            -p "*.app.tar.gz" -p "*setup.exe"
+          ls -la sigs/
+
+      - name: 对最终资产重新签名(tauri-action 重打包会使 bundler 签名失效)
+        env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
+          cd sigs
+          pnpm tauri signer sign *.app.tar.gz
+          pnpm tauri signer sign *x64-setup.exe
+          ls -la
+
+      - name: 更新包入仓(canonical 名,CDN 直链稳定)+ 生成双平台 latest.json
+        run: |
           mkdir -p updates
-          cp "src-tauri/target/release/bundle/macos/Kimi Code.app.tar.gz" updates/
-          pnpm tauri signer sign "src-tauri/target/release/bundle/macos/Kimi Code.app.tar.gz"
-          SIG=$(cat "src-tauri/target/release/bundle/macos/Kimi Code.app.tar.gz.sig")
-          URL="https://cdn.jsdelivr.net/gh/${{ github.repository }}@main/updates/Kimi.Code_aarch64.app.tar.gz"
+          cp sigs/*.app.tar.gz updates/Kimi.Code_aarch64.app.tar.gz
+          cp sigs/*x64-setup.exe updates/Kimi.Code_x64-setup.exe
+          MACSIG=$(cat sigs/*.app.tar.gz.sig)
+          WINSIG=$(cat sigs/*x64-setup.exe.sig)
+          REPO_RAW="https://raw.githubusercontent.com/${{ github.repository }}/main/updates"
           jq -n \
-            --arg v "${{ env.VERSION }}" \
+            --arg v "${{ needs.prepare.outputs.version }}" \
             --rawfile notes release-notes.md \
-            --arg sig "$SIG" \
-            --arg url "$URL" \
+            --arg macsig "$MACSIG" \
+            --arg winsig "$WINSIG" \
+            --arg macurl "$REPO_RAW/Kimi.Code_aarch64.app.tar.gz" \
+            --arg winurl "$REPO_RAW/Kimi.Code_x64-setup.exe" \
             --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            '{version:$v, notes:$notes, pub_date:$date, platforms:{"darwin-aarch64":{url:$url, signature:$sig}}}' \
-            > updates/latest.json
-          (cd updates && gh release upload "v${{ env.VERSION }}" latest.json --clobber)
+            '{version:$v, notes:$notes, pub_date:$date, platforms:{
+              "darwin-aarch64": {url:$macurl, signature:$macsig},
+              "windows-x86_64": {url:$winurl, signature:$winsig}
+            }}' > updates/latest.json
+          cat updates/latest.json
+
+      - name: latest.json 上传 Release + 清单/更新包回传 main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "v${{ needs.prepare.outputs.version }}" updates/latest.json --clobber
           git config user.name "kimi-gui-ci"
           git config user.email "ci@users.noreply.github.com"
           git add updates/
-          git commit -m "chore(release): updates v${{ env.VERSION }} [skip ci]" || echo "no change"
+          git commit -m "chore(release): updates v${{ needs.prepare.outputs.version }}(双平台) [skip ci]" || echo "no change"
           git push origin HEAD:main
+
+      - name: Release 正文回填 CHANGELOG 段落
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit "v${{ needs.prepare.outputs.version }}" --notes-file release-notes.md

@@ -4,6 +4,17 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.2] - 2026-07-22
+
+### 新增
+
+- **Windows 支持**:NSIS 安装包(.exe)云端构建;自动更新覆盖 macOS / Windows 双平台(更新包随仓走 CDN)
+
+### 修复
+
+- 全局唤起快捷键跨平台化:macOS 为 ⌘⌥N,Windows/Linux 为 Ctrl+Alt+N
+- daemon 查找 kimi CLI 兼容 Windows(`.exe` 与 Windows 安装路径)
+
 ## [1.0.1] - 2026-07-24
 
 ### 修正

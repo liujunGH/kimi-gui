@@ -27,9 +27,10 @@ pub fn build_global_shortcut_plugin() -> impl tauri::plugin::Plugin<tauri::Wry> 
         }
     };
 
-    // 先尝试注册 Cmd+Option+N。失败时不阻断启动(全局快捷键非核心功能),
+    // 先尝试注册全局唤起快捷键。失败时不阻断启动(全局快捷键非核心功能),
     // 退化为只装 handler、不注册快捷键的 plugin —— handler 不会触发。
-    match "Cmd+Option+N".parse::<Shortcut>() {
+    // CmdOrCtrl+Alt+N:macOS 上是 ⌘⌥N,Windows/Linux 上是 Ctrl+Alt+N。
+    match "CmdOrCtrl+Alt+N".parse::<Shortcut>() {
         Ok(sc) => match Builder::new().with_handler(handler).with_shortcut(sc) {
             Ok(b) => b.build(),
             Err(e) => {

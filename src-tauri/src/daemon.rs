@@ -40,20 +40,24 @@ pub fn kimi_home() -> PathBuf {
 
 /// Locate the `kimi` binary. GUI apps launched from Finder get a minimal PATH,
 /// so fall back to well-known install locations.
+/// Windows 上可执行文件名是 kimi.exe,安装位置在 %USERPROFILE%\.kimi-code\bin\。
 pub fn find_kimi() -> Option<PathBuf> {
+    let exe = if cfg!(windows) { "kimi.exe" } else { "kimi" };
     if let Ok(path) = std::env::var("PATH") {
         for dir in std::env::split_paths(&path) {
-            let candidate = dir.join("kimi");
+            let candidate = dir.join(exe);
             if candidate.is_file() {
                 return Some(candidate);
             }
         }
     }
-    let candidates = [
-        home_dir().join(".kimi-code/bin/kimi"),
-        PathBuf::from("/opt/homebrew/bin/kimi"),
-        PathBuf::from("/usr/local/bin/kimi"),
+    let mut candidates = vec![
+        home_dir().join(".kimi-code").join("bin").join(exe),
     ];
+    if !cfg!(windows) {
+        candidates.push(PathBuf::from("/opt/homebrew/bin/kimi"));
+        candidates.push(PathBuf::from("/usr/local/bin/kimi"));
+    }
     candidates.into_iter().find(|p| p.is_file())
 }
 
