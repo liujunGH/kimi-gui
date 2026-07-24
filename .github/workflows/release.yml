@@ -182,6 +182,9 @@ jobs:
           git config user.email "ci@users.noreply.github.com"
           git add updates/
           git commit -m "chore(release): updates v${{ needs.prepare.outputs.version }}(双平台) [skip ci]" || echo "no change"
+          # tag 之后 main 可能已有新提交(doc/fix),非快进会被拒,先 rebase
+          git fetch origin main
+          git rebase origin/main
           git push origin HEAD:main
 
       - name: Release 正文回填 CHANGELOG 段落

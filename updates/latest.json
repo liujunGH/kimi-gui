@@ -1,15 +1,15 @@
 {
-  "version": "1.0.2",
-  "notes": "\n### 新增\n\n- **Windows 支持**:NSIS 安装包(.exe)云端构建;自动更新覆盖 macOS / Windows 双平台(更新包随仓走 CDN)\n\n### 修复\n\n- 全局唤起快捷键跨平台化:macOS 为 ⌘⌥N,Windows/Linux 为 Ctrl+Alt+N\n- daemon 查找 kimi CLI 兼容 Windows(`.exe` 与 Windows 安装路径)\n\n",
-  "pub_date": "2026-07-24T10:16:13Z",
+  "version": "1.0.3",
+  "notes": "\n### 修复\n\n- 发行流水线加固:manifest 任务补 node/pnpm 环境、签名步骤改绝对路径、签名密钥显式传参;双平台构建与自动更新清单生成全程自动化验证通过\n\n",
+  "pub_date": "2026-07-24T12:00:53Z",
   "platforms": {
     "darwin-aarch64": {
       "url": "https://raw.githubusercontent.com/liujunGH/kimi-gui/main/updates/Kimi.Code_aarch64.app.tar.gz",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxalhrVjFXOEtMdVRPaGFpVEVQMGo0b04vd2V4Qm5lZWNHcDQ4dWxlcThyNitPTSswVnd3ejA2cUw2Zy9sMWZtT3Rib0loYVBSaXBTcTRrMUNIMEN3eUE4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0ODg4MTMyCWZpbGU6S2ltaS5Db2RlX2FhcmNoNjQuYXBwLnRhci5nego2b1VXTk5RdXRRQTlPNlRFODBLeUp3ZTgzZzBDekR0QVFscHdjODA2bkRGbHhmYzlyYXlrZ1JrRVJUY1FBRWQyLzJTd2FXYnNNT3RLOG9rZmVPQnRCZz09Cg=="
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxalh1OWRFU0dkZlY2NkpQU2VtOUwwdlowS0RQVDk1bTFqbnlhK3RqemJpVXJEVUxlYWpaeWZackJ2WGpZM1RDeXR0bVZxSG1nTFVLSXl5OWVibHNsREFRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0ODk0NDUzCWZpbGU6S2ltaS5Db2RlX2FhcmNoNjQuYXBwLnRhci5negpqZnR4TEVVM1NjUVFoWE1ZVTZiOXFIcVphVGh0a3k1dWg0a3BQb3RiMXZ1SHNNR1p1S1l6WFVuUlZIbHJIeW5KNUZIYTFkM2FPUVovNFpJeE5UTUlBdz09Cg=="
     },
     "windows-x86_64": {
       "url": "https://raw.githubusercontent.com/liujunGH/kimi-gui/main/updates/Kimi.Code_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxalo4VmlOMUxBZmFDUTA2TlJuamNYaDZEcHNCR3NPbUtxOFNPUTg0ZVgyeDNWZ3JaazlnNkZndktQT0tDUnFJTjFYQkJRUWVWb00zdUcwanNyU1d6VHdjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0ODg4MTMyCWZpbGU6S2ltaS5Db2RlXzEuMC4yX3g2NC1zZXR1cC5leGUKejExWXIxeUVZTmlLNm9Xdk5hSERxT1A2OVk4K0hqeXhnNHFLc2JHK1BRZGpCVVRlV1p6VkhudGk4aTBSVmxiR2RzUUgxb3U1L05PZW82S2EzSk1WQ2c9PQo="
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxalo5cVJ2UlhVQ0VxZG5WTzdNR3pLRm5RMG9GT2lsZk5KV1lHRXZ6S2JJaXozdHFzaHh5cXhYVFZYclZvS0kyRUYxcTNvV0g3cFgxTVd5SjFyYUZPaXdnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0ODk0NDUzCWZpbGU6S2ltaS5Db2RlXzEuMC4zX3g2NC1zZXR1cC5leGUKMWkrUUt5UCtQdlpXY2RnNk9CUCt1OTY2bEdCTW90ZUd4emdnV09ITnAxbHhWd3ZkMmtsRDdMMStjSWQ1M0F0c2NGZnFJRWxnVmxWa29jWWdIZkdLQXc9PQo="
     }
   }
 }
