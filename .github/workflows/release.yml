@@ -108,6 +108,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 重新签名要用 tauri CLI(npm 包),manifest job 也需要 pnpm+node+依赖
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: 安装前端依赖(供 tauri CLI)
+        run: pnpm install --frozen-lockfile
+
       - name: 提取本版本说明
         run: |
           awk '/^## \[${{ needs.prepare.outputs.version }}\]/{flag=1;next}/^## \[/{flag=0}flag' CHANGELOG.md > release-notes.md || true
