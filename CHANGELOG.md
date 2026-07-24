@@ -4,6 +4,12 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.3] - 2026-07-24
+
+### 修复
+
+- 发行流水线加固:manifest 任务补 node/pnpm 环境、签名步骤改绝对路径、签名密钥显式传参;双平台构建与自动更新清单生成全程自动化验证通过
+
 ## [1.0.2] - 2026-07-22
 
 ### 新增
