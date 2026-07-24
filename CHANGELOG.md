@@ -4,6 +4,12 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.4] - 2026-07-24
+
+### 修复
+
+- 发行流水线末端回传 main 分支前自动 rebase,避免 tag 后有新提交导致的非快进推送失败;发行链全程(双平台构建/签名/清单/回传)验证通过
+
 ## [1.0.3] - 2026-07-24
 
 ### 修复
