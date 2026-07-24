@@ -40,21 +40,35 @@ pub fn kimi_home() -> PathBuf {
 
 /// Locate the `kimi` binary. GUI apps launched from Finder get a minimal PATH,
 /// so fall back to well-known install locations.
-/// Windows 上可执行文件名是 kimi.exe,安装位置在 %USERPROFILE%\.kimi-code\bin\。
+/// Windows:npm 全局安装的可执行文件是 `kimi.cmd`(不是 .exe),必须一并尝试;
+/// Rust ≥1.77 会自动用 cmd.exe 包裹 .cmd/.bat,直接 spawn 即可。
 pub fn find_kimi() -> Option<PathBuf> {
-    let exe = if cfg!(windows) { "kimi.exe" } else { "kimi" };
+    let names: &[&str] = if cfg!(windows) {
+        &["kimi.exe", "kimi.cmd", "kimi.bat", "kimi"]
+    } else {
+        &["kimi"]
+    };
     if let Ok(path) = std::env::var("PATH") {
         for dir in std::env::split_paths(&path) {
-            let candidate = dir.join(exe);
-            if candidate.is_file() {
-                return Some(candidate);
+            for name in names {
+                let candidate = dir.join(name);
+                if candidate.is_file() {
+                    return Some(candidate);
+                }
             }
         }
     }
-    let mut candidates = vec![
-        home_dir().join(".kimi-code").join("bin").join(exe),
-    ];
-    if !cfg!(windows) {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if cfg!(windows) {
+        candidates.push(home_dir().join(".kimi-code/bin/kimi.exe"));
+        // npm 全局前缀(%APPDATA%\npm)下的 shim
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            for name in ["kimi.cmd", "kimi.exe"] {
+                candidates.push(PathBuf::from(&appdata).join("npm").join(name));
+            }
+        }
+    } else {
+        candidates.push(home_dir().join(".kimi-code/bin/kimi"));
         candidates.push(PathBuf::from("/opt/homebrew/bin/kimi"));
         candidates.push(PathBuf::from("/usr/local/bin/kimi"));
     }

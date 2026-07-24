@@ -4,6 +4,15 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.7] - 2026-07-24
+
+### 修复
+
+- **回滚 1.0.5 的剥签名**(方向性错误):macOS 26 实测无签名应用直接 SIGKILL 且 provenance 不可删,adhoc 签名才能跑;「已损坏」用 `xattr -dr com.apple.quarantine` 一次可解
+- **Windows daemon 仍不自启**:find_kimi 补 npm 全局安装的 `kimi.cmd` 查找(此前只找 kimi.exe,npm 装 CLI 的机器永远找不到)
+- **Windows 托盘菜单闪退**:托盘点击事件改为只响应左键(此前右键同时触发显示窗口抢焦,菜单被瞬间挤掉)
+- **新增退出入口**:设置 → 关于 →「退出应用」+ 命令面板「退出应用」(托盘菜单之外的兜底路径;daemon 保持后台运行)
+
 ## [1.0.6] - 2026-07-24
 
 ### 修复

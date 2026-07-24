@@ -777,6 +777,7 @@ const paletteActions = computed<PaletteAction[]>(() => {
       { id: 'copy-id', label: '复制会话 ID', icon: 'copy' },
     );
   }
+  list.push({ id: 'quit', label: '退出应用', icon: 'x' });
   return list;
 });
 const paletteSessions = computed(() =>
@@ -828,6 +829,9 @@ function onPaletteAction(id: string) {
       }
       break;
     }
+    case 'quit':
+      void import('@tauri-apps/api/core').then(({ invoke }) => invoke('quit_app'));
+      break;
   }
 }
 

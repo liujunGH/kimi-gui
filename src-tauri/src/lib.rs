@@ -37,6 +37,12 @@ fn toggle_window_zoom(window: tauri::Window) {
     }
 }
 
+/// 应用内退出入口(设置页/命令面板;托盘菜单之外的兜底退出路径)。
+#[tauri::command]
+fn quit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -53,6 +59,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             daemon_info,
             toggle_window_zoom,
+            quit_app,
             dock_badge::set_dock_badge,
             usage::plan_usage
         ])

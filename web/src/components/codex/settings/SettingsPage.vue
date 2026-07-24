@@ -102,6 +102,16 @@ async function onCheckUpdate() {
   if (updateError.value) toast(`检查失败:${updateError.value}`);
   else toast('已是最新版本');
 }
+
+/** 退出应用(托盘菜单之外的兜底退出路径;daemon 是共享设施,不动它) */
+async function onQuitApp() {
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('quit_app');
+  } catch {
+    window.close();
+  }
+}
 const archivedLoading = ref(false);
 async function loadArchive() {
   archivedLoading.value = true;
@@ -408,6 +418,15 @@ onMounted(() => void loadArchive());
                 <button class="btn" :disabled="checking" @click="onCheckUpdate">
                   {{ checking ? '检查中…' : '检查更新' }}
                 </button>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">退出</div>
+                <div class="setting-desc">关闭主窗口并退出应用(daemon 保持后台运行)</div>
+              </div>
+              <div class="setting-control">
+                <button class="btn" @click="onQuitApp">退出应用</button>
               </div>
             </div>
             <div class="setting-row">

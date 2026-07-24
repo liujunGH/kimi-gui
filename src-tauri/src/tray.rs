@@ -37,8 +37,14 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
-            // 点击托盘图标(左键/单击,平台相关)显示主窗
-            if let tauri::tray::TrayIconEvent::Click { button: _, .. } = event {
+            // 只响应左键单击显示主窗;右键交给系统弹菜单。
+            // 关键:右键若也触发 window.show(),窗口抢焦会把刚弹出的菜单瞬间挤掉
+            // (Windows 上表现为"菜单闪一下就没了")
+            if let tauri::tray::TrayIconEvent::Click {
+                button: tauri::tray::MouseButton::Left,
+                ..
+            } = event
+            {
                 let app = tray.app_handle();
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.show();
