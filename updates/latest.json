@@ -1,15 +1,15 @@
 {
-  "version": "1.0.3",
-  "notes": "\n### 修复\n\n- 发行流水线加固:manifest 任务补 node/pnpm 环境、签名步骤改绝对路径、签名密钥显式传参;双平台构建与自动更新清单生成全程自动化验证通过\n\n",
-  "pub_date": "2026-07-24T12:00:53Z",
+  "version": "1.0.4",
+  "notes": "\n### 修复\n\n- 发行流水线末端回传 main 分支前自动 rebase,避免 tag 后有新提交导致的非快进推送失败;发行链全程(双平台构建/签名/清单/回传)验证通过\n\n",
+  "pub_date": "2026-07-24T12:12:45Z",
   "platforms": {
     "darwin-aarch64": {
       "url": "https://raw.githubusercontent.com/liujunGH/kimi-gui/main/updates/Kimi.Code_aarch64.app.tar.gz",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxalh1OWRFU0dkZlY2NkpQU2VtOUwwdlowS0RQVDk1bTFqbnlhK3RqemJpVXJEVUxlYWpaeWZackJ2WGpZM1RDeXR0bVZxSG1nTFVLSXl5OWVibHNsREFRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0ODk0NDUzCWZpbGU6S2ltaS5Db2RlX2FhcmNoNjQuYXBwLnRhci5negpqZnR4TEVVM1NjUVFoWE1ZVTZiOXFIcVphVGh0a3k1dWg0a3BQb3RiMXZ1SHNNR1p1S1l6WFVuUlZIbHJIeW5KNUZIYTFkM2FPUVovNFpJeE5UTUlBdz09Cg=="
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxalVqMDMxc3JaQ09ZZUtkVnhMV2Rwa2pHK1JJc0tNSGFxM2tRSEl1SHBmZGNmckNvMnhKa2tweTRrZVdNc1htQUFQUWhjcno4aFEybEU1QTBOT0RVT0FnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0ODk1MTY1CWZpbGU6S2ltaS5Db2RlX2FhcmNoNjQuYXBwLnRhci5nego3N1lPUml4S2RxMnlEbVRORll3anF3WTkxbktHRjQ1cHhjT25yZmpHVDEwZk5SNnBQaDA3aTBuM0EyNFlSbnlmR0oxYngycmF5TWhIS0c0akFVVGJEQT09Cg=="
     },
     "windows-x86_64": {
       "url": "https://raw.githubusercontent.com/liujunGH/kimi-gui/main/updates/Kimi.Code_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxalo5cVJ2UlhVQ0VxZG5WTzdNR3pLRm5RMG9GT2lsZk5KV1lHRXZ6S2JJaXozdHFzaHh5cXhYVFZYclZvS0kyRUYxcTNvV0g3cFgxTVd5SjFyYUZPaXdnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0ODk0NDUzCWZpbGU6S2ltaS5Db2RlXzEuMC4zX3g2NC1zZXR1cC5leGUKMWkrUUt5UCtQdlpXY2RnNk9CUCt1OTY2bEdCTW90ZUd4emdnV09ITnAxbHhWd3ZkMmtsRDdMMStjSWQ1M0F0c2NGZnFJRWxnVmxWa29jWWdIZkdLQXc9PQo="
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxalJwTlRrODZBUnJHU3F1MFlsVkRnaVZaSFROeDVtZWpJa3VHVVNONXBMcGc0WEtDbzFCblltTjhLQS9mams5OVBhV0RTRkI5eGFpd1g1a280a1FsSXdjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0ODk1MTY1CWZpbGU6S2ltaS5Db2RlXzEuMC40X3g2NC1zZXR1cC5leGUKb1ZZMkJkT05KY2xzMTRYS1NIbGlJNjUvRjFUS1M5OHBLMHZJYzJjOEZWbWl2NXJqZHlFdEJnQk1qU2toMUEyaXZhZFpINHgyaU1ta045UkdZUXFIQ1E9PQo="
     }
   }
 }
