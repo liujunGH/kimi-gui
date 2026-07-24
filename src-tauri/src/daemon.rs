@@ -136,27 +136,39 @@ pub fn connect_daemon() -> Result<Launch, String> {
         .or_else(|| find_instance_from_legacy_lock(&home));
 
     if already_running.is_none() {
-        // 尝试启动 daemon
-        // 优先 `kimi web`(0.28+),fallback `kimi server run`(0.27-)
-        let web_result = Command::new(&kimi)
-            .args(["web"])
-            .output();
-
-        match web_result {
-            Ok(output) if output.status.success() => {}
-            _ => {
-                // fallback: kimi server run(旧版)
-                let output = Command::new(&kimi)
-                    .args(["server", "run"])
-                    .output()
-                    .map_err(|e| format!("执行 daemon 启动失败：{e}"))?;
-                if !output.status.success() {
-                    return Err(format!(
-                        "daemon 启动退出码非零：{}",
-                        String::from_utf8_lossy(&output.stderr).trim()
-                    ));
-                }
+        // 启动 daemon:`kimi web` / `kimi server run` 都是前台长驻进程,
+        // 必须 spawn 不等待 + 轮询实例文件出现。
+        // ⚠️ 阻塞式 .output() 会永久挂起(macOS 上因常驻实例从未走到这条路径,
+        // Windows 首启必踩)。Windows 上加 CREATE_NO_WINDOW 避免弹控制台黑窗。
+        let mut ok = false;
+        for args in [["web"].as_slice(), ["server", "run"].as_slice()] {
+            let mut cmd = Command::new(&kimi);
+            cmd.args(args);
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
             }
+            if cmd.spawn().is_err() {
+                continue;
+            }
+            for _ in 0..20 {
+                if find_instance_from_instances_dir(&home).is_some()
+                    || find_instance_from_legacy_lock(&home).is_some()
+                {
+                    ok = true;
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(500));
+            }
+            if ok {
+                break;
+            }
+        }
+        if !ok {
+            return Err(
+                "daemon 启动超时(可先手动运行 `kimi web` 验证 kimi CLI 可用后再开应用)".to_string(),
+            );
         }
     }
 

@@ -22,6 +22,8 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         .icon(app.default_window_icon().cloned().expect("缺默认 icon"))
         .menu(&menu)
         .tooltip("Kimi Code")
+        // 右键弹菜单(显示/退出),左键交给我们自己的事件显示主窗(Windows 惯例)
+        .menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => {
                 if let Some(window) = app.get_webview_window("main") {

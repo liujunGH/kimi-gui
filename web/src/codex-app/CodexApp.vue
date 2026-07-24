@@ -96,6 +96,22 @@ onMounted(() => {
   setTimeout(() => void checkForUpdate(true), 5000);
 });
 
+// daemon 连接失败兜底提示(尤其 Windows:CLI 未装/未登录时凭证注入永远不来)
+onMounted(() => {
+  setTimeout(() => {
+    try {
+      if (
+        '__TAURI_INTERNALS__' in window &&
+        !localStorage.getItem('kimi-web.server-credential')
+      ) {
+        toast('未连接到 daemon:找不到 kimi CLI,请先安装 Kimi Code 并登录');
+      }
+    } catch {
+      /* ignore */
+    }
+  }, 12000);
+});
+
 // 双击标题栏放大/还原(macOS Overlay 标题栏样式下没有原生行为,手动实现):
 // 模板级 @dblclick 绑定在 .app-toolbar / .sidebar-brand,非交互元素时才触发
 const { toggleWindowZoom } = useTauriDaemon();

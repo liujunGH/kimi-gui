@@ -4,6 +4,14 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.6] - 2026-07-24
+
+### 修复
+
+- **Windows 托盘菜单**:右键托盘图标现在能弹出菜单(显示/退出);此前菜单绑在左键,右键无响应导致无法退出
+- **Windows daemon 无法自启**:启动 daemon 从阻塞等待改为后台 spawn + 轮询实例文件(此前在 Windows 上首启永久挂起,必须手动 `kimi web`);启动不再弹控制台黑窗
+- daemon 连接失败时给出明确提示(找不到 kimi CLI 请先安装并登录)
+
 ## [1.0.5] - 2026-07-24
 
 ### 修复
