@@ -229,7 +229,7 @@ export function useSideChat(rawState: ExtendedState, deps: UseSideChatDeps) {
         content: [{ type: 'text', text: trimmed }],
         agentId,
         model,
-        thinking: (await resolveThinkingForPrompt(sid, model)) ?? rawState.thinking,
+        thinking: await resolveThinkingForPrompt(sid, model),
         permissionMode: rawState.permission,
         planMode: rawState.planModeBySession[sid] ?? false,
         swarmMode: rawState.swarmModeBySession[sid] ?? false,

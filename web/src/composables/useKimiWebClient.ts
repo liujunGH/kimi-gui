@@ -666,7 +666,9 @@ async function refreshSessionStatus(sessionId: string): Promise<void> {
     },
   }));
   rawState.swarmModeBySession = { ...rawState.swarmModeBySession, [sessionId]: st.swarmMode };
+  saveSwarmModeToStorage();
   rawState.planModeBySession = { ...rawState.planModeBySession, [sessionId]: st.planMode };
+  savePlanModeToStorage();
   // Fold the session's own thinking level too — per-session state wins over the
   // per-model storage pick (see thinkingBySession on ExtendedState).
   if (st.thinkingEffort.length > 0) {
@@ -857,9 +859,11 @@ function applyEvent(event: ReturnType<typeof toAppEvent>, sessionId: string, seq
   if (event.type === 'sessionUsageUpdated') {
     if (event.swarmMode !== undefined) {
       rawState.swarmModeBySession = { ...rawState.swarmModeBySession, [event.sessionId]: event.swarmMode };
+      saveSwarmModeToStorage();
     }
     if (event.planMode !== undefined) {
       rawState.planModeBySession = { ...rawState.planModeBySession, [event.sessionId]: event.planMode };
+      savePlanModeToStorage();
     }
     if (event.thinking !== undefined) {
       rawState.thinkingBySession = {

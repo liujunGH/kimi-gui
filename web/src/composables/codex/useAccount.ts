@@ -127,11 +127,11 @@ function reopenAuthPage(): void {
   if (pendingFlow.value) void openAuthPage(pendingFlow.value.verificationUriComplete);
 }
 
-async function logout(): Promise<void> {
+async function logout(apiLogout?: () => Promise<void>): Promise<void> {
   if (busy.value) return;
   busy.value = true;
   try {
-    await getKimiWebApi().logout();
+    await (apiLogout ? apiLogout() : getKimiWebApi().logout());
     state.value = 'unauthed';
     useToast().toast('已退出登录');
   } finally {

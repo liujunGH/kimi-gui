@@ -203,7 +203,12 @@ function thinkingEnabled(): boolean {
 }
 
 function toggleDefaultThinking(): void {
-  emit('updateConfig', { thinking: { enabled: !thinkingEnabled() } } as Partial<AppConfig>);
+  // Preserve any existing fields (e.g. effort) on config.thinking — a shallow
+  // config merge would otherwise replace the whole object and wipe them.
+  const existing = (props.config?.thinking ?? {}) as Record<string, unknown>;
+  emit('updateConfig', {
+    thinking: { ...existing, enabled: !thinkingEnabled() },
+  } as Partial<AppConfig>);
 }
 
 // Telemetry is opt-out: undefined and `true` both mean enabled, only explicit

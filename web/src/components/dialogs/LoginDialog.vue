@@ -119,7 +119,13 @@ async function startFlow(): Promise<void> {
   consecutivePollFailures = 0;
   step.value = 'starting';
 
-  const result = await props.onStartOAuthLogin();
+  let result: Awaited<ReturnType<typeof props.onStartOAuthLogin>>;
+  try {
+    result = await props.onStartOAuthLogin();
+  } catch {
+    step.value = 'error';
+    return;
+  }
   if (!result) {
     step.value = 'error';
     return;
@@ -167,7 +173,12 @@ function startCountdown(): void {
 function scheduleNextPoll(intervalSec: number): void {
   if (pollTimer) clearTimeout(pollTimer);
   pollTimer = setTimeout(async () => {
-    const result = await props.onPollOAuthLogin();
+    let result: Awaited<ReturnType<typeof props.onPollOAuthLogin>>;
+    try {
+      result = await props.onPollOAuthLogin();
+    } catch {
+      result = null;
+    }
     if (result === null) {
       // Poll failed (or no active flow). Keep polling through transient
       // blips, but give up with an explicit error after several in a row.
@@ -220,7 +231,7 @@ async function close(): Promise<void> {
   stopTimers();
   // Best-effort cancel
   if (step.value === 'device-code') {
-    void props.onCancelOAuthLogin();
+    void props.onCancelOAuthLogin().catch(() => {});
   }
   emit('close');
 }

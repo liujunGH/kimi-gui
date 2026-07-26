@@ -145,10 +145,11 @@ function act(key: ApprovalActKey) {
     return;
   }
   if (client && props.approvalId) {
-    responded.value = true;
     void client.respondApproval(props.approvalId, {
       decision: key === 'reject' ? 'rejected' : 'approved',
       scope: key === 'session' ? 'session' : undefined,
+    }).then((ok) => {
+      if (ok) responded.value = true;
     });
   }
 }

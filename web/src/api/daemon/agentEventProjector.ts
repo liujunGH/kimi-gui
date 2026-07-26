@@ -841,7 +841,8 @@ export function createAgentProjector(): AgentProjector {
         const promptId = s.turnPromptId.get(turnId) ?? s.currentPromptId;
         if (!msgId || !promptId) break;
 
-        const toolCallId: string = p?.toolCallId;
+        const toolCallId: string | undefined = p?.toolCallId;
+        if (!toolCallId) break;
         // Real daemon field name is 'name' per event-projector.ts
         const toolName: string = p?.name ?? p?.toolName ?? '';
         const args = p?.args ?? p?.input ?? {};

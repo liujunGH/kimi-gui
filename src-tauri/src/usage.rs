@@ -163,6 +163,12 @@ fn scrape_plan_usage() -> Result<PlanUsage, String> {
     let sandbox = std::env::temp_dir().join(format!("kimi-usage-home-{}", std::process::id()));
     let _ = fs::remove_dir_all(&sandbox);
     fs::create_dir_all(&sandbox).map_err(|e| e.to_string())?;
+    // 凭据副本会进这个目录:Linux 上 /tmp 多用户共享,必须把权限收紧到仅当前用户。
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&sandbox, fs::Permissions::from_mode(0o700));
+    }
     let real_home = kimi_home();
     for item in [
         "config.toml",
@@ -218,14 +224,17 @@ fn refresh_background() {
         return;
     }
     thread::spawn(|| {
-        match scrape_plan_usage() {
-            Ok(u) => {
-                if let Ok(mut guard) = PLAN_USAGE.lock() {
-                    *guard = Some(u);
+        // catch_unwind 防止线程 panic 把 SCRAPE_RUNNING 永远留在 true。
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            match scrape_plan_usage() {
+                Ok(u) => {
+                    if let Ok(mut guard) = PLAN_USAGE.lock() {
+                        *guard = Some(u);
+                    }
                 }
+                Err(e) => eprintln!("[kimi-gui] 额度抓取失败:{e}"),
             }
-            Err(e) => eprintln!("[kimi-gui] 额度抓取失败:{e}"),
-        }
+        }));
         SCRAPE_RUNNING.store(false, Ordering::Relaxed);
     });
 }

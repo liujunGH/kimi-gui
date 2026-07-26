@@ -17,11 +17,15 @@ const props = defineProps<WorkspaceGroupProps & { pinnedIds?: string[]; activeWo
 const emit = defineEmits<{
   (e: 'select-session', id: string): void;
   (e: 'toggle-pin', id: string): void;
+  (e: 'archive-session', id: string): void;
+  (e: 'rename-session', id: string): void;
+  (e: 'export-session', id: string): void;
+  (e: 'copy-session-id', id: string): void;
   (e: 'set-sort', mode: WorkspaceSortMode): void;
-  (e: 'select-workspace'): void;
-  (e: 'rename-workspace'): void;
-  (e: 'delete-workspace'): void;
-  (e: 'copy-path'): void;
+  (e: 'select-workspace', id: string): void;
+  (e: 'rename-workspace', id: string): void;
+  (e: 'delete-workspace', id: string): void;
+  (e: 'copy-path', root: string): void;
 }>();
 
 const SORTS: { id: WorkspaceSortMode; label: string }[] = [
@@ -65,7 +69,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick));
         class="ws-name"
         :class="{ 'ws-active': props.activeWorkspace }"
         :title="props.activeWorkspace ? '活跃工作区' : '设为活跃工作区'"
-        @click.stop="emit('select-workspace')"
+        @click.stop="emit('select-workspace', props.workspace.id)"
       >
         {{ props.workspace.name }}
       </button>
@@ -85,10 +89,10 @@ onUnmounted(() => document.removeEventListener('click', onDocClick));
           <span class="mi-label">{{ s.label }}</span>
         </button>
         <div class="menu-sep"></div>
-        <button class="menu-item" @click.stop="emit('rename-workspace'); menuOpen = false"><span class="mi-label">重命名工作区</span></button>
-        <button class="menu-item" @click.stop="emit('copy-path'); menuOpen = false"><span class="mi-label">复制路径</span></button>
+        <button class="menu-item" @click.stop="emit('rename-workspace', props.workspace.id); menuOpen = false"><span class="mi-label">重命名工作区</span></button>
+        <button class="menu-item" @click.stop="emit('copy-path', props.workspace.root); menuOpen = false"><span class="mi-label">复制路径</span></button>
         <div class="menu-sep"></div>
-        <button class="menu-item" @click.stop="emit('delete-workspace'); menuOpen = false"><span class="mi-label">移除工作区</span></button>
+        <button class="menu-item" @click.stop="emit('delete-workspace', props.workspace.id); menuOpen = false"><span class="mi-label">移除工作区</span></button>
       </div>
     </div>
     <div class="ws-threads">
@@ -101,6 +105,10 @@ onUnmounted(() => document.removeEventListener('click', onDocClick));
         :pinned="props.pinnedIds?.includes(s.id) ?? false"
         @select="emit('select-session', s.id)"
         @toggle-pin="emit('toggle-pin', s.id)"
+        @archive="emit('archive-session', s.id)"
+        @rename="emit('rename-session', s.id)"
+        @export="emit('export-session', s.id)"
+        @copy-id="emit('copy-session-id', s.id)"
       />
     </div>
   </section>

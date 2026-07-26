@@ -7,6 +7,7 @@
  */
 import { computed, onMounted, ref } from 'vue';
 import type { PermissionMode } from '../../../types';
+import type { AppSession, AppConfig } from '../../../api/types';
 import CodexIcon from '../layout/CodexIcon.vue';
 import { useTheme } from '../../../composables/codex/useTheme';
 import { useKimiClient } from '../../../composables/codex/useKimiClient';
@@ -33,22 +34,24 @@ const NAV: { id: SectionId; label: string; icon: string }[] = [
 const active = ref<SectionId>(props.initialSection);
 
 /* ---------- 通用 ---------- */
-// 权限默认值:读 client.permission,写 client.setPermission
+// 权限默认值:读 daemon 全局配置,写 client.updateConfig
 const permDefault = computed<PermissionMode>({
-  get: () => client.permission.value ?? 'manual',
-  set: (v) => void client.setPermission(v),
+  get: () =>
+    ((client.config.value as AppConfig | null)?.defaultPermissionMode as PermissionMode | undefined) ??
+    'manual',
+  set: (v: PermissionMode) => void client.updateConfig({ defaultPermissionMode: v }),
 });
 
-// 默认模型:读 client.models + defaultModel,写 client.setModel
+// 默认模型:读 daemon 全局配置,写 client.updateConfig
 const modelOptions = computed(() =>
-  (client.models.value ?? []).map((m: any) => ({
+  (client.models.value ?? []).map((m) => ({
     id: m.id,
     name: m.displayName ?? m.model ?? m.id,
   })),
 );
 const defaultModelId = computed<string>({
-  get: () => client.defaultModel.value ?? '',
-  set: (v) => void client.setModel(v),
+  get: () => (client.config.value as AppConfig | null)?.defaultModel ?? client.defaultModel.value ?? '',
+  set: (v) => void client.updateConfig({ defaultModel: v }),
 });
 
 // 通知开关
@@ -89,7 +92,7 @@ function setFontSize(px: number) {
 /* ---------- 权限(详细) ---------- */
 
 /* ---------- 归档 ---------- */
-const archivedSessions = ref<any[]>([]);
+const archivedSessions = ref<AppSession[]>([]);
 /** 应用版本(构建期注入,单一来源 tauri.conf.json) */
 const appVersion = __APP_VERSION__;
 
@@ -116,10 +119,11 @@ const archivedLoading = ref(false);
 async function loadArchive() {
   archivedLoading.value = true;
   try {
-    const res: any = await client.loadArchivedSessions();
-    archivedSessions.value = res?.items ?? res ?? [];
-  } catch {
-    /* ignore */
+    const res = await client.loadArchivedSessions();
+    archivedSessions.value = res?.items ?? [];
+  } catch (err) {
+    console.warn('[settings] load archived sessions failed', err);
+    toast('加载归档会话失败');
   } finally {
     archivedLoading.value = false;
   }
@@ -127,7 +131,7 @@ async function loadArchive() {
 /** 恢复归档会话(返回成功则移出列表) */
 async function onRestore(id: string) {
   const ok = await client.restoreSession(id);
-  if (ok) archivedSessions.value = archivedSessions.value.filter((s: any) => s.id !== id);
+  if (ok) archivedSessions.value = archivedSessions.value.filter((s) => s.id !== id);
 }
 onMounted(() => void loadArchive());
 
@@ -394,7 +398,7 @@ onMounted(() => void loadArchive());
                 <span class="ai-icon"><CodexIcon name="archive" /></span>
                 <div class="ai-info">
                   <div class="ai-name">{{ s.title || s.id }}</div>
-                  <div class="ai-meta">归档于 {{ s.archivedAt?.slice(0, 10) ?? '未知' }}</div>
+                  <div class="ai-meta">归档于 {{ s.updatedAt?.slice(0, 10) ?? '未知' }}</div>
                 </div>
                 <button class="ai-restore" @click="onRestore(s.id)">恢复</button>
               </div>

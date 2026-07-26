@@ -42,7 +42,7 @@ function openFileMenu(ev: MouseEvent | { x: number; y: number }, f: string) {
   cardEl = target?.closest?.('.diff-inline, .rp-diff, .body-diff') ?? null;
   lastOpenEvent = 'target' in ev ? ev : null;
   file.value = f;
-  hasSelection.value = !!String(window.getSelection());
+  hasSelection.value = !!window.getSelection()?.toString().trim();
   pos.value = {
     x: Math.max(0, Math.min(x, window.innerWidth - 220)),
     y: Math.max(0, Math.min(y, window.innerHeight - 300)),

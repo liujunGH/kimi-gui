@@ -8,7 +8,9 @@
 import { computed, onMounted, ref } from 'vue';
 import CodexIcon from '../layout/CodexIcon.vue';
 import { useAccount } from '../../../composables/codex/useAccount';
+import { useKimiClient } from '../../../composables/codex/useKimiClient';
 
+const client = useKimiClient();
 const { state, pendingFlow, probe, startLogin, cancelLogin, reopenAuthPage, logout } = useAccount();
 const menuOpen = ref(false);
 
@@ -27,7 +29,7 @@ function onRowClick() {
 }
 async function onLogout() {
   menuOpen.value = false;
-  await logout();
+  await logout(() => client.logout());
 }
 </script>
 

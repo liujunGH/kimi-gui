@@ -1795,7 +1795,10 @@ describe('useWorkspaceState — snapshot prompt recovery', () => {
     );
   });
 
-  it('falls back to the active level for a drained prompt whose model left the catalog', async () => {
+  it('does not fall back to the active level for a drained prompt whose model left the catalog', async () => {
+    // The active-session rawState.thinking tracks whatever session the user is
+    // looking at now; a queue drain for a background session must not submit
+    // that level. Unknown models resolve to undefined and let the daemon decide.
     const state = createState();
     state.sessions = [{ ...createSession(), id: 'sess_a', model: 'provider/gone-model' }];
     state.thinking = 'max';
@@ -1816,7 +1819,7 @@ describe('useWorkspaceState — snapshot prompt recovery', () => {
     await vi.waitFor(() => expect(apiMock.submitPrompt).toHaveBeenCalled());
     expect(apiMock.submitPrompt).toHaveBeenCalledWith(
       'sess_a',
-      expect.objectContaining({ model: 'provider/gone-model', thinking: 'max' }),
+      expect.objectContaining({ model: 'provider/gone-model', thinking: undefined }),
     );
   });
 

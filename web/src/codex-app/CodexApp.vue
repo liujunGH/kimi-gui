@@ -243,10 +243,9 @@ useHotkeys([
 
 // ---------------------------------------------------------------- 侧栏数据
 
-const sidebarWorkspaces = computed(() =>
-  (client.workspacesView.value ?? []).map((w) => ({ name: w.name, branch: '', id: w.id })),
-);
+const sidebarWorkspaces = computed(() => client.workspacesView.value ?? []);
 const sidebarSessions = computed(() => client.sessionsForView.value ?? []);
+const sidebarCurrentWsId = computed(() => client.activeWorkspaceId.value ?? '');
 const sidebarCurrentWs = computed(() => {
   const id = client.activeWorkspaceId.value ?? '';
   return (client.workspacesView.value ?? []).find((w) => w.id === id)?.name ?? id;
@@ -551,9 +550,16 @@ function onNewTask() {
   composerRef.value?.focus?.();
 }
 /** 点工作区组名 = 切换活跃工作区(对齐 kimi web:列表即选择器) */
-function onSelectWorkspace(name: string) {
-  const ws = (client.workspacesView.value ?? []).find((w) => w.name === name);
-  if (ws) client.openWorkspace(ws.id);
+function onSelectWorkspace(id: string) {
+  client.openWorkspace(id);
+}
+async function onCopyWorkspacePath(root: string) {
+  try {
+    await navigator.clipboard.writeText(root);
+    toast('已复制工作区路径');
+  } catch {
+    toast('复制失败');
+  }
 }
 /** 「工作区」标题行 + → 原生文件夹选择 → 添加 */
 async function onAddWorkspace() {
@@ -684,28 +690,59 @@ function onRenameSession() {
     onConfirm: (v) => void client.renameSession(id, v),
   };
 }
-function onRenameWorkspace() {
-  const id = client.activeWorkspaceId.value;
-  if (!id) return;
+function onRenameWorkspace(id?: string) {
+  const workspaceId = id || client.activeWorkspaceId.value;
+  if (!workspaceId) return;
+  const name = client.workspacesView.value.find((w) => w.id === workspaceId)?.name ?? '';
   promptDialog.value = {
     title: '重命名工作区',
-    initial: sidebarCurrentWs.value,
+    initial: name || sidebarCurrentWs.value,
     confirmLabel: '重命名',
     input: true,
-    onConfirm: (v) => void client.renameWorkspace(id, v),
+    onConfirm: (v) => void client.renameWorkspace(workspaceId, v),
   };
 }
-function onDeleteWorkspace() {
-  const id = client.activeWorkspaceId.value;
-  if (!id) return;
+function onDeleteWorkspace(id?: string) {
+  const workspaceId = id || client.activeWorkspaceId.value;
+  if (!workspaceId) return;
+  const name = client.workspacesView.value.find((w) => w.id === workspaceId)?.name ?? workspaceId;
   promptDialog.value = {
-    title: '移除工作区?',
+    title: `移除工作区「${name}」?`,
     description: '会话数据保留,可重新添加。',
     confirmLabel: '移除',
     danger: true,
     input: false,
-    onConfirm: () => void client.deleteWorkspace(id),
+    onConfirm: () => void client.deleteWorkspace(workspaceId),
   };
+}
+
+/** 侧栏行内菜单:按 id 操作任意 session(不切换活跃会话) */
+function onRenameSessionById(id: string) {
+  const title = client.sessions.value.find((s) => s.id === id)?.title ?? '';
+  promptDialog.value = {
+    title: '重命名任务',
+    initial: title,
+    confirmLabel: '重命名',
+    input: true,
+    onConfirm: (v) => void client.renameSession(id, v),
+  };
+}
+function onArchiveSessionById(id: string) {
+  promptDialog.value = {
+    title: '归档任务?',
+    description: '归档后可在设置中恢复。',
+    confirmLabel: '归档',
+    danger: true,
+    input: false,
+    onConfirm: () => void client.archiveSession(id),
+  };
+}
+function onExportSessionById(id: string) {
+  void client.exportSession(id);
+}
+function onCopySessionId(id: string) {
+  void navigator.clipboard.writeText(id);
+  toast('已复制会话 ID');
 }
 
 /** 文件路径链接点击 → 读文件内容 → 在 DetailPane 显示 */
@@ -942,9 +979,9 @@ async function searchFiles(q: string) {
     <AppShell>
       <template #sidebar="{ toggleCollapsed }">
         <Sidebar
-          :workspaces="sidebarWorkspaces as never"
+          :workspaces="sidebarWorkspaces"
           :sessions="sidebarSessions"
-          :current-workspace-id="sidebarCurrentWs"
+          :current-workspace-id="sidebarCurrentWsId"
           :current-session-id="sidebarCurrentSession"
           :filter="filter"
           :collapsed="false"
@@ -960,6 +997,11 @@ async function searchFiles(q: string) {
           @add-workspace="onAddWorkspace"
           @rename-workspace="onRenameWorkspace"
           @delete-workspace="onDeleteWorkspace"
+          @copy-path="onCopyWorkspacePath"
+          @archive-session="onArchiveSessionById"
+          @rename-session="onRenameSessionById"
+          @export-session="onExportSessionById"
+          @copy-session-id="onCopySessionId"
         />
       </template>
       <header class="app-toolbar" @dblclick="onTitlebarDblClick">
@@ -976,9 +1018,9 @@ async function searchFiles(q: string) {
   <AppShell v-else>
     <template #sidebar="{ toggleCollapsed }">
       <Sidebar
-        :workspaces="sidebarWorkspaces as never"
+        :workspaces="sidebarWorkspaces"
         :sessions="sidebarSessions"
-        :current-workspace-id="sidebarCurrentWs"
+        :current-workspace-id="sidebarCurrentWsId"
         :current-session-id="sidebarCurrentSession"
         :filter="filter"
         :collapsed="false"
@@ -994,6 +1036,11 @@ async function searchFiles(q: string) {
         @set-workspace-sort="(m: any) => client.setWorkspaceSortMode(m)"
         @rename-workspace="onRenameWorkspace"
         @delete-workspace="onDeleteWorkspace"
+        @copy-path="onCopyWorkspacePath"
+        @archive-session="onArchiveSessionById"
+        @rename-session="onRenameSessionById"
+        @export-session="onExportSessionById"
+        @copy-session-id="onCopySessionId"
       >
         <template #new-task>
           <button class="new-task" @click="onNewTask">
@@ -1009,10 +1056,10 @@ async function searchFiles(q: string) {
       <!-- toolbar -->
       <span class="toolbar-title">{{ activeSession?.title || sidebarCurrentWs || 'Kimi Code' }}</span>
       <ThreadMenu
-        @pin="togglePin(client.activeSessionId.value)"
+        @pin="client.activeSessionId.value && togglePin(client.activeSessionId.value)"
         @open-side-task="ui.openSideTask('thread')"
         @rename="onRenameSession"
-        @archive="void client.archiveSession(client.activeSessionId.value)"
+        @archive="client.activeSessionId.value && void client.archiveSession(client.activeSessionId.value)"
         @copy="void client.exportSession()"
         @fork="void client.forkSession()"
         @export="void client.exportSession()"

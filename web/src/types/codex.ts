@@ -43,7 +43,7 @@ export type WorkspaceSortMode = 'recent' | 'manual' | 'created';
 // sidebar/
 // ---------------------------------------------------------------------------
 
-import type { Session, Workspace } from '../types';
+import type { Session, WorkspaceView } from '../types';
 
 /** 附件(prompt attachments,跟官方 useKimiWebClient 一致) */
 export interface PromptAttachment {
@@ -54,7 +54,7 @@ export interface PromptAttachment {
 }
 
 export interface SidebarProps {
-  workspaces: Workspace[];
+  workspaces: WorkspaceView[];
   currentWorkspaceId: string;
   sessions: Session[];
   currentSessionId: string;
@@ -75,7 +75,7 @@ export interface SidebarEmits {
 }
 
 export interface WorkspaceGroupProps {
-  workspace: Workspace;
+  workspace: WorkspaceView;
   sessions: Session[];
   currentSessionId: string;
   sortMode: WorkspaceSortMode;

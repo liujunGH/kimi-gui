@@ -27,10 +27,15 @@ function onBrandDblclick(e: MouseEvent) {
 const props = defineProps<SidebarProps & { pinnedIds?: string[] }>();
 const emit = defineEmits<SidebarEmits & {
   (e: 'open-settings'): void;
-  (e: 'select-workspace', name: string): void;
+  (e: 'select-workspace', id: string): void;
+  (e: 'archive-session', id: string): void;
+  (e: 'rename-session', id: string): void;
+  (e: 'export-session', id: string): void;
+  (e: 'copy-session-id', id: string): void;
   (e: 'set-workspace-sort', mode: WorkspaceSortMode): void;
-  (e: 'rename-workspace', name: string): void;
-  (e: 'delete-workspace', name: string): void;
+  (e: 'rename-workspace', id: string): void;
+  (e: 'delete-workspace', id: string): void;
+  (e: 'copy-path', root: string): void;
 }>();
 
 /** 工作区排序模式:接 client.setWorkspaceSortMode(持久化) */
@@ -130,25 +135,34 @@ function sessionsOf(wsName: string): Session[] {
             :pinned="true"
             @select="emit('select-session', s.id)"
             @toggle-pin="emit('toggle-pin', s.id)"
+            @archive="emit('archive-session', s.id)"
+            @rename="emit('rename-session', s.id)"
+            @export="emit('export-session', s.id)"
+            @copy-id="emit('copy-session-id', s.id)"
           />
         </div>
       </section>
 
       <WorkspaceGroup
         v-for="ws in visibleWorkspaces"
-        :key="(ws as unknown as { id?: string }).id ?? ws.name"
+        :key="ws.id"
         :workspace="ws"
         :sessions="sessionsOf(ws.name)"
         :current-session-id="props.currentSessionId"
         :sort-mode="sortOf(ws.name)"
         :pinned-ids="props.pinnedIds"
-        :active-workspace="ws.name === props.currentWorkspaceId"
+        :active-workspace="ws.id === props.currentWorkspaceId"
         @select-session="(id) => emit('select-session', id)"
         @toggle-pin="(id) => emit('toggle-pin', id)"
+        @archive-session="emit('archive-session', $event)"
+        @rename-session="emit('rename-session', $event)"
+        @export-session="emit('export-session', $event)"
+        @copy-session-id="emit('copy-session-id', $event)"
         @set-sort="(m) => onSetSort(ws.name, m)"
-        @select-workspace="emit('select-workspace', ws.name)"
-        @rename-workspace="emit('rename-workspace', ws.name)"
-        @delete-workspace="emit('delete-workspace', ws.name)"
+        @select-workspace="emit('select-workspace', $event)"
+        @rename-workspace="emit('rename-workspace', $event)"
+        @delete-workspace="emit('delete-workspace', $event)"
+        @copy-path="emit('copy-path', $event)"
       />
       <div v-if="showFilterEmpty" class="sf-empty">没有符合筛选的会话</div>
     </div>

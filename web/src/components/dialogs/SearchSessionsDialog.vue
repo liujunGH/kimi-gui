@@ -14,7 +14,7 @@ const { t } = useI18n();
 
 const props = defineProps<{
   sessions: Session[];
-  activeId: string;
+  activeId?: string;
 }>();
 
 const emit = defineEmits<{

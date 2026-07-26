@@ -71,29 +71,36 @@ pub fn run() {
             std::thread::spawn(move || match connect_daemon() {
                 Ok(launch) => {
                     let state: State<'_, SharedDaemon> = app_handle.state();
-                    *state.0.lock().unwrap() = Some(launch.clone());
+                    match state.0.lock() {
+                        Ok(mut guard) => *guard = Some(launch.clone()),
+                        Err(_) => {
+                            eprintln!("[kimi-gui] daemon 状态锁已 poison,跳过写实例信息");
+                        }
+                    }
 
                     // 把 token 注入到 webview:用 eval 调前端的 setCredential
                     // (serverAuth 的 setCredential 是全局函数,写 localStorage + memory)
                     // 用 localStorage 直接写(serverAuth 的 initServerAuth 会读它)
-                    let token = &launch.token;
-                    let base = &launch.base;
+                    // token/base 必须用 serde_json 转义成 JS 字符串字面量,防止引号/换行注入。
+                    let token_js = serde_json::to_string(&launch.token)
+                        .unwrap_or_else(|_| "\"\"".to_string());
+                    let base_js = serde_json::to_string(&launch.base)
+                        .unwrap_or_else(|_| "\"\"".to_string());
                     let js = format!(
                         r#"
                         try {{
                             var cred = JSON.stringify({{
                                 version: 1,
-                                credential: "{}",
+                                credential: {token_js},
                                 expiresAt: Date.now() + 7*24*60*60*1000
                             }});
                             localStorage.setItem('kimi-web.server-credential', cred);
-                            localStorage.setItem('kimi-gui.daemon-base', "{}");
+                            localStorage.setItem('kimi-gui.daemon-base', {base_js});
                             console.info('[kimi-gui] token + base injected via Rust eval');
                         }} catch(e) {{
                             console.error('[kimi-gui] token inject failed:', e);
                         }}
-                        "#,
-                        token, base
+                        "#
                     );
                     if let Some(window) = app_handle.get_webview_window("main") {
                         if let Err(e) = window.eval(&js) {
@@ -125,11 +132,6 @@ pub fn run() {
                 }
             }
         })
-        .invoke_handler(tauri::generate_handler![
-            daemon_info,
-            dock_badge::set_dock_badge,
-            usage::plan_usage
-        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

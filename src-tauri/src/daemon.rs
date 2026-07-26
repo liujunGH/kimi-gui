@@ -109,7 +109,7 @@ fn find_instance_from_instances_dir(home: &PathBuf) -> Option<(String, u64)> {
         if path.extension().and_then(|e| e.to_str()) != Some("json") {
             continue;
         }
-        let content = fs::read_to_string(&path).ok()?;
+        let Ok(content) = fs::read_to_string(&path) else { continue };
         let info: InstanceInfo = match serde_json::from_str(&content) {
             Ok(i) => i,
             Err(_) => continue,
@@ -163,10 +163,16 @@ pub fn connect_daemon() -> Result<Launch, String> {
                 use std::os::windows::process::CommandExt;
                 cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
             }
-            if cmd.spawn().is_err() {
-                continue;
-            }
+            let mut child = match cmd.spawn() {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
             for _ in 0..20 {
+                // 子进程已退出(如旧版 CLI 不认识 `web` 子命令)就立即换下一组,
+                // 不要傻等满 10s。
+                if child.try_wait().map(|st| st.is_some()).unwrap_or(false) {
+                    break;
+                }
                 if find_instance_from_instances_dir(&home).is_some()
                     || find_instance_from_legacy_lock(&home).is_some()
                 {
@@ -178,6 +184,9 @@ pub fn connect_daemon() -> Result<Launch, String> {
             if ok {
                 break;
             }
+            // 本组启动超时且子进程还活着:杀掉再试下一组,避免残留多个 daemon。
+            let _ = child.kill();
+            let _ = child.wait();
         }
         if !ok {
             return Err(

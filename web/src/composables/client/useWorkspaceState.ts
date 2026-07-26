@@ -930,12 +930,16 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
     try {
       const api = getKimiWebApi();
       const [list, home] = await Promise.all([
-        api.listWorkspaces().catch(() => [] as AppWorkspace[]),
-        api.getFsHome().catch(() => ({ home: '', recentRoots: [] })),
+        api.listWorkspaces().catch(() => undefined as AppWorkspace[] | undefined),
+        api.getFsHome().catch(() => undefined),
       ]);
-      rawState.workspaces = applyWorkspaceNameOverrides(list);
-      rawState.fsHome = home.home || null;
-      rawState.recentRoots = home.recentRoots;
+      // Keep the previous registered list when the daemon call fails — a
+      // transient network error must not make sidebar groups vanish.
+      if (list !== undefined) rawState.workspaces = applyWorkspaceNameOverrides(list);
+      if (home !== undefined) {
+        rawState.fsHome = home.home || null;
+        rawState.recentRoots = home.recentRoots;
+      }
     } catch {
       // Defensive — derived workspaces still work off the loaded sessions.
     }
@@ -1025,7 +1029,7 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
     // otherwise re-derive it in mergedWorkspaces.
     const root =
       rawState.workspaces.find((w) => w.id === event.workspaceId)?.root ?? event.root;
-    if (root && !rawState.hiddenWorkspaceRoots.includes(root)) {
+    if (root && !rawState.hiddenWorkspaceRoots.some((r) => workspaceRootKey(r) === workspaceRootKey(root))) {
       rawState.hiddenWorkspaceRoots = [...rawState.hiddenWorkspaceRoots, root];
       saveHiddenWorkspacesToStorage(rawState.hiddenWorkspaceRoots);
     }
@@ -1537,7 +1541,7 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
         // tracks whatever session the user is looking at now: a queue drain for
         // a background session would otherwise submit the level of the session
         // the user switched to since enqueueing.
-        thinking: (await modelProvider.resolveThinkingForPrompt(sid, model)) ?? rawState.thinking,
+        thinking: await modelProvider.resolveThinkingForPrompt(sid, model),
         permissionMode: rawState.permission,
         planMode,
         swarmMode,
@@ -1713,7 +1717,7 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
         model,
         // Resolved against this prompt's own session + model, same as a normal
         // send (see submitPromptInternal).
-        thinking: (await modelProvider.resolveThinkingForPrompt(sid, model)) ?? rawState.thinking,
+        thinking: await modelProvider.resolveThinkingForPrompt(sid, model),
         permissionMode: rawState.permission,
         planMode: rawState.planModeBySession[sid] ?? false,
         swarmMode: rawState.swarmModeBySession[sid] ?? false,
@@ -1990,11 +1994,11 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
   async function respondApproval(
     approvalId: string,
     response: { decision: ApprovalDecision; scope?: 'session'; feedback?: string; selectedLabel?: string },
-  ): Promise<void> {
+  ): Promise<boolean> {
     const sid = rawState.activeSessionId;
-    if (!sid) return;
+    if (!sid) return false;
     // Guard against a second click while the first respond is in flight.
-    if (pendingApprovalActions[approvalId]) return;
+    if (pendingApprovalActions[approvalId]) return false;
     pendingApprovalActions[approvalId] = true;
     try {
       const api = getKimiWebApi();
@@ -2007,14 +2011,16 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
       await api.respondApproval(sid, approvalId, fullResponse);
       // Remove from local approvals immediately (WS event will confirm)
       removePendingApproval(sid, approvalId);
+      return true;
     } catch (err) {
       if (isAlreadyResolvedError(err)) {
         // Already resolved (another client or a raced event) — that is the
         // desired end state, so drop it locally without surfacing an error.
         removePendingApproval(sid, approvalId);
-      } else {
-        pushOperationFailure('respondApproval', err, { sessionId: sid });
+        return true;
       }
+      pushOperationFailure('respondApproval', err, { sessionId: sid });
+      return false;
     } finally {
       delete pendingApprovalActions[approvalId];
     }
@@ -2076,10 +2082,12 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
     try {
       const api = getKimiWebApi();
       // A background subagent row is keyed by agent id, but REST `/tasks` only
-      // knows its background-task id.
-      const restTaskId = (rawState.tasksBySession[sid] ?? []).find((t) => t.id === taskId)
-        ?.backgroundTaskId;
-      await api.cancelTask(sid, restTaskId ?? taskId);
+      // knows its background-task id. Regular bash/tool tasks use their own id
+      // directly. Foreground subagents never registered with `/tasks`, so we
+      // must not send their agent id there.
+      const task = (rawState.tasksBySession[sid] ?? []).find((t) => t.id === taskId);
+      if (task?.kind === 'subagent' && task.backgroundTaskId === undefined) return;
+      await api.cancelTask(sid, task?.backgroundTaskId ?? taskId);
       // Update task status locally
       const list = rawState.tasksBySession[sid] ?? [];
       rawState.tasksBySession = {
@@ -2339,7 +2347,7 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
           activeSession.workspaceId === id ||
           workspaceIdForSession(activeSession) === id),
     );
-    if (root && !rawState.hiddenWorkspaceRoots.includes(root)) {
+    if (root && !rawState.hiddenWorkspaceRoots.some((r) => workspaceRootKey(r) === workspaceRootKey(root))) {
       rawState.hiddenWorkspaceRoots = [...rawState.hiddenWorkspaceRoots, root];
       saveHiddenWorkspacesToStorage(rawState.hiddenWorkspaceRoots);
     }

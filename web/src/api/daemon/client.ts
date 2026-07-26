@@ -1229,7 +1229,26 @@ export class DaemonKimiWebApi implements KimiWebApi {
     lineCount?: number;
   } | null> {
     try {
-      return await this.http.get('/fs:content', { path });
+      const data = await this.http.get<{
+        path: string;
+        content: string;
+        encoding: string;
+        mime: string;
+        language_id?: string;
+        is_binary?: boolean;
+        size: number;
+        line_count?: number;
+      }>('/fs:content', { path });
+      return {
+        path: data.path,
+        content: data.content,
+        encoding: data.encoding,
+        mime: data.mime,
+        languageId: data.language_id,
+        isBinary: data.is_binary ?? false,
+        size: data.size,
+        lineCount: data.line_count,
+      };
     } catch {
       return null;
     }

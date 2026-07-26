@@ -77,7 +77,7 @@ describe('useSideChat — sendSideChatPromptOn', () => {
       expect.objectContaining({
         agentId: 'agent_btw_1',
         model: 'kimi-code',
-        thinking: 'high',
+        thinking: undefined,
         permissionMode: 'auto',
         planMode: true,
         swarmMode: false,
@@ -86,10 +86,11 @@ describe('useSideChat — sendSideChatPromptOn', () => {
     expect(pushOperationFailure).not.toHaveBeenCalled();
   });
 
-  it('falls back to the active level when the parent model has left the catalog', async () => {
+  it('does not fall back to the active level when the parent model has left the catalog', async () => {
     // resolveThinkingForPrompt returns undefined for a model the catalog no
-    // longer lists — the submit then keeps the active-session level (same
-    // fallback as the normal prompt paths).
+    // longer lists — the submit must NOT keep the active-session level (that
+    // tracks whatever session the user is looking at now); it stays undefined
+    // and lets the daemon decide.
     apiMock.startBtw.mockReset();
     apiMock.submitPrompt.mockReset();
     apiMock.startBtw.mockResolvedValue({ agentId: 'agent_btw_1' });
@@ -109,7 +110,7 @@ describe('useSideChat — sendSideChatPromptOn', () => {
 
     expect(apiMock.submitPrompt).toHaveBeenCalledWith(
       'sess_1',
-      expect.objectContaining({ thinking: 'max' }),
+      expect.objectContaining({ thinking: undefined }),
     );
   });
 

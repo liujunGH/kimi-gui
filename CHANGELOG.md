@@ -4,6 +4,29 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.8] - 2026-07-26
+
+### 修复
+
+- **工作区移除/重命名误伤活跃工作区**:侧栏菜单对非活跃工作区操作时,实际作用到了当前活跃工作区;现统一改为按 workspace id 精确定位
+- **归档管理显示「归档于 未知」**:读取了不存在的 `archivedAt` 字段,改为 `updatedAt`;加载失败从静默吞掉改为 toast 提示
+- **设置页默认权限/默认模型写错地方**:此前改的是当前会话,现改为 daemon 全局配置
+- **Tauri 命令丢失**:`invoke_handler` 被二次注册覆盖,导致双击放大、退出应用失效
+- **daemon 启动残留多实例**:spawn 超时不杀子进程,可能同时起多个 daemon;现超时 kill 并立即换下一组
+- **工作区列表瞬时失败清空**:`loadWorkspaces` 失败时不再覆盖已有注册列表
+- **已移除工作区大小写复活**:隐藏路径改用规范化 key 匹配,`C:\Foo` 与 `c:\foo` 视为同一目录
+- **cancelTask 误操作**:foreground subagent 的 agent id 不再误发到 REST `/tasks`
+- **后台会话 thinking 级别错乱**:prompt/steer/BTW/skill 不再 fallback 到当前活动会话的级别
+- **eval 注入面**:token/base 注入 webview 时改用 `serde_json` 转义
+- **凭据 sandbox 权限收紧**:Linux `/tmp` 下 sandbox 创建后设 0700
+
+### 加固
+
+- **OAuth 登录对话框**:启动/轮询/取消全部补齐 try/catch,失败不再卡住或产生未处理 rejection
+- **审批卡防永久禁用**:改为请求成功后才标记 responded,网络失败可重试
+- **daemon 实例扫描**:单个实例文件读取失败不再中断整个扫描
+- **scrape 线程 panic 保护**:`SCRAPE_RUNNING` 不再因 panic 永久卡住
+
 ## [1.0.7] - 2026-07-24
 
 ### 修复

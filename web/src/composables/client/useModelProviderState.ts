@@ -451,7 +451,7 @@ export function useModelProviderState(
       const rawModel = rawState.sessions.find((s) => s.id === sid)?.model;
       const skillModel = (rawModel && rawModel.length > 0 ? rawModel : rawState.defaultModel) ?? undefined;
       const persisted = await persistSessionProfile(
-        { thinking: (await resolveThinkingForPrompt(sid, skillModel)) ?? rawState.thinking },
+        { thinking: await resolveThinkingForPrompt(sid, skillModel) },
         sid,
       );
       if (!persisted) throw PROFILE_PERSIST_FAILED;

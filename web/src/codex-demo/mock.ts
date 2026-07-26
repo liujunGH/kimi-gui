@@ -5,7 +5,7 @@
  * 届时来自对应端点(见 prototype/README.md 数据来源表)。
  */
 import { ref } from 'vue';
-import type { ChatTurn, Session, TodoView, ToolCall, Workspace } from '../types';
+import type { ChatTurn, Session, TodoView, ToolCall, WorkspaceView } from '../types';
 import type { KimiClient } from '../composables/codex/useKimiClient';
 import type {
   ApprovalRequestSummary,
@@ -24,10 +24,10 @@ import type {
 
 // ---------------------------------------------------------------- 侧栏(动态:/workspaces + /sessions)
 
-export const workspaces: Workspace[] = [
-  { name: 'kimi-gui', branch: 'main' },
-  { name: 'my-api-server', branch: 'dev' },
-  { name: 'blog', branch: 'main' },
+export const workspaces: WorkspaceView[] = [
+  { id: 'kimi-gui', name: 'kimi-gui', root: '/Users/demo/kimi-gui', shortPath: '~/kimi-gui', sessionCount: 2 },
+  { id: 'my-api-server', name: 'my-api-server', root: '/Users/demo/my-api-server', shortPath: '~/my-api-server', sessionCount: 1 },
+  { id: 'blog', name: 'blog', root: '/Users/demo/blog', shortPath: '~/blog', sessionCount: 0 },
 ];
 
 export const sessions: Session[] = [
