@@ -4,6 +4,12 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.9] - 2026-07-26
+
+### 修复
+
+- **macOS「已损坏」改为可放行**:Tauri 的 ad-hoc 签名只覆盖主二进制,Info.plist 和资源未 seal,macOS 26 判为损坏;现在打包/CI 都会 `codesign --deep --force --sign -` 完整重签,与 Electron 的 afterSign 行为对齐,Gatekeeper 提示降级为「无法验证开发者」可右键打开
+
 ## [1.0.8] - 2026-07-26
 
 ### 修复

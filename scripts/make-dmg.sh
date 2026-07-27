@@ -27,6 +27,10 @@ STAGE="$(mktemp -d /tmp/kimi-dmg-stage.XXXXXX)"
 trap 'rm -rf "$STAGE"' EXIT
 cp -R "$SRC_DIR/Kimi Code.app" "$STAGE/"
 
+# 2.5 完整 ad-hoc 签名:tauri build 只签主二进制(Info.plist 未 seal,macOS 26 判「已损坏」),
+# 必须 --deep --force 重签整个 bundle,对齐 electron-builder afterSign 的行为。
+codesign --deep --force --sign - "$STAGE/Kimi Code.app"
+
 # 3. 打包
 mkdir -p "$OUT_DIR"
 TMP="$(mktemp /tmp/kimi-dmg-rw.XXXXXX.dmg)"
