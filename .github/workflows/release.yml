@@ -101,6 +101,25 @@ jobs:
           releaseDraft: false
           prerelease: false
 
+      # ⚠️ tauri-action 的 adhoc 签名只覆盖主二进制,Info.plist 和资源未 seal,
+      # macOS 26 会把这种不完整签名判为「已损坏」。必须 --deep --force 重签整个
+      # bundle(对齐 electron-builder afterSign 的行为),才能降级为「无法验证开发者」。
+      - name: 完整 ad-hoc 签名(macOS)
+        if: matrix.os == 'macos-14'
+        run: |
+          APP="src-tauri/target/release/bundle/macos/Kimi Code.app"
+          if [ -d "$APP" ]; then
+            codesign --deep --force --sign - "$APP"
+            # 重打 DMG(tauri-action 已上传的旧 DMG 仍是不完整签名)
+            bash scripts/make-dmg.sh
+            # 用重签后的 DMG 覆盖 Release 资产
+            gh release upload "v${{ needs.prepare.outputs.version }}" \
+              "src-tauri/target/release/bundle/dmg/Kimi Code_${{ needs.prepare.outputs.version }}_aarch64.dmg" \
+              --clobber
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       # ⚠️ 不要在这里剥签名!macOS 26 实测:无签名 app 直接 SIGKILL(provenance 删不掉),
       # adhoc 签名反而能跑;「已损坏」用 xattr -dr com.apple.quarantine 一次即可解。
       # (v1.0.5 曾剥签名,是方向性错误,已回滚。根本解是 Apple 开发者证书 + 公证。)
