@@ -219,7 +219,7 @@ function startArchive(): void {
 </script>
 
 <template>
-  <header class="chat-header" :class="{ 'macos-desktop': isMacosDesktop }">
+  <header class="chat-header" :class="{ 'macos-desktop': isMacosDesktop }" :data-tauri-drag-region="isMacosDesktop || undefined">
     <!-- Workspace / session breadcrumb -->
     <div class="ch-id">
       <span v-if="workspaceName" class="ch-ws">{{ workspaceName }}</span>
@@ -230,6 +230,7 @@ function startArchive(): void {
         v-model="renameValue"
         class="ch-rename"
         type="text"
+        data-tauri-drag-region="false"
         @keydown.enter.stop="commitRename"
         @keydown.esc.stop="cancelRename"
         @blur="commitRename"
@@ -248,6 +249,7 @@ function startArchive(): void {
       :label="t('header.options')"
       :aria-expanded="menuOpen"
       aria-haspopup="menu"
+      data-tauri-drag-region="false"
       @click.stop="toggleMenu($event)"
     >
       <Icon name="dots-horizontal" size="md" />
@@ -303,6 +305,7 @@ function startArchive(): void {
       v-if="isGitRepo"
       type="button"
       class="ch-git"
+      data-tauri-drag-region="false"
       @click="emit('openChanges')"
     >
       <span
@@ -327,6 +330,7 @@ function startArchive(): void {
       type="button"
       class="ch-pill ch-pr"
       :class="prStateClass(pr.state)"
+      data-tauri-drag-region="false"
       @click="pr && emit('openPr', pr.url)"
     >
       <Icon name="git-pull-request" size="sm" />

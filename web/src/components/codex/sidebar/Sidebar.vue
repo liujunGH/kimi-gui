@@ -86,8 +86,8 @@ function sessionsOf(wsName: string): Session[] {
 <template>
   <aside class="app-sidebar">
     <div class="sidebar-brand" @dblclick="onBrandDblclick">
-      <span class="brand-logo">K</span>
-      <span class="brand-name">Kimi Code</span>
+      <span class="brand-logo" data-tauri-drag-region>K</span>
+      <span class="brand-name" data-tauri-drag-region>Kimi Code</span>
       <button class="icon-btn brand-collapse" title="折叠侧栏" @click="emit('collapse')">
         <CodexIcon name="panel-left" />
       </button>

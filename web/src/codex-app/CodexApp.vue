@@ -1004,8 +1004,8 @@ async function searchFiles(q: string) {
           @copy-session-id="onCopySessionId"
         />
       </template>
-      <header class="app-toolbar" @dblclick="onTitlebarDblClick">
-        <button class="btn" @click="settingsOpen = false">
+      <header class="app-toolbar" data-tauri-drag-region @dblclick="onTitlebarDblClick">
+        <button class="btn" data-tauri-drag-region="false" @click="settingsOpen = false">
           <CodexIcon name="chevron-right" style="transform: rotate(180deg)" />
           返回
         </button>
@@ -1054,7 +1054,7 @@ async function searchFiles(q: string) {
     <!-- toolbar -->
     <header class="app-toolbar" @dblclick="onTitlebarDblClick">
       <!-- toolbar -->
-      <span class="toolbar-title">{{ activeSession?.title || sidebarCurrentWs || 'Kimi Code' }}</span>
+      <span class="toolbar-title" data-tauri-drag-region>{{ activeSession?.title || sidebarCurrentWs || 'Kimi Code' }}</span>
       <ThreadMenu
         @pin="client.activeSessionId.value && togglePin(client.activeSessionId.value)"
         @open-side-task="ui.openSideTask('thread')"
@@ -1064,7 +1064,7 @@ async function searchFiles(q: string) {
         @fork="void client.forkSession()"
         @export="void client.exportSession()"
       />
-      <span class="toolbar-spacer" />
+      <span class="toolbar-spacer" data-tauri-drag-region />
       <span v-if="approvalCount" class="pill pill-warning">
         <span class="dot dot-waiting" />等待批准 · {{ approvalCount }} 项
       </span>

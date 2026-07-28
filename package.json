@@ -1,7 +1,7 @@
 {
   "name": "kimi-gui",
   "private": true,
-  "version": "1.0.10",
+  "version": "1.0.11",
   "description": "Kimi Code native desktop client (Tauri + Vue 3)",
   "type": "module",
   "scripts": {
