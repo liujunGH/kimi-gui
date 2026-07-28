@@ -431,14 +431,14 @@ void pollPlanUsage();
 const planUsageTimer = setInterval(pollPlanUsage, 60_000);
 onUnmounted(() => clearInterval(planUsageTimer));
 
-// thinking effort 映射:官方 ThinkingLevel('none'|'minimal'|'low'|'medium'|'high'|'xhigh')
+// thinking effort 映射:daemon 实际支持('off'|'low'|'high'|'max')
 // → 契约 EffortLevel('Low'|'High'|'Max')
 const composerEffort = computed<EffortLevel | null>(() => {
   const t = client.thinking.value;
-  if (!t || t === 'none' || t === 'minimal') return null;
+  if (!t || t === 'off' || t === 'none' || t === 'minimal') return null;
   if (t === 'low' || t === 'medium') return 'Low';
   if (t === 'high') return 'High';
-  return 'Max'; // xhigh
+  return 'Max'; // max
 });
 
 // ---------------------------------------------------------------- 子智能体
@@ -577,9 +577,9 @@ function onComposerMode(m: ComposerMode) {
 
 /** EffortLevel → 官方 ThinkingLevel 反向映射 */
 const EFFORT_TO_THINKING: Record<EffortLevel, string> = {
-  Low: 'medium',
+  Low: 'low',
   High: 'high',
-  Max: 'xhigh',
+  Max: 'max',
 };
 
 /**

@@ -4,6 +4,13 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.10] - 2026-07-26
+
+### 修复
+
+- **思考强度 Max 档报错**:`EFFORT_TO_THINKING` 误把 `'Max'` 映射为 `'xhigh'`,但 daemon 实际只支持 `off/low/high/max`;现改为 `'max'`,同时反向映射兼容 `off/none/minimal` 都视为关闭
+- **窗口无法拖动**:codex 工具栏/侧栏品牌区缺少 `-webkit-app-region: drag`,导致无边框窗口无法按住头部移动;已补上并为内部按钮加 `no-drag`
+
 ## [1.0.9] - 2026-07-26
 
 ### 修复

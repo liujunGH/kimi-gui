@@ -56,6 +56,8 @@ a { color: inherit; text-decoration: none; }
   padding: 0 var(--sp-4);
   border-bottom: 1px solid var(--border-soft);
   transition: padding var(--dur-3) var(--ease);
+  /* 按住头部拖动窗口(Tauri 无边框窗口) */
+  -webkit-app-region: drag;
 }
 .app.sidebar-collapsed .app-toolbar { padding-left: 118px; }
 .toolbar-title {
@@ -67,6 +69,15 @@ a { color: inherit; text-decoration: none; }
   text-overflow: ellipsis;
 }
 .toolbar-spacer { flex: 1; }
+
+/* 工具栏内可交互元素禁止拖动,否则按钮点不动 */
+.app-toolbar button,
+.app-toolbar a,
+.app-toolbar input,
+.app-toolbar select,
+.app-toolbar .menu-item {
+  -webkit-app-region: no-drag;
+}
 
 .app-conversation { flex: 1; min-height: 0; overflow-y: auto; }
 .conversation {
