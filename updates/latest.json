@@ -1,15 +1,15 @@
 {
-  "version": "1.0.10",
-  "notes": "\n### 修复\n\n- **思考强度 Max 档报错**:`EFFORT_TO_THINKING` 误把 `'Max'` 映射为 `'xhigh'`,但 daemon 实际只支持 `off/low/high/max`;现改为 `'max'`,同时反向映射兼容 `off/none/minimal` 都视为关闭\n- **窗口无法拖动**:codex 工具栏/侧栏品牌区缺少 `-webkit-app-region: drag`,导致无边框窗口无法按住头部移动;已补上并为内部按钮加 `no-drag`\n\n",
-  "pub_date": "2026-07-28T03:00:58Z",
+  "version": "1.0.11",
+  "notes": "\n### 修复\n\n- **窗口拖动(真正修复)**:1.0.10 误用 Electron 的 `-webkit-app-region`(Tauri 2 不支持),现改为 Tauri 2 的 `data-tauri-drag-region` HTML 属性,工具栏标题/空白区、侧栏品牌区、官方 ChatHeader/Sidebar 头部均可按住拖动;按钮/输入框等交互元素加 `data-tauri-drag-region=\"false\"` 保持可点击\n\n",
+  "pub_date": "2026-07-28T05:57:08Z",
   "platforms": {
     "darwin-aarch64": {
       "url": "https://raw.githubusercontent.com/liujunGH/kimi-gui/main/updates/Kimi.Code_aarch64.app.tar.gz",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxalNUMnc1b2tZMnZVTEw0QXJJZ2ppYWFyOEVKY2l6M0E0VUVXMUlVNU9sR3Rkb0R1dWw1ZmFqSDNBWndoQS93Y083OEhKMzZKellPWUlhTjM2S0lxQndjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1MjA3NjU3CWZpbGU6S2ltaS5Db2RlX2FhcmNoNjQuYXBwLnRhci5negpIMWNVOFlyYzRnWENESmhOWXk5cCsrdzJWTFZabms5MVp3enoySVhuZXJDcUNuNFJEdnhKY3d3aXNhajI2cmwxWVVIVFRoMkVUcWxTSlJVZGREUDNCQT09Cg=="
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxalR4ajh1Mld4dGh4NE9DbzFSRVBIY25wNytQSlpWNFBkVlA1ejJsRmV6ejliT2RXeEpaUlR5MlhydFdUNGwyZ1JqVFNCTEdBZkR4ZnRFbkFvRzM3Zmc0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1MjE4MjI4CWZpbGU6S2ltaS5Db2RlX2FhcmNoNjQuYXBwLnRhci5negpiOEROT1lCQlB2amZ0ak5mVU5HTGN5QlA3Rmg3UEloYitiSlBHUnFyeVpobGRtVGpMRXl1VFNPMnovR0Q3YmhkMnlHNzArMzA0ZHJZWU5GL3ZvM2xEUT09Cg=="
     },
     "windows-x86_64": {
       "url": "https://raw.githubusercontent.com/liujunGH/kimi-gui/main/updates/Kimi.Code_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxamM2Q0RldUxLZEdXSDBRcjF3UjdjNzVOd0FkQnlRaDhoVS9zTU5ycTg4YWs4U3BkUXM3UTczUXZLNzBPc0pjd2VOeSs1SGk2VkIvNXBza2tOWG5BK3dVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1MjA3NjU4CWZpbGU6S2ltaS5Db2RlXzEuMC4xMF94NjQtc2V0dXAuZXhlCmQ4T0RvU1AvZ1ZVSk0xV2c0NExIazdwVUJ3WXBIOS9zdWt5RENxV3hxVWF2MlB1L2RWckZUWHlPUjhJclBxMnkzZHp3VW9rZmU3cXB2azJ5bGd5U0R3PT0K"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxamQyM05XNUY4UlVHTFF1ei8vT1BFWVQzei9hY0xZbXFGalFTMkFQYzg0SEtWZlRqclpkWTRuTDF6VVBkTGZrY1NMeHByMFlXbzJBZlRoVmtqSmR0c0EwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1MjE4MjI4CWZpbGU6S2ltaS5Db2RlXzEuMC4xMV94NjQtc2V0dXAuZXhlCnArWWpsS1huTm9FeHVUcENRTjlsandTVGQzcWxmeWhVSkFQS2t4cGdvd1FEMlNpZXdRdFNrd0g5QVJWS29GcXVIY2RNYzZrTm1qM2RwVFJHcm42ckNBPT0K"
     }
   }
 }
