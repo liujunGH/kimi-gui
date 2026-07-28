@@ -647,7 +647,7 @@ onBeforeUnmount(() => {
            hidden (traffic lights own that corner) and the header is just a
            window-drag strip — there the toggle is App.vue's resident floating
            button beside the traffic lights. -->
-      <div class="ch">
+      <div class="ch" :data-tauri-drag-region="isMacosDesktop || undefined">
         <div class="ch-brand">
           <template v-if="!isMacosDesktop">
             <svg ref="logoRef" class="ch-logo" :class="{ 'is-dev': isDev }" viewBox="0 0 32 22" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Kimi Code" @click="onLogoClick" @pointerdown="onLogoPointerDown" @pointerup="onLogoPointerUp" @pointercancel="onLogoPointerUp">

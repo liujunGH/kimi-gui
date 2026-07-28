@@ -4,6 +4,12 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.11] - 2026-07-26
+
+### 修复
+
+- **窗口拖动(真正修复)**:1.0.10 误用 Electron 的 `-webkit-app-region`(Tauri 2 不支持),现改为 Tauri 2 的 `data-tauri-drag-region` HTML 属性,工具栏标题/空白区、侧栏品牌区、官方 ChatHeader/Sidebar 头部均可按住拖动;按钮/输入框等交互元素加 `data-tauri-drag-region="false"` 保持可点击
+
 ## [1.0.10] - 2026-07-26
 
 ### 修复
