@@ -1,15 +1,15 @@
 {
-  "version": "1.0.8",
-  "notes": "\n### 修复\n\n- **工作区移除/重命名误伤活跃工作区**:侧栏菜单对非活跃工作区操作时,实际作用到了当前活跃工作区;现统一改为按 workspace id 精确定位\n- **归档管理显示「归档于 未知」**:读取了不存在的 `archivedAt` 字段,改为 `updatedAt`;加载失败从静默吞掉改为 toast 提示\n- **设置页默认权限/默认模型写错地方**:此前改的是当前会话,现改为 daemon 全局配置\n- **Tauri 命令丢失**:`invoke_handler` 被二次注册覆盖,导致双击放大、退出应用失效\n- **daemon 启动残留多实例**:spawn 超时不杀子进程,可能同时起多个 daemon;现超时 kill 并立即换下一组\n- **工作区列表瞬时失败清空**:`loadWorkspaces` 失败时不再覆盖已有注册列表\n- **已移除工作区大小写复活**:隐藏路径改用规范化 key 匹配,`C:\\Foo` 与 `c:\\foo` 视为同一目录\n- **cancelTask 误操作**:foreground subagent 的 agent id 不再误发到 REST `/tasks`\n- **后台会话 thinking 级别错乱**:prompt/steer/BTW/skill 不再 fallback 到当前活动会话的级别\n- **eval 注入面**:token/base 注入 webview 时改用 `serde_json` 转义\n- **凭据 sandbox 权限收紧**:Linux `/tmp` 下 sandbox 创建后设 0700\n\n### 加固\n\n- **OAuth 登录对话框**:启动/轮询/取消全部补齐 try/catch,失败不再卡住或产生未处理 rejection\n- **审批卡防永久禁用**:改为请求成功后才标记 responded,网络失败可重试\n- **daemon 实例扫描**:单个实例文件读取失败不再中断整个扫描\n- **scrape 线程 panic 保护**:`SCRAPE_RUNNING` 不再因 panic 永久卡住\n\n",
-  "pub_date": "2026-07-26T08:24:07Z",
+  "version": "1.0.10",
+  "notes": "\n### 修复\n\n- **思考强度 Max 档报错**:`EFFORT_TO_THINKING` 误把 `'Max'` 映射为 `'xhigh'`,但 daemon 实际只支持 `off/low/high/max`;现改为 `'max'`,同时反向映射兼容 `off/none/minimal` 都视为关闭\n- **窗口无法拖动**:codex 工具栏/侧栏品牌区缺少 `-webkit-app-region: drag`,导致无边框窗口无法按住头部移动;已补上并为内部按钮加 `no-drag`\n\n",
+  "pub_date": "2026-07-28T03:00:58Z",
   "platforms": {
     "darwin-aarch64": {
       "url": "https://raw.githubusercontent.com/liujunGH/kimi-gui/main/updates/Kimi.Code_aarch64.app.tar.gz",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxamYremVHNkQzdmFkWG9La09YbWZiNyt0TzltYUJpampHQVFSWE5xdE82eGJ5V29ZcHRPVUpDTFFsWEZRWlN0aFZuV1VMSVBJeVdVRW9ka3pPcFdJUmdFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1MDU0MjQ2CWZpbGU6S2ltaS5Db2RlX2FhcmNoNjQuYXBwLnRhci5negpwS2RocjFsRDQyS3ptaysvQ29CL25veDFQUjlZakVXMlBFN3ZieXJhOHl6U0d4b1Q0YW8zdVZkeWEzbmpTSE5rSXVxS0tDQU9ieldiMkZNN3F3VzdDZz09Cg=="
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxalNUMnc1b2tZMnZVTEw0QXJJZ2ppYWFyOEVKY2l6M0E0VUVXMUlVNU9sR3Rkb0R1dWw1ZmFqSDNBWndoQS93Y083OEhKMzZKellPWUlhTjM2S0lxQndjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1MjA3NjU3CWZpbGU6S2ltaS5Db2RlX2FhcmNoNjQuYXBwLnRhci5negpIMWNVOFlyYzRnWENESmhOWXk5cCsrdzJWTFZabms5MVp3enoySVhuZXJDcUNuNFJEdnhKY3d3aXNhajI2cmwxWVVIVFRoMkVUcWxTSlJVZGREUDNCQT09Cg=="
     },
     "windows-x86_64": {
       "url": "https://raw.githubusercontent.com/liujunGH/kimi-gui/main/updates/Kimi.Code_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxamQ4NU9ISlZzYXNDZGN2Y2ZEcVlEMHJiNml0YmNjTWc5SmVoWlJzZlo3anpZbm9SLzQxUWI5NE5acVFTZHlwT3I3bWUwK3AwK01aaUpoTDE3NWQyN2djPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1MDU0MjQ3CWZpbGU6S2ltaS5Db2RlXzEuMC44X3g2NC1zZXR1cC5leGUKdVJ5eGFMTlE1emplUW91TU1zandsc21vZ2Zyd0JvUS94WVZIM2tmdHduRDRhc2kvT0swQk10MndackR5SktxS0doVTJDdnVCdkUzb3U4YnVpcFZ1Q1E9PQo="
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxamM2Q0RldUxLZEdXSDBRcjF3UjdjNzVOd0FkQnlRaDhoVS9zTU5ycTg4YWs4U3BkUXM3UTczUXZLNzBPc0pjd2VOeSs1SGk2VkIvNXBza2tOWG5BK3dVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1MjA3NjU4CWZpbGU6S2ltaS5Db2RlXzEuMC4xMF94NjQtc2V0dXAuZXhlCmQ4T0RvU1AvZ1ZVSk0xV2c0NExIazdwVUJ3WXBIOS9zdWt5RENxV3hxVWF2MlB1L2RWckZUWHlPUjhJclBxMnkzZHp3VW9rZmU3cXB2azJ5bGd5U0R3PT0K"
     }
   }
 }
