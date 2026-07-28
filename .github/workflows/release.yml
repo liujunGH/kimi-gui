@@ -205,9 +205,11 @@ jobs:
           git config user.email "ci@users.noreply.github.com"
           git add updates/
           git commit -m "chore(release): updates v${{ needs.prepare.outputs.version }}(双平台) [skip ci]" || echo "no change"
-          # tag 之后 main 可能已有新提交(doc/fix),非快进会被拒,先 rebase
+          # tag 之后 main 可能已有新提交(doc/fix),非快进会被拒,先 rebase。
+          # updates/ 里的二进制文件在 rebase 时必然冲突(两边都改了同一文件),
+          # 用 -X theirs 让本次新构建的版本胜出。
           git fetch origin main
-          git rebase origin/main
+          git rebase -X theirs origin/main
           git push origin HEAD:main
 
       - name: Release 正文回填 CHANGELOG 段落
