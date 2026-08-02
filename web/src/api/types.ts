@@ -52,6 +52,20 @@ export interface AppSessionUsage {
   turnCount: number;
 }
 
+export interface AppOAuthUsageBucket {
+  window: { duration: number; unit: string };
+  used: number;
+  limit: number;
+  reset_at: string;
+}
+
+export interface AppOAuthUsage {
+  kind: string;
+  summary: AppOAuthUsageBucket;
+  limits: AppOAuthUsageBucket[];
+  extra_usage: AppOAuthUsageBucket | null;
+}
+
 export interface AppSession {
   id: string;
   title: string;
@@ -662,6 +676,7 @@ export interface AppConfig {
   defaultProvider?: string;
   defaultModel?: string;
   models?: Record<string, unknown>;
+  secondaryModel?: { model?: string; defaultEffort?: string; [key: string]: unknown };
   thinking?: { enabled?: boolean; effort?: string };
   planMode?: boolean;
   yolo?: boolean;
@@ -672,11 +687,61 @@ export interface AppConfig {
   services?: unknown;
   mergeAllAvailableSkills?: boolean;
   extraSkillDirs?: string[];
+  extraAgentDirs?: string[];
   loopControl?: unknown;
   background?: unknown;
   experimental?: Record<string, boolean>;
   telemetry?: boolean;
   raw?: Record<string, unknown>;
+}
+
+export interface AppAgentConfigInput {
+  model?: string;
+  systemPrompt?: string;
+  tools?: string[];
+  mcpServers?: string[];
+  thinking?: string;
+  permissionMode?: 'manual' | 'yolo' | 'auto';
+  planMode?: boolean;
+  swarmMode?: boolean;
+}
+
+export interface AppToolDescriptor {
+  name: string;
+  description: string;
+  inputSchema: unknown;
+  source: 'builtin' | 'skill' | 'mcp';
+  mcpServerId?: string;
+  active?: boolean;
+}
+
+export interface AppMcpServer {
+  id: string;
+  name: string;
+  transport: 'stdio' | 'http' | 'sse';
+  status: 'connected' | 'connecting' | 'disconnected' | 'error';
+  lastError?: string;
+  toolCount: number;
+}
+
+export interface AppSearchResult {
+  items: Array<{
+    sessionId: string;
+    workspaceId: string;
+    sessionTitle: string;
+    agentId: string;
+    role: 'user' | 'assistant' | 'title';
+    snippet: string;
+    time: number;
+    turn?: number;
+    stepId?: string;
+    score: number;
+  }>;
+  hasMore: boolean;
+  pageToken?: string;
+  incomplete?: 'candidate_cap';
+  indexState: { state: 'building' | 'ready' | 'readonly'; indexedSessions: number; totalSessions: number; documents: number };
+  source: 'live' | 'index';
 }
 
 /** A session-scoped skill the user can invoke from the slash menu. */
@@ -701,7 +766,7 @@ export interface KimiWebApi {
   getHealth(): Promise<{ status: 'ok'; uptimeSec: number }>;
   getMeta(): Promise<{ serverVersion: string; serverId: string; startedAt: string; capabilities: Record<string, boolean>; openInApps: string[]; dangerousBypassAuth: boolean; backend: 'v1' | 'v2' }>;
   listSessions(input?: PageRequest & { busy?: boolean; workspaceId?: string; includeArchive?: boolean; archivedOnly?: boolean; excludeEmpty?: boolean }): Promise<Page<AppSession>>;
-  createSession(input: { title?: string; cwd?: string; model?: string; workspaceId?: string }): Promise<AppSession>;
+  createSession(input: { title?: string; cwd?: string; model?: string; workspaceId?: string; agentConfig?: AppAgentConfigInput }): Promise<AppSession>;
   /** Fetch one session by id (deep links beyond the first listSessions page). */
   getSession(sessionId: string): Promise<AppSession>;
   updateSession(sessionId: string, input: { title?: string; cwd?: string; model?: string; permissionMode?: string; planMode?: boolean; swarmMode?: boolean; goalObjective?: string; goalControl?: 'pause' | 'resume' | 'cancel'; thinking?: string }): Promise<AppSession>;
@@ -748,6 +813,8 @@ export interface KimiWebApi {
   listDirectory(sessionId: string, input: { path?: string; depth?: number; includeGitStatus?: boolean }): Promise<{ items: FsEntry[]; childrenByPath?: Record<string, FsEntry[]>; truncated: boolean }>;
   readFile(sessionId: string, input: { path: string; offset?: number; length?: number }): Promise<{ path: string; content: string; encoding: 'utf-8' | 'base64'; size: number; truncated: boolean; etag: string; mime: string; languageId?: string; lineCount?: number; isBinary: boolean }>;
   searchFiles(sessionId: string, input: { query: string; limit?: number }): Promise<{ items: Array<{ path: string; name: string; kind: FsKind; score: number; matchPositions: number[] }>; truncated: boolean }>;
+  searchWorkspaceFiles(workspace: string, input: { query: string; limit?: number }): Promise<{ items: Array<{ path: string; name: string; kind: FsKind; score: number; matchPositions: number[] }>; truncated: boolean }>;
+  searchAll(input: { query: string; mode?: 'terms' | 'literal'; op?: 'AND' | 'OR'; role?: 'user' | 'assistant' | 'title'; sort?: 'score' | 'time_desc' | 'time_asc'; pageSize?: number; pageToken?: string }): Promise<AppSearchResult>;
   grepFiles(sessionId: string, input: { pattern: string; regex?: boolean; caseSensitive?: boolean }): Promise<{ files: Array<{ path: string; matches: Array<{ line: number; col: number; text: string; before: string[]; after: string[] }> }>; filesScanned: number; truncated: boolean; elapsedMs: number }>;
   getGitStatus(sessionId: string, paths?: string[]): Promise<{ branch: string; ahead: number; behind: number; entries: Record<string, string>; additions: number; deletions: number; pullRequest: { number: number; state: string; url: string } | null }>;
   getFileDiff(sessionId: string, path: string): Promise<{ path: string; diff: string }>;
@@ -776,6 +843,10 @@ export interface KimiWebApi {
   refreshAllProviders(): Promise<ProviderRefreshResult>;
   refreshOAuthProviderModels(): Promise<ProviderRefreshResult>;
 
+  listTools(sessionId?: string): Promise<AppToolDescriptor[]>;
+  listMcpServers(): Promise<AppMcpServer[]>;
+  restartMcpServer(id: string): Promise<{ restarting: true }>;
+
   // File upload / download
   uploadFile(input: { file: Blob; name?: string }): Promise<{ id: string; name: string; mediaType: string; size: number }>;
   getFileUrl(fileId: string): string;
@@ -803,12 +874,7 @@ export interface KimiWebApi {
   logout(): Promise<{ loggedOut: boolean }>;
 
   // OAuth Usage — daemon 0.29+ (GET /oauth/usage)
-  getOAuthUsage(): Promise<{
-    kind: string;
-    summary: { label: string; used: number; limit: number; reset_hint: string };
-    limits: { label: string; used: number; limit: number; reset_hint: string }[];
-    extra_usage: { label: string; used: number; limit: number; reset_hint: string } | null;
-  } | null>;
+  getOAuthUsage(): Promise<AppOAuthUsage | null>;
 
   // Host File Content — daemon 0.29+ (GET /fs:content?path=<absolute>)
   getFsContent(path: string): Promise<{

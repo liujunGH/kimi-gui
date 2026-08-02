@@ -2,7 +2,7 @@
 /**
  * CommandPalette —— ⌘K 命令面板(命令 + 会话双区,替代纯会话搜索弹层)
  *
- * - 输入过滤:命令按 label 模糊;会话按 title(上限 8 条)
+ * - 输入过滤:命令按 label 模糊;会话按标题、最近提问和工作区搜索
  * - ↑↓ 跨区移动光标(环形),Enter 执行;鼠标移动即选中
  * - Esc 关闭(stopPropagation,不触发全局 escClose 连关底层);点遮罩关闭;挂载自动聚焦
  */
@@ -19,15 +19,20 @@ export interface PaletteSession {
   id: string;
   title: string;
   meta?: string;
+  lastPrompt?: string;
+  workspaceName?: string;
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   actions: PaletteAction[];
   sessions: PaletteSession[];
-}>();
+  searchLoading?: boolean;
+  searchHint?: string;
+}>(), { searchLoading: false, searchHint: '' });
 const emit = defineEmits<{
   (e: 'select-action', id: string): void;
   (e: 'select-session', id: string): void;
+  (e: 'query', value: string): void;
   (e: 'close'): void;
 }>();
 
@@ -41,9 +46,12 @@ const filteredActions = computed(() =>
 );
 const filteredSessions = computed(() => {
   const list = q.value
-    ? props.sessions.filter((s) => s.title.toLowerCase().includes(q.value))
+    ? props.sessions.filter((s) =>
+        [s.title, s.lastPrompt, s.workspaceName, s.meta]
+          .some((value) => value?.toLowerCase().includes(q.value)),
+      )
     : props.sessions;
-  return list.slice(0, 8);
+  return list.slice(0, 50);
 });
 
 interface Row {
@@ -57,6 +65,7 @@ const rows = computed<Row[]>(() => [
 watch(rows, () => {
   cursor.value = 0;
 });
+watch(query, (value) => emit('query', value));
 
 function exec(row: Row | undefined) {
   if (!row) return;
@@ -112,8 +121,15 @@ onMounted(() => void nextTick(() => inputEl.value?.focus()));
             <span v-if="a.kbd" class="kbd">{{ a.kbd }}</span>
           </button>
         </template>
+        <div v-if="q && !filteredSessions.length" class="cp-search-state-row">
+          {{ props.searchLoading ? '正在搜索全部历史…' : (props.searchHint || '没有匹配的会话') }}
+        </div>
         <template v-if="filteredSessions.length">
-          <div class="cp-label">会话</div>
+          <div class="cp-label cp-session-label">
+            <span>会话</span>
+            <span v-if="props.searchLoading" class="cp-search-state">搜索全部历史中…</span>
+            <span v-else-if="props.searchHint" class="cp-search-state">{{ props.searchHint }}</span>
+          </div>
           <button
             v-for="(s, j) in filteredSessions"
             :key="s.id"
@@ -124,12 +140,16 @@ onMounted(() => void nextTick(() => inputEl.value?.focus()));
             @mousemove="cursor = filteredActions.length + j"
           >
             <span class="mi-ic"><CodexIcon name="list" /></span>
-            <span class="cp-text">{{ s.title }}</span>
+            <span class="cp-session-text">
+              <span class="cp-text">{{ s.title }}</span>
+              <span v-if="s.lastPrompt" class="cp-snippet">{{ s.lastPrompt }}</span>
+            </span>
             <span v-if="s.meta" class="cp-meta">{{ s.meta }}</span>
           </button>
         </template>
       </div>
-      <div v-else class="cp-empty">无匹配结果</div>
+      <div v-else-if="props.searchLoading" class="cp-empty">正在搜索全部历史…</div>
+      <div v-else class="cp-empty">{{ props.searchHint || '无匹配结果' }}</div>
     </div>
   </div>
 </template>
@@ -177,6 +197,17 @@ onMounted(() => void nextTick(() => inputEl.value?.focus()));
   letter-spacing: 0.05em; text-transform: uppercase;
   color: var(--text-3);
 }
+.cp-session-label { display: flex; justify-content: space-between; gap: 12px; }
+.cp-search-state {
+  max-width: 70%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-weight: 500; letter-spacing: 0; text-transform: none;
+}
+.cp-search-state-row {
+  padding: 12px 8px;
+  color: var(--text-3);
+  font-size: var(--text-sm);
+}
 .cp-item {
   display: flex; align-items: center; gap: 9px;
   width: 100%;
@@ -189,8 +220,16 @@ onMounted(() => void nextTick(() => inputEl.value?.focus()));
 }
 .cp-item.active { background: var(--accent-soft); color: var(--text); }
 .cp-text {
-  flex: 1; min-width: 0;
+  min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cp-session-text {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.cp-snippet {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11px; color: var(--text-3);
 }
 .cp-meta { flex: none; font-size: 11px; color: var(--text-3); }
 .cp-empty {

@@ -768,7 +768,7 @@ permission: 'manual' | 'auto' | 'yolo';
 
 **方案**(全部实现并真机验证):
 1. **`src-tauri/src/usage.rs`(新)**:照 kimi-ui 配方 —— portable-pty 起无头 TUI(throwaway KIMI_CODE_HOME 放凭据副本)→ ESC 清首启对话框 → 发 `/usage` → **单独发 `\r` 提交**(关键:文本和回车必须分两次写,合并不提交)→ vt100 解析 → 提取 "X% used ... resets in Y" 两行。`PlanUsage { weekly_pct, weekly_reset, hourly_pct, hourly_reset, fetched_at }`,缓存 TTL 600s,后台刷新,启动预热不阻塞。Cargo 加 `portable-pty = "0.8"` + `vt100 = "0.15"`(与 kimi-ui 同版本)
-2. **命令注册**:`plan_usage` 进 invoke_handler(lib.rs),`usage::warm_cache()` 在 setup 预热
+2. **命令注册**:`plan_usage` 进 invoke_handler(lib.rs);前端首屏稳定后再按需预热,避免启动时创建 PTY
 3. **前端**:`useTauriDaemon` 加 `fetchPlanUsage()`(additive,浏览器返回 null);CodexApp 轮询(启动 + 60s)→ `QuotaInfo` → ContextMeter;quota 为 0 时仍 fallback 到 sessionCost(浏览器沙箱不受影响)
 
 **验证**(真机,非 mock):
@@ -1121,3 +1121,12 @@ ROADMAP 给 kimi3 的 5 项全部完成，vue-tsc 全绿，`verify5.mjs` 10 断�
 - **Homebrew Cask 通道已上线并实测闭环**:`brew install --cask liujunGH/tap/kimi-code` → 装完直接能开,零警告。tap 仓库:github.com/liujunGH/homebrew-tap,Casks/kimi-code.rb(1.0.7 + sha256)。
 - 后续版本需要同步更新 cask 的 version + sha256(可上 CI 自动更新,需 scoped token,未配)。
 - 根本解仍是 Apple 开发者证书 + 公证($99/年)。
+
+## 版本锚点 · 1.0.12 · 2026-08-03
+
+- **产品补全**:完成 P1-P3、数据与迁移、性能专项；GUI 补齐 Agent/模型/Provider/Skills/MCP/Hooks/权限/附加目录、Inspect、归档/导入/备份恢复等管理入口。
+- **Engine 自维护**:设置 → Kimi Engine 可查看 CLI/daemon 版本、更新 CLI、用已安装新版 CLI 重启本机 daemon；重启后刷新页面以切断旧 WebSocket，避免版本状态滞留。
+- **额度兼容**:优先消费 daemon 0.29+ OAuth usage REST 响应，兼容 0.31.1 字段；旧版本回退 PTY，0% 上下文额度不再被当作缺失。
+- **体验与性能**:修复连接正常时的“找不到 kimi CLI”误报；侧栏渐进渲染、daemon 搜索防抖、长会话窗口化、Markdown/KaTeX/Mermaid 延迟加载/worker 化。
+- **发行质量**:release workflow 在创建 Release 前增加全量前端质量门禁和 Rust 锁文件/格式校验，同一 tag 禁止并发互相覆盖。
+- **发版验收**:`pnpm web:typecheck`;web 36 文件/666 tests;样式 baseline 检查;生产构建;`cargo fmt --check`;Rust 4 tests;锁文件一致性全部通过。1.0.12 DMG 已完成挂载、版本/arm64/深度签名检查,SHA-256 为 `c47dd4bea87a36df585f58f2dda127d48bf9688ba20e2fbb9797339e5ebba797`。

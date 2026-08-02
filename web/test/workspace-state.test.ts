@@ -32,6 +32,7 @@ const apiMock = vi.hoisted(() => ({
   getFsHome: vi.fn(),
   getHealth: vi.fn(),
   getMeta: vi.fn(),
+  getSession: vi.fn(),
   listSessions: vi.fn(),
   listWorkspaces: vi.fn(),
 }));
@@ -232,6 +233,26 @@ function task(id: string, status: AppTask['status'] = 'running'): AppTask {
     createdAt: '2026-01-01T00:00:00.000Z',
   };
 }
+
+describe('useWorkspaceState — search result selection', () => {
+  beforeEach(() => {
+    apiMock.getSession.mockReset();
+  });
+
+  it('seeds a session missing from the paged sidebar before opening it', async () => {
+    const remote = { ...createSession(), id: 'sess_remote', title: 'Remote result' };
+    apiMock.getSession.mockResolvedValue(remote);
+    const deps = createDeps();
+    const workspace = useWorkspaceState(createState(), deps);
+
+    await workspace.selectSessionFromSearch(remote.id);
+
+    expect(apiMock.getSession).toHaveBeenCalledWith(remote.id);
+    expect(deps.upsertSessionFront).toHaveBeenCalledWith(remote);
+    expect(deps.setActiveSessionId).toHaveBeenCalledWith(remote.id);
+    expect(deps.syncSessionFromSnapshot).toHaveBeenCalledWith(remote.id);
+  });
+});
 
 describe('useWorkspaceState — abortCurrentPrompt', () => {
   beforeEach(() => {

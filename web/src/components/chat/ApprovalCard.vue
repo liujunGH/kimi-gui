@@ -27,6 +27,32 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 
+// Multiple approvals may coexist. Shortcuts must target the card the user most
+// recently focused/clicked, never an unrelated card that happened to mount last.
+interface ApprovalShortcutRegistry {
+  serial: number;
+  mounted: number[];
+  active: number | null;
+}
+const registryKey = '__kimiApprovalShortcutRegistry';
+const globalRegistry = globalThis as typeof globalThis & {
+  [registryKey]?: ApprovalShortcutRegistry;
+};
+const shortcutRegistry = globalRegistry[registryKey] ??= {
+  serial: 0,
+  mounted: [],
+  active: null,
+};
+const cardId = ++shortcutRegistry.serial;
+
+function activateCard(): void {
+  shortcutRegistry.active = cardId;
+  for (const id of shortcutRegistry.mounted) {
+    document.querySelector<HTMLElement>(`[data-approval-card-id="${id}"]`)
+      ?.classList.toggle('shortcut-active', id === cardId);
+  }
+}
+
 interface PlanReviewView {
   plan: string;
   path?: string;
@@ -145,6 +171,7 @@ function rejectAndExitPlan(): void { act('rejectAndExit', { decision: 'rejected'
 // ---------------------------------------------------------------------------
 
 function handleKeydown(e: KeyboardEvent): void {
+  if (shortcutRegistry.active !== cardId) return;
   const tag = (document.activeElement?.tagName ?? '').toLowerCase();
   if (tag === 'input' || tag === 'textarea') return;
   // While a decision is in flight, ignore number-key shortcuts so a stray key
@@ -171,12 +198,35 @@ function handleKeydown(e: KeyboardEvent): void {
   else if (e.key === '4') { e.preventDefault(); openFeedback(); }
 }
 
-onMounted(() => document.addEventListener('keydown', handleKeydown));
-onUnmounted(() => document.removeEventListener('keydown', handleKeydown));
+onMounted(() => {
+  shortcutRegistry.mounted.push(cardId);
+  document.addEventListener('keydown', handleKeydown);
+  if (shortcutRegistry.active === null) activateCard();
+});
+onUnmounted(() => {
+  document.removeEventListener('keydown', handleKeydown);
+  const index = shortcutRegistry.mounted.indexOf(cardId);
+  if (index >= 0) shortcutRegistry.mounted.splice(index, 1);
+  if (shortcutRegistry.active === cardId) {
+    shortcutRegistry.active = shortcutRegistry.mounted[0] ?? null;
+    const next = shortcutRegistry.active;
+    if (next !== null) {
+      document.querySelector<HTMLElement>(`[data-approval-card-id="${next}"]`)
+        ?.classList.add('shortcut-active');
+    }
+  }
+});
 </script>
 
 <template>
-  <Card class="appr" :class="{ minimized }">
+  <Card
+    class="appr"
+    :class="{ minimized }"
+    :data-approval-card-id="cardId"
+    tabindex="0"
+    @focusin="activateCard"
+    @pointerdown="activateCard"
+  >
     <!-- Header -->
     <template #head>
       <div class="ah">
@@ -341,6 +391,9 @@ onUnmounted(() => document.removeEventListener('keydown', handleKeydown));
 /* Warning attention-card head band layered on top of the shared flat Card
    primitive (Card supplies the border, radius and surface; no shadow). */
 .appr.ui-card { border-color: var(--color-warning-bd); }
+.appr.shortcut-active.ui-card {
+  box-shadow: 0 0 0 2px var(--color-warning-bd);
+}
 .appr :deep(.ui-card__head) {
   background: var(--color-warning-soft);
   border-bottom-color: var(--color-warning-bd);

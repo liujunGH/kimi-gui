@@ -9,14 +9,15 @@
  * - 滚锚(Q4 归 kimi3):用户贴底时新内容自动跟随;上翻后不抢滚动;
  *   前插加载时保持视口位置(scrollTop 按新增高度补偿)
  */
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import type { ConversationPaneProps, ConversationPaneEmits } from '../../../types/codex';
 import type { ChatTurn } from '../../../types';
 import CodexIcon from '../layout/CodexIcon.vue';
 import MessageUser from './MessageUser.vue';
-import MessageAssistant from './MessageAssistant.vue';
 import TurnProgress from './TurnProgress.vue';
 import ConversationToc, { type ConversationTocItem } from '../../chat/ConversationToc.vue';
+
+const MessageAssistant = defineAsyncComponent(() => import('./MessageAssistant.vue'));
 
 const props = withDefaults(
   defineProps<ConversationPaneProps & {
@@ -57,11 +58,18 @@ function tocTitle(turn: ChatTurn): string {
   if ((turn.tools?.length ?? 0) > 0) return `${turn.tools!.length} tools`;
   return 'kimi';
 }
-const tocItems = computed<ConversationTocItem[]>(() =>
-  props.turns
+const tocItems = computed<ConversationTocItem[]>(() => {
+  // Only mounted turns are navigable. Keeping the TOC inside the same window
+  // prevents thousands of hidden anchors from defeating conversation paging.
+  const start = Math.max(0, total.value - visibleCount.value);
+  let userNo = 0;
+  for (let i = 0; i < start; i++) {
+    if (props.turns[i]?.role === 'user') userNo++;
+  }
+  return shownTurns.value
     .filter((t) => t.role === 'user')
-    .map((t, i) => ({ id: t.id, role: t.role as 'user', no: i + 1, title: tocTitle(t) })),
-);
+    .map((t) => ({ id: t.id, role: 'user', no: ++userNo, title: tocTitle(t) }));
+});
 const activeTurnId = ref<string | null>(null);
 function updateActiveToc() {
   const el = scrollEl.value;

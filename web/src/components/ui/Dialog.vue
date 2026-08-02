@@ -3,7 +3,7 @@
      ones. radius xl + shadow xl, head(title/desc/close) / body / foot(right).
      Includes focus trap, Esc-to-close, and optional overlay-click-to-close. -->
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
 import { openDialogCount } from '../../composables/dialogStack';
 import IconButton from './IconButton.vue';
 import Icon from './Icon.vue';
@@ -39,6 +39,7 @@ const emit = defineEmits<{
 }>();
 
 const panel = ref<HTMLElement | null>(null);
+const titleId = useId();
 let previouslyFocused: Element | null = null;
 
 const FOCUSABLE =
@@ -140,12 +141,13 @@ onBeforeUnmount(() => {
         :class="[`ui-dialog--${size}`, { 'ui-dialog--flush': !padded, 'ui-dialog--fixed-height': height === 'fixed' }]"
         role="dialog"
         aria-modal="true"
+        :aria-labelledby="title ? titleId : undefined"
         tabindex="-1"
       >
         <div v-if="title || $slots.head" class="ui-dialog__head">
           <slot name="head">
             <div class="ui-dialog__titles">
-              <div v-if="title" class="ui-dialog__title">{{ title }}</div>
+              <div v-if="title" :id="titleId" class="ui-dialog__title">{{ title }}</div>
               <div v-if="description" class="ui-dialog__desc">{{ description }}</div>
             </div>
           </slot>

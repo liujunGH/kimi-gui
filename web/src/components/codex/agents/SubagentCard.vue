@@ -56,37 +56,37 @@ const pct = computed(() => {
 <template>
   <div
     class="subagent-card"
-    :class="VARIANT[status]"
-    role="button"
-    tabindex="0"
-    @click="emit('inspect')"
-    @keydown.enter.self="emit('inspect')"
-    @keydown.space.prevent.self="emit('inspect')"
+    :class="[VARIANT[status], { 'has-cancel': status === 'working' }]"
+    role="group"
   >
-    <div class="sa-head">
-      <span class="dot" :class="DOT[status]"></span>
-      <span class="sa-name">{{ props.subagent.name }}</span>
-      <span class="sa-status">{{ STATUS_TEXT[status] }}</span>
-      <span v-if="props.subagent.progress" class="sa-progress">
-        {{ props.subagent.progress.current }}/{{ props.subagent.progress.total }}
+    <button type="button" class="sa-inspect" @click="emit('inspect')">
+      <span class="sa-head">
+        <span class="dot" :class="DOT[status]"></span>
+        <span class="sa-name">{{ props.subagent.name }}</span>
+        <span class="sa-status">{{ STATUS_TEXT[status] }}</span>
+        <span v-if="props.subagent.progress" class="sa-progress">
+          {{ props.subagent.progress.current }}/{{ props.subagent.progress.total }}
+        </span>
+        <span v-if="props.subagent.elapsed" class="sa-elapsed">· {{ props.subagent.elapsed }}</span>
       </span>
-      <span v-if="props.subagent.elapsed" class="sa-elapsed">· {{ props.subagent.elapsed }}</span>
-      <button
-        v-if="status === 'working'"
-        class="sa-cancel"
-        title="取消该子任务"
-        @click.stop="emit('cancel')"
-      >
-        <CodexIcon name="stop" size="sm" />
-      </button>
-    </div>
-    <div v-if="props.subagent.summary" class="sa-body">{{ props.subagent.summary }}</div>
-    <div class="sa-bar"><div class="sa-bar-fill" :style="{ width: pct + '%' }"></div></div>
+      <span v-if="props.subagent.summary" class="sa-body">{{ props.subagent.summary }}</span>
+      <span class="sa-bar"><span class="sa-bar-fill" :style="{ width: pct + '%' }"></span></span>
+    </button>
+    <button
+      v-if="status === 'working'"
+      class="sa-cancel"
+      title="取消该子任务"
+      @click="emit('cancel')"
+    >
+      <CodexIcon name="stop" size="sm" />
+    </button>
   </div>
 </template>
 
 <style scoped>
-/* 卡片保留 div + role="button"(卡头嵌了 sa-cancel 按钮,换 <button> 会造成按钮套按钮);
-   键盘焦点可见性 */
-.subagent-card:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.subagent-card { position: relative; }
+.sa-inspect { display: block; width: 100%; text-align: left; }
+.has-cancel .sa-inspect { padding-right: 24px; }
+.sa-inspect:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sa-cancel { position: absolute; top: 10px; right: 10px; }
 </style>

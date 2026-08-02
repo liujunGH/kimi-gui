@@ -16,6 +16,7 @@ const emit = defineEmits<{
   (e: 'copy'): void;
   (e: 'fork'): void;
   (e: 'export'): void;
+  (e: 'export-markdown'): void;
 }>();
 
 interface MenuEntry {
@@ -23,7 +24,7 @@ interface MenuEntry {
   icon?: string;
   label?: string;
   kbd?: string;
-  action?: 'pin' | 'rename' | 'archive' | 'open-side-task' | 'copy' | 'fork' | 'export';
+  action?: 'pin' | 'rename' | 'archive' | 'open-side-task' | 'copy' | 'fork' | 'export' | 'export-markdown';
   sub?: boolean;
 }
 
@@ -34,9 +35,10 @@ const ENTRIES: MenuEntry[] = [
   { kind: 'sep' },
   { kind: 'item', icon: 'panel-side', label: '打开侧边任务', kbd: '⌥⌘S', action: 'open-side-task' },
   { kind: 'sep' },
-  { kind: 'item', icon: 'copy', label: '复制', action: 'copy' },
+  { kind: 'item', icon: 'copy', label: '复制最近回复', action: 'copy' },
   { kind: 'item', icon: 'git-branch', label: '分叉会话', action: 'fork' },
-  { kind: 'item', icon: 'download', label: '导出对话', action: 'export' },
+  { kind: 'item', icon: 'file', label: '导出 Markdown', action: 'export-markdown' },
+  { kind: 'item', icon: 'download', label: '导出完整归档 ZIP', action: 'export' },
 ];
 
 const open = ref(false);

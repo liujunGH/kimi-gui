@@ -23,11 +23,15 @@ const props = defineProps<{
   loading?: boolean;
   /** If true, models could not be fetched (daemon 404 / unsupported) */
   unavailable?: boolean;
+  /** Existing transcript context will lose its provider prompt-cache reuse when
+   *  the user switches to another model. */
+  cacheWarning?: boolean;
 }>();
 
 const emit = defineEmits<{
   select: [modelId: string];
   'toggle-star': [modelId: string];
+  manage: [];
   close: [];
 }>();
 
@@ -160,6 +164,11 @@ function selectTab(tabId: string): void {
         </Button>
       </div>
 
+      <div v-if="cacheWarning" class="cache-warning" role="note">
+        <Icon name="alert-triangle" size="sm" />
+        <span>切换模型会使当前会话已有上下文的 Prompt Cache 失效，下一轮可能更慢且消耗更多输入 Token。</span>
+      </div>
+
       <!-- Loading state -->
       <div v-if="loading" class="state-row">
         <Spinner size="sm" />
@@ -214,7 +223,10 @@ function selectTab(tabId: string): void {
       </div>
 
       <!-- Footer hint -->
-      <div class="footer-hint">{{ t('model.footerHint') }}</div>
+      <div class="footer-hint">
+        <span>{{ t('model.footerHint') }}</span>
+        <Button variant="ghost" size="sm" @click="emit('manage')">管理模型与 Provider</Button>
+      </div>
     </div>
   </Dialog>
 </template>
@@ -229,6 +241,18 @@ function selectTab(tabId: string): void {
   display: flex;
   gap: var(--space-1);
   overflow-x: auto;
+}
+.cache-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
+  border-radius: var(--radius-md);
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 8%, transparent);
+  font-size: var(--text-sm);
+  line-height: 1.45;
 }
 
 /* Model list */
@@ -334,6 +358,10 @@ function selectTab(tabId: string): void {
 
 /* Footer */
 .footer-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
   padding-top: var(--space-2);
   font-family: var(--font-ui);
   font-size: var(--text-xs);

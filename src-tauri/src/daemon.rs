@@ -11,8 +11,14 @@
 
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::{Read, Write};
+use std::net::{TcpStream, ToSocketAddrs};
 use std::path::PathBuf;
 use std::process::Command;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+const MAX_HEARTBEAT_AGE_SECS: f64 = 30.0;
+const CONNECT_TIMEOUT: Duration = Duration::from_millis(180);
 
 /// 已发现的 daemon 连接信息。
 #[derive(Debug, Clone, Serialize)]
@@ -76,7 +82,7 @@ pub fn find_kimi() -> Option<PathBuf> {
 }
 
 /// 新格式实例信息(0.28+:`server/instances/<ULID>.json`)
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 struct InstanceInfo {
     #[allow(dead_code)]
     server_id: String,
@@ -86,10 +92,165 @@ struct InstanceInfo {
     port: u64,
     #[allow(dead_code)]
     started_at: f64,
-    #[allow(dead_code)]
     heartbeat_at: f64,
     #[allow(dead_code)]
     host_version: String,
+}
+
+fn local_endpoint_from_base(base: &str) -> Result<(String, u16), String> {
+    let authority = base
+        .strip_prefix("http://")
+        .ok_or("只能重启本机 HTTP daemon")?;
+    if authority.contains('/') || authority.contains('?') || authority.contains('#') {
+        return Err("daemon 地址格式无效".to_string());
+    }
+    let (raw_host, raw_port) = authority.rsplit_once(':').ok_or("daemon 地址缺少端口")?;
+    let host = raw_host.trim_matches(['[', ']']);
+    if !matches!(host, "127.0.0.1" | "localhost" | "::1") {
+        return Err("只允许从 GUI 重启本机 daemon".to_string());
+    }
+    let port = raw_port
+        .parse::<u16>()
+        .map_err(|_| "daemon 端口无效".to_string())?;
+    Ok((host.to_string(), port))
+}
+
+fn latest_instance_for_endpoint(home: &PathBuf, host: &str, port: u16) -> Option<InstanceInfo> {
+    let entries = fs::read_dir(home.join("server/instances")).ok()?;
+    entries
+        .flatten()
+        .filter_map(|entry| fs::read_to_string(entry.path()).ok())
+        .filter_map(|content| serde_json::from_str::<InstanceInfo>(&content).ok())
+        .filter(|info| info.host == host && info.port == u64::from(port))
+        .max_by(|left, right| {
+            left.heartbeat_at
+                .partial_cmp(&right.heartbeat_at)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+}
+
+fn request_local_shutdown(host: &str, port: u16, token: &str) -> Result<(), String> {
+    if token.bytes().any(|byte| matches!(byte, b'\r' | b'\n')) {
+        return Err("daemon token 格式无效".to_string());
+    }
+    let address = (host, port)
+        .to_socket_addrs()
+        .map_err(|e| format!("解析 daemon 地址失败: {e}"))?
+        .next()
+        .ok_or("找不到 daemon 地址")?;
+    let mut stream = TcpStream::connect_timeout(&address, Duration::from_secs(2))
+        .map_err(|e| format!("连接 daemon 失败: {e}"))?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .map_err(|e| e.to_string())?;
+    stream
+        .set_write_timeout(Some(Duration::from_secs(2)))
+        .map_err(|e| e.to_string())?;
+    let request = format!(
+        "POST /api/v1/shutdown HTTP/1.1\r\nHost: {host}:{port}\r\nAuthorization: Bearer {token}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+    );
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|e| format!("请求 daemon 关闭失败: {e}"))?;
+    let mut response = Vec::new();
+    let _ = stream.read_to_end(&mut response);
+    let status = String::from_utf8_lossy(&response);
+    if status.starts_with("HTTP/1.1 200") || status.starts_with("HTTP/1.0 200") {
+        Ok(())
+    } else {
+        Err("daemon 拒绝了关闭请求；运行中的任务未被中断".to_string())
+    }
+}
+
+/// Gracefully stop the exact loopback daemon currently used by the GUI, then
+/// launch the installed CLI on the same address. Other Kimi daemon instances
+/// are deliberately left untouched.
+pub fn restart_daemon(current: &Launch) -> Result<Launch, String> {
+    let (host, port) = local_endpoint_from_base(&current.base)?;
+    let home = kimi_home();
+    let old_instance = latest_instance_for_endpoint(&home, &host, port)
+        .ok_or("找不到当前 daemon 的实例记录，为避免误停进程已取消重启")?;
+
+    request_local_shutdown(&host, port, &current.token)?;
+    let stop_deadline = Instant::now() + Duration::from_secs(8);
+    while Instant::now() < stop_deadline && endpoint_is_reachable(&host, u64::from(port)) {
+        std::thread::sleep(Duration::from_millis(150));
+    }
+    if endpoint_is_reachable(&host, u64::from(port)) {
+        return Err("daemon 未在 8 秒内退出；未启动第二个实例".to_string());
+    }
+
+    let kimi = find_kimi().ok_or("找不到 kimi CLI，请先安装或更新 Kimi Code")?;
+    let mut command = Command::new(kimi);
+    let port_text = port.to_string();
+    command.args([
+        "web",
+        "--host",
+        host.as_str(),
+        "--port",
+        port_text.as_str(),
+        "--no-open",
+    ]);
+    command.env("KIMI_CODE_EXPERIMENTAL_SECONDARY_MODEL", "1");
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+    let mut child = command
+        .spawn()
+        .map_err(|e| format!("启动新版 daemon 失败: {e}"))?;
+
+    let start_deadline = Instant::now() + Duration::from_secs(12);
+    while Instant::now() < start_deadline {
+        if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
+            return Err(format!("新版 daemon 启动失败: {status}"));
+        }
+        if endpoint_is_reachable(&host, u64::from(port)) {
+            if let Some(instance) = latest_instance_for_endpoint(&home, &host, port) {
+                if instance.pid != old_instance.pid {
+                    let token = fs::read_to_string(home.join("server.token"))
+                        .map_err(|e| format!("读取 server.token 失败: {e}"))?
+                        .trim()
+                        .to_string();
+                    return Ok(Launch {
+                        base: current.base.clone(),
+                        token,
+                    });
+                }
+            }
+        }
+        std::thread::sleep(Duration::from_millis(250));
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+    Err("新版 daemon 启动超时，已停止未就绪的进程".to_string())
+}
+
+fn heartbeat_is_fresh(heartbeat_at: f64, now_secs: f64) -> bool {
+    if !heartbeat_at.is_finite() || heartbeat_at <= 0.0 {
+        return false;
+    }
+    // Some historical builds wrote milliseconds while current builds write seconds.
+    let normalized = if heartbeat_at > 10_000_000_000.0 {
+        heartbeat_at / 1000.0
+    } else {
+        heartbeat_at
+    };
+    let age = now_secs - normalized;
+    (-5.0..=MAX_HEARTBEAT_AGE_SECS).contains(&age)
+}
+
+fn endpoint_is_reachable(host: &str, port: u64) -> bool {
+    let Ok(port) = u16::try_from(port) else {
+        return false;
+    };
+    let Ok(addresses) = (host, port).to_socket_addrs() else {
+        return false;
+    };
+    addresses
+        .into_iter()
+        .any(|address| TcpStream::connect_timeout(&address, CONNECT_TIMEOUT).is_ok())
 }
 
 /// 旧格式 lock(0.27-:`server/lock`)
@@ -104,16 +265,27 @@ fn find_instance_from_instances_dir(home: &PathBuf) -> Option<(String, u64)> {
     let instances_dir = home.join("server/instances");
     let entries = fs::read_dir(&instances_dir).ok()?;
     let mut latest: Option<(f64, String, u64)> = None;
+    let now_secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()?
+        .as_secs_f64();
     for entry in entries.flatten() {
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()) != Some("json") {
             continue;
         }
-        let Ok(content) = fs::read_to_string(&path) else { continue };
+        let Ok(content) = fs::read_to_string(&path) else {
+            continue;
+        };
         let info: InstanceInfo = match serde_json::from_str(&content) {
             Ok(i) => i,
             Err(_) => continue,
         };
+        if !heartbeat_is_fresh(info.heartbeat_at, now_secs)
+            || !endpoint_is_reachable(&info.host, info.port)
+        {
+            continue;
+        }
         // 选 heartbeat 最新的
         match &latest {
             Some((hb, _, _)) if *hb >= info.heartbeat_at => {}
@@ -131,7 +303,7 @@ fn find_instance_from_legacy_lock(home: &PathBuf) -> Option<(String, u64)> {
     let lock: LegacyLock = serde_json::from_str(&lock_raw).ok()?;
     let host = lock.host.unwrap_or_else(|| "127.0.0.1".to_string());
     let port = lock.port.unwrap_or(58627);
-    Some((host, port))
+    endpoint_is_reachable(&host, port).then_some((host, port))
 }
 
 /// Ensure the local daemon is running and discover its address/credentials.
@@ -146,8 +318,8 @@ pub fn connect_daemon() -> Result<Launch, String> {
     let home = kimi_home();
 
     // 先看是否已有实例在跑(不需要重复启动)
-    let already_running = find_instance_from_instances_dir(&home)
-        .or_else(|| find_instance_from_legacy_lock(&home));
+    let already_running =
+        find_instance_from_instances_dir(&home).or_else(|| find_instance_from_legacy_lock(&home));
 
     if already_running.is_none() {
         // 启动 daemon:`kimi web` / `kimi server run` 都是前台长驻进程,
@@ -158,6 +330,10 @@ pub fn connect_daemon() -> Result<Launch, String> {
         for args in [["web"].as_slice(), ["server", "run"].as_slice()] {
             let mut cmd = Command::new(&kimi);
             cmd.args(args);
+            // GUI exposes a secondary-model picker for subagents. The feature
+            // remains opt-in in the CLI, so enable only this documented
+            // experiment for daemon processes started by Kimi GUI.
+            cmd.env("KIMI_CODE_EXPERIMENTAL_SECONDARY_MODEL", "1");
             #[cfg(windows)]
             {
                 use std::os::windows::process::CommandExt;
@@ -206,4 +382,39 @@ pub fn connect_daemon() -> Result<Launch, String> {
 
     let base = format!("http://{host}:{port}");
     Ok(Launch { base, token })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{heartbeat_is_fresh, local_endpoint_from_base};
+
+    #[test]
+    fn accepts_recent_seconds_and_milliseconds() {
+        let now = 1_800_000_000.0;
+        assert!(heartbeat_is_fresh(now - 5.0, now));
+        assert!(heartbeat_is_fresh((now - 5.0) * 1000.0, now));
+    }
+
+    #[test]
+    fn rejects_stale_invalid_and_far_future_heartbeats() {
+        let now = 1_800_000_000.0;
+        assert!(!heartbeat_is_fresh(now - 31.0, now));
+        assert!(!heartbeat_is_fresh(f64::NAN, now));
+        assert!(!heartbeat_is_fresh(now + 10.0, now));
+    }
+
+    #[test]
+    fn restart_target_must_be_an_explicit_loopback_endpoint() {
+        assert_eq!(
+            local_endpoint_from_base("http://127.0.0.1:58627").unwrap(),
+            ("127.0.0.1".to_string(), 58627)
+        );
+        assert_eq!(
+            local_endpoint_from_base("http://[::1]:58627").unwrap(),
+            ("::1".to_string(), 58627)
+        );
+        assert!(local_endpoint_from_base("https://127.0.0.1:58627").is_err());
+        assert!(local_endpoint_from_base("http://192.168.1.9:58627").is_err());
+        assert!(local_endpoint_from_base("http://127.0.0.1:58627/path").is_err());
+    }
 }

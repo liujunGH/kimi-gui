@@ -171,9 +171,10 @@ const queued = ref(
 function onSend(_text: string, mode: ComposerMode) {
   toast(mode === 'steer' ? '已插话到当前轮(原型)' : running.value ? '已排队(原型)' : '已发送(原型)');
 }
-function qSteer(id: string) {
-  queued.value = queued.value.filter((q) => q.id !== id);
-  toast('已插话到当前轮 · 1 段引导(原型)');
+function qSteer() {
+  const count = queued.value.length;
+  queued.value = [];
+  toast(`已插话到当前轮 · ${count} 段引导(原型)`);
 }
 function qEdit(id: string) {
   queued.value = queued.value.filter((q) => q.id !== id);
@@ -181,6 +182,14 @@ function qEdit(id: string) {
 }
 function qRemove(id: string) {
   queued.value = queued.value.filter((q) => q.id !== id);
+}
+function qReorder(from: number, to: number) {
+  if (from === to || from < 0 || to < 0 || from >= queued.value.length || to >= queued.value.length) return;
+  const next = [...queued.value];
+  const [item] = next.splice(from, 1);
+  if (!item) return;
+  next.splice(to, 0, item);
+  queued.value = next;
 }
 
 const agentPanelOpen = ref(false);
@@ -192,6 +201,10 @@ function openTranscript(id: string) {
 function toggleReview() {
   if (ui.reviewPaneOpen.value) ui.closeReview();
   else ui.openReview();
+}
+function onReviewFix(path: string) {
+  ui.closeReview();
+  toast(`已回填修复请求:${path}(演示)`);
 }
 function toggleDetail() {
   if (ui.detailPaneOpen.value) ui.closeDetail();
@@ -284,12 +297,16 @@ const sideTaskProps = computed(() => {
             ? { text: '待输入', kind: 'warning' as const }
             : { text: '运行中', kind: 'accent' as const },
       thread: { name: sa?.name ?? id, ws: '子智能体 · /swarm 重构 4 个组件', dot: 'running' as const },
+      composerVisible: false,
+      draftKey: `agent:${id}`,
     };
   }
   return {
     title: '侧边任务',
     status: { text: '运行中', kind: 'accent' as const },
     thread: { name: 'DiffView 重做', ws: 'kimi-gui', dot: 'running' as const },
+    composerVisible: true,
+    draftKey: 'thread:demo',
   };
 });
 
@@ -449,9 +466,10 @@ function openFM(e: MouseEvent, file: string) {
         <div class="dock-inner">
           <QueuePanel
             :queued-prompts="queued"
-            @promote-to-steer="qSteer"
+            @steer-all="qSteer"
             @edit="qEdit"
             @remove="qRemove"
+            @reorder="qReorder"
           />
           <Composer
             :running="true"
@@ -504,9 +522,10 @@ function openFM(e: MouseEvent, file: string) {
           <QueuePanel
             :queued-prompts="queued"
             :default-open="true"
-            @promote-to-steer="qSteer"
+            @steer-all="qSteer"
             @edit="qEdit"
             @remove="qRemove"
+            @reorder="qReorder"
           />
           <div class="steer-feedback">
             <CodexIcon name="flag" />
@@ -683,7 +702,12 @@ function openFM(e: MouseEvent, file: string) {
           />
         </div>
       </div>
-      <ReviewPane :files="M.diffFiles" :hunks-by-file="M.hunksByFile" branch="feat/diff-redo" />
+      <ReviewPane
+        :files="M.diffFiles"
+        :hunks-by-file="M.hunksByFile"
+        branch="feat/diff-redo"
+        @request-fix="onReviewFix"
+      />
     </template>
 
     <!-- ================= settings ================= -->

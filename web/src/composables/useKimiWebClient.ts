@@ -283,6 +283,9 @@ interface QueuedPrompt {
 export interface ExtendedState extends KimiClientState {
   connected: boolean;
   serverVersion: string;
+  /** Feature flags reported by GET /meta. Unknown keys must remain unknown so
+   *  newer and older daemon builds can be handled without optimistic 404s. */
+  serverCapabilities: Record<string, boolean>;
   /**
    * True when the connected server reports `dangerous_bypass_auth` in `/meta`,
    * meaning its bearer-token gate is disabled. The UI skips the server-token
@@ -383,6 +386,7 @@ const rawState: ExtendedState = reactive({
   ...createInitialState(),
   connected: false,
   serverVersion: '',
+  serverCapabilities: {},
   dangerousBypassAuth: false,
   backend: 'v1',
   workspaceName: 'kimi-web',
@@ -1894,6 +1898,9 @@ function toUiTask(task: AppTask): TaskItem {
     output,
     runInBackground: task.runInBackground,
     parentToolCallId: task.parentToolCallId,
+    subagentPhase: task.subagentPhase,
+    suspendedReason: task.suspendedReason,
+    swarmIndex: task.swarmIndex,
   };
 }
 
@@ -2048,6 +2055,7 @@ const loadMoreMessagesError = computed<boolean>(() => {
   return sid ? rawState.messagesLoadMoreErrorBySession[sid] ?? false : false;
 });
 const serverVersion = computed<string>(() => rawState.serverVersion);
+const serverCapabilities = computed<Readonly<Record<string, boolean>>>(() => rawState.serverCapabilities);
 const backend = computed<'v1' | 'v2'>(() => rawState.backend);
 const dangerousBypassAuth = computed<boolean>(() => rawState.dangerousBypassAuth);
 
@@ -2805,6 +2813,7 @@ export function useKimiWebClient() {
     hasMoreMessages,
     loadMoreMessagesError,
     serverVersion,
+    serverCapabilities,
     backend,
     dangerousBypassAuth,
     clearDangerousBypassAuth,
@@ -2865,6 +2874,8 @@ export function useKimiWebClient() {
     loadWorkspaces: workspaceState.loadWorkspaces,
     loadMoreSessions: workspaceState.loadMoreSessions,
     loadAllSessions: workspaceState.loadAllSessions,
+    listSessionsForSearch: workspaceState.listSessionsForSearch,
+    selectSessionFromSearch: workspaceState.selectSessionFromSearch,
     selectWorkspace: workspaceState.selectWorkspace,
     openWorkspace: workspaceState.openWorkspace,
     openWorkspaceDraft: workspaceState.openWorkspaceDraft,

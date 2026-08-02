@@ -33,7 +33,10 @@ const props = withDefaults(
 
 const { reviewPaneOpen, closeReview } = useUIState();
 
-const emit = defineEmits<{ (e: 'select-file', path: string): void }>();
+const emit = defineEmits<{
+  (e: 'select-file', path: string): void;
+  (e: 'request-fix', path: string): void;
+}>();
 
 const selected = ref(props.files[0]?.path ?? '');
 watch(
@@ -120,7 +123,7 @@ function baseName(path: string): string {
 </script>
 
 <template>
-  <aside class="review-pane" :class="{ open: reviewPaneOpen }">
+  <aside v-if="reviewPaneOpen" class="review-pane open">
     <div class="rp-head">
       <span class="rp-title">Review · {{ props.files.length }} 个文件</span>
       <span v-if="props.branch" class="rp-branch">{{ props.branch }}</span>
@@ -206,9 +209,9 @@ function baseName(path: string): string {
     <div class="rp-content">
       <div
         v-for="f in props.files"
+        v-show="f.path === selected"
         :key="f.path"
         class="rp-diff"
-        :hidden="f.path !== selected"
       >
         <div class="diff-inline">
           <div class="diff-head">
@@ -218,10 +221,32 @@ function baseName(path: string): string {
               ><span class="add">+{{ f.additions }}</span
               ><span class="del">−{{ f.deletions }}</span></span
             >
+            <button
+              type="button"
+              class="rp-fix"
+              :aria-label="`让 Kimi 修复 ${f.path}`"
+              @click="emit('request-fix', f.path)"
+            >
+              让 Kimi 修复
+            </button>
           </div>
-          <DiffLines :hunks="props.hunksByFile[f.path] ?? []" />
+          <DiffLines v-if="f.path === selected" :hunks="props.hunksByFile[f.path] ?? []" />
         </div>
       </div>
     </div>
   </aside>
 </template>
+
+<style scoped>
+.rp-fix {
+  margin-left: auto;
+  padding: 4px 9px;
+  border: 1px solid var(--accent-bd);
+  border-radius: var(--r-full);
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+.rp-fix:hover { filter: brightness(0.97); }
+</style>

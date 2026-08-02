@@ -1,7 +1,7 @@
 <!-- apps/kimi-web/src/components/settings/ProviderManager.vue -->
 <!-- Modal overlay for managing providers: list, add, refresh, delete. -->
 <script setup lang="ts">
-import { onMounted, onUnmounted, reactive, ref } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { AppProvider } from '../../api/types';
 import { useDialogFocus } from '../../composables/useDialogFocus';
@@ -26,6 +26,10 @@ const props = defineProps<{
   loading?: boolean;
   /** If true, providers could not be fetched (daemon 404 / unsupported) */
   unavailable?: boolean;
+  /** Whether this host has mounted the OAuth device-flow dialog. */
+  oauthAvailable?: boolean;
+  busyIds?: string[];
+  adding?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -36,6 +40,7 @@ const emit = defineEmits<{
   openLogin: [platform: string];
   close: [];
 }>();
+const busySet = computed(() => new Set(props.busyIds ?? []));
 
 // -------------------------------------------------------------------------
 // Delete confirmation
@@ -159,10 +164,10 @@ function statusLabel(status: AppProvider['status']): string {
             <!-- Actions -->
             <div class="prov-actions">
               <Tooltip :text="t('providers.refreshTitle', { type: p.type })">
-                <Button variant="secondary" size="sm" @click="emit('refresh', p.id)">{{ t('providers.refresh') }}</Button>
+                <Button variant="secondary" size="sm" :disabled="busySet.has(p.id)" @click="emit('refresh', p.id)">{{ busySet.has(p.id) ? '处理中…' : t('providers.refresh') }}</Button>
               </Tooltip>
               <Tooltip :text="t('providers.deleteTitle', { type: p.type })">
-                <Button variant="danger-soft" size="sm" @click="onDeleteProvider(p.id)">{{ t('providers.delete') }}</Button>
+                <Button variant="danger-soft" size="sm" :disabled="busySet.has(p.id)" @click="onDeleteProvider(p.id)">{{ t('providers.delete') }}</Button>
               </Tooltip>
             </div>
           </div>
@@ -174,17 +179,17 @@ function statusLabel(status: AppProvider['status']): string {
         <template v-if="!showAddForm">
           <div class="add-btns">
             <!-- OAuth login shortcuts for common platforms -->
-            <Button variant="secondary" size="sm" @click="emit('openLogin', 'moonshot')">
+            <Button v-if="oauthAvailable !== false" variant="secondary" size="sm" @click="emit('openLogin', 'moonshot')">
               <Icon name="user" size="sm" />
               {{ t('providers.loginKimi') }}
             </Button>
-            <Button variant="secondary" size="sm" @click="emit('openLogin', 'anthropic')">
+            <Button v-if="oauthAvailable !== false" variant="secondary" size="sm" @click="emit('openLogin', 'anthropic')">
               <Icon name="user" size="sm" />
               {{ t('providers.loginAnthropic') }}
             </Button>
-            <Button variant="primary" size="sm" @click="openAdd">
+            <Button variant="primary" size="sm" :disabled="adding" @click="openAdd">
               <Icon name="plus" size="sm" />
-              {{ t('providers.enterApiKey') }}
+              {{ adding ? '正在保存…' : t('providers.enterApiKey') }}
             </Button>
           </div>
         </template>
@@ -227,6 +232,11 @@ function statusLabel(status: AppProvider['status']): string {
             </div>
           </div>
         </template>
+      </div>
+
+      <div class="security-hint">
+        <Icon name="tool" size="sm" />
+        <span>API Key 只提交给本机 Kimi daemon；列表与日志不会回显密钥。Provider 目录仅在打开此页面时刷新。</span>
       </div>
 
       <!-- Footer -->
@@ -350,6 +360,7 @@ function statusLabel(status: AppProvider['status']): string {
   color: var(--color-text-faint);
   border-top: 1px solid var(--color-line);
 }
+.security-hint { display: flex; align-items: flex-start; gap: var(--space-2); padding: var(--space-2); border-radius: var(--radius-md); background: var(--color-surface-sunken); color: var(--color-text-muted); font-size: var(--text-xs); line-height: 1.45; }
 
 @media (max-width: 640px) {
   .prov-row {

@@ -2,7 +2,7 @@ import { createApp } from 'vue';
 import App from './App.vue';
 import i18n from './i18n';
 import { installClientErrorCapture } from './debug/trace';
-import { setCredential } from './api/daemon/serverAuth';
+import { setEphemeralCredential } from './api/daemon/serverAuth';
 import '@fontsource-variable/inter/opsz.css';
 import '@fontsource-variable/inter/opsz-italic.css';
 import '@fontsource-variable/jetbrains-mono/wght.css';
@@ -24,12 +24,14 @@ installClientErrorCapture();
  */
 async function bootstrapTauriToken(): Promise<void> {
   if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return;
+  localStorage.removeItem('kimi-web.server-credential');
   const { invoke } = await import('@tauri-apps/api/core');
   for (let i = 0; i < 10; i++) {
     try {
       const info = await invoke<{ base: string; token: string }>('daemon_info');
       if (info?.token) {
-        setCredential(info.token);
+        setEphemeralCredential(info.token);
+        localStorage.setItem('kimi-gui.daemon-base', info.base);
         // eslint-disable-next-line no-console
         console.info('[kimi-gui] daemon token 注入成功,base =', info.base);
         return;

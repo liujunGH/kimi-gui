@@ -11,6 +11,7 @@ export default {
   thinking: { desc: 'Set the thinking level' },
   compact: { desc: 'Compact the conversation history' },
   fork: { desc: 'Fork this session into a new one' },
+  copy: { desc: 'Copy the latest agent response' },
   export: {
     desc: 'Download this session and troubleshooting logs as a ZIP',
     noSession: 'Open a session before exporting it.',

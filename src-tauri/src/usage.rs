@@ -1,7 +1,8 @@
 //! 计划额度抓取(复刻 kimi-ui 的 PTY 抓取方案,已验证可行)
 //!
-//! daemon 无额度 REST 端点(usage/quota/account/rate-limits 等全路径实测 404),
-//! 但 CLI TUI 的 `/usage` 会渲染计划额度(Weekly / 5h limit)。做法与 kimi-ui 一致:
+//! 旧版 daemon 无额度 REST 端点；新版优先由 Web 调用 `/oauth/usage`。
+//! 本模块保留给旧版 daemon：从 CLI TUI 的 `/usage` 渲染计划额度
+//! (Weekly / 5h limit)。做法与 kimi-ui 一致:
 //! 嵌入式 PTY 起无头 TUI(throwaway KIMI_CODE_HOME 放凭据副本,不污染真实数据目录),
 //! ESC 清首启对话框 → 发送 `/usage` → 单独发 `\r` 提交 → vt100 解析渲染结果,
 //! 提取两行 "X% used ... resets in Y"。
@@ -225,23 +226,17 @@ fn refresh_background() {
     }
     thread::spawn(|| {
         // catch_unwind 防止线程 panic 把 SCRAPE_RUNNING 永远留在 true。
-        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            match scrape_plan_usage() {
+        let _ =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match scrape_plan_usage() {
                 Ok(u) => {
                     if let Ok(mut guard) = PLAN_USAGE.lock() {
                         *guard = Some(u);
                     }
                 }
                 Err(e) => eprintln!("[kimi-gui] 额度抓取失败:{e}"),
-            }
-        }));
+            }));
         SCRAPE_RUNNING.store(false, Ordering::Relaxed);
     });
-}
-
-/// 启动时预热缓存(不阻塞 setup)。
-pub fn warm_cache() {
-    refresh_background();
 }
 
 /// Tauri command:返回缓存的额度;过期则后台刷新,本次先返回缓存/loading。
@@ -249,7 +244,10 @@ pub fn warm_cache() {
 pub fn plan_usage() -> Value {
     let stale = PLAN_USAGE
         .lock()
-        .map(|u| u.as_ref().map_or(true, |u| u.fetched_at + SCRAPE_TTL_SECS < now_secs()))
+        .map(|u| {
+            u.as_ref()
+                .map_or(true, |u| u.fetched_at + SCRAPE_TTL_SECS < now_secs())
+        })
         .unwrap_or(true);
     if stale {
         refresh_background();

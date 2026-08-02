@@ -4,8 +4,8 @@
  *
  * 行为:
  * - 指示器开合面板;条数空时自动收起并隐藏
- * - 条操作:引导(转插话)/ 编辑 / 删除,经 emit 上抛
- * - 拖拽重排:grip 拖动 → emit reorder(from, to)
+ * - 整队操作:立即插话；条操作仅编辑 / 删除，避免把单条动作伪装成整队动作
+ * - 拖拽或键盘按钮重排 → emit reorder(from, to)
  */
 import { computed, ref, watch } from 'vue';
 import type { QueuePanelProps, QueuePanelEmits } from '../../../types/codex';
@@ -71,7 +71,15 @@ function onDragEnd() {
     <div class="queue-panel" :class="{ open }">
       <div class="qp-head">
         消息队列
-        <span class="qp-hint">{{ count }} 条 · 拖拽重排</span>
+        <span class="qp-hint">{{ count }} 条 · 可拖拽或按键重排</span>
+        <button
+          type="button"
+          class="qp-steer"
+          title="合并全部排队消息，立即插话到当前轮"
+          @click="emit('steer-all')"
+        >
+          <CodexIcon name="reply" />整队立即插话
+        </button>
       </div>
       <div
         v-for="(q, i) in props.queuedPrompts"
@@ -91,13 +99,11 @@ function onDragEnd() {
         <span class="qp-num">{{ i + 1 }}</span>
         <span class="qp-text">{{ q.text }}</span>
         <span class="qp-actions">
-          <button
-            class="qp-steer"
-            title="转为引导:合并全部排队消息,立即插话到当前轮(TUI 对等行为)"
-            @click="emit('promote-to-steer', q.id)"
-          >
-            <CodexIcon name="reply" />
-            引导
+          <button class="icon-btn qp-move" :disabled="i === 0" title="上移" :aria-label="`上移第 ${i + 1} 条消息`" @click="emit('reorder', i, i - 1)">
+            <CodexIcon name="chevron-up" size="sm" />
+          </button>
+          <button class="icon-btn qp-move" :disabled="i === count - 1" title="下移" :aria-label="`下移第 ${i + 1} 条消息`" @click="emit('reorder', i, i + 1)">
+            <CodexIcon name="chevron-down" size="sm" />
           </button>
           <button class="icon-btn" title="编辑" @click="emit('edit', q.id)">
             <CodexIcon name="pencil" size="sm" />
@@ -119,4 +125,10 @@ function onDragEnd() {
   font-family: inherit;
 }
 .queue-indicator:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.qp-head .qp-hint { margin-left: auto; }
+.qp-head .qp-steer { margin-left: 4px; }
+.qp-actions .icon-btn:disabled { opacity: 0.35; cursor: default; }
+.qp-row .qp-actions .qp-move { opacity: 0.6; }
+.qp-row .qp-actions .qp-move:hover,
+.qp-row .qp-actions .qp-move:focus-visible { opacity: 1; }
 </style>

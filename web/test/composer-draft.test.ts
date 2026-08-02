@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
 import { useComposerDraft } from '../src/composables/useComposerDraft';
 import { draftStorageKey } from '../src/lib/storage';
@@ -48,6 +48,7 @@ describe('useComposerDraft', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     if (original === undefined) {
       delete (globalThis as { localStorage?: Storage }).localStorage;
     } else {
@@ -71,17 +72,21 @@ describe('useComposerDraft', () => {
   });
 
   it('persists the draft when the text changes', async () => {
+    vi.useFakeTimers();
     const { text } = setup('s1');
     text.value = 'hello';
     await nextTick();
+    vi.advanceTimersByTime(300);
     expect(globalThis.localStorage.getItem(draftStorageKey('s1'))).toBe('hello');
   });
 
   it('clears the stored draft when the text is emptied', async () => {
+    vi.useFakeTimers();
     globalThis.localStorage.setItem(draftStorageKey('s1'), 'x');
     const { text } = setup('s1');
     text.value = '';
     await nextTick();
+    vi.advanceTimersByTime(300);
     expect(globalThis.localStorage.getItem(draftStorageKey('s1'))).toBeNull();
   });
 

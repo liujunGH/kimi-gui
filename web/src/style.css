@@ -952,3 +952,15 @@ body {
     font-size: max(16px, var(--ui-font-size-xl));
   }
 }
+/* Native preflight is painted before Vue/API initialization, so a cold daemon
+   start never leaves an unexplained blank window. */
+.boot-status {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  gap: 10px;
+  text-align: center;
+  color: var(--text-2, #5f6670);
+  background: var(--bg, #fff);
+}
+.boot-status strong { color: var(--text, #20242a); font-size: 18px; }

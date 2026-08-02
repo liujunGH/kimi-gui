@@ -8,7 +8,7 @@ import type { AppTask } from '../../api/types';
 import { keepLiveSubagents } from '../../lib/taskMerge';
 import type { ExtendedState } from '../useKimiWebClient';
 
-const TASK_OUTPUT_POLL_INTERVAL_MS = 1000;
+const TASK_OUTPUT_POLL_INTERVAL_MS = 3000;
 const TASK_OUTPUT_POLL_BYTES = 4096;
 const TASK_OUTPUT_FINAL_BYTES = 32 * 1024;
 
@@ -132,6 +132,11 @@ export function useTaskPoller(
         const isTerminal =
           task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled';
         if (!isRunning && !isTerminal) return;
+
+        // Live subagent progress is already projected from WebSocket events.
+        // Skipping per-agent tail reads keeps a swarm from producing N+1 REST
+        // requests every tick; terminal output still gets one final backfill.
+        if (isRunning && task.kind === 'subagent') return;
 
         // Running tasks: poll tail continuously. Terminal tasks: fetch a final
         // snapshot once if we have not already received real streamed output.

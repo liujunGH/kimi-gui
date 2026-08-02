@@ -83,6 +83,7 @@
   font-size: var(--text-sm);
   color: var(--text-2);
   cursor: pointer; user-select: none;
+  text-align: left;
 }
 .toolbar-thinking-toggle:hover { background: var(--hover); }
 .tt-switch {

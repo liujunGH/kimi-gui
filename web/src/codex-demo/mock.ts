@@ -509,8 +509,13 @@ const [notifyOnQuestion, setNotifyOnQuestion] = rw(true);
 const [notifyOnApproval, setNotifyOnApproval] = rw(true);
 const [soundOnComplete, setSoundOnComplete] = rw(false);
 const [uiFontSize, setUiFontSize] = rw(14);
+const config = ref({ defaultPermissionMode: 'manual', defaultModel: 'kimi-k3' });
 
 export const mockKimiClient = {
+  config,
+  updateConfig: async (patch: Record<string, unknown>) => {
+    config.value = { ...config.value, ...patch } as typeof config.value;
+  },
   permission, setPermission,
   models: ref([
     { id: 'kimi-k2.7', displayName: 'K2.7' },
@@ -522,7 +527,8 @@ export const mockKimiClient = {
   notifyOnApproval, setNotifyOnApproval,
   soundOnComplete, setSoundOnComplete,
   uiFontSize, setUiFontSize,
-  loadArchivedSessions: async () => {},
+  loadArchivedSessions: async () => ({ items: [] }),
+  restoreSession: async () => true,
   archivedSessions: ref([]),
   connection: ref('connected'),
   serverVersion: ref('2.1.0-demo'),

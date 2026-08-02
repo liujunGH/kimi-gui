@@ -50,7 +50,12 @@
 .new-task .ic { width: 14px; height: 14px; }
 
 /* ---------- 搜索 ---------- */
-.sidebar-search { flex: none; padding: 0 12px 10px; }
+.sidebar-search {
+  flex: none;
+  width: 100%;
+  padding: 0 12px 10px;
+  text-align: left;
+}
 .search-box {
   height: 30px;
   display: flex; align-items: center; gap: 7px;
@@ -73,6 +78,28 @@
 }
 
 .workspace-group { display: flex; flex-direction: column; gap: 1px; }
+
+.workspace-pager {
+  display: flex;
+  justify-content: center;
+  padding: 0 4px 4px;
+}
+.workspace-pager-btn {
+  width: 100%;
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px dashed var(--border-soft);
+  border-radius: var(--r-md);
+  color: var(--text-3);
+  font-size: var(--text-xs);
+  background: transparent;
+  transition: background var(--dur-1), color var(--dur-1), border-color var(--dur-1);
+}
+.workspace-pager-btn:hover {
+  color: var(--text-2);
+  border-color: var(--border);
+  background: var(--hover);
+}
 
 .workspace-header {
   position: relative;

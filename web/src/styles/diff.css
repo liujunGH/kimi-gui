@@ -93,6 +93,7 @@
 .dl-hidden { display: none; }
 .dl-collapsed {
   display: flex; justify-content: center;
+  width: 100%;
   padding: 5px 0;
   background: var(--bg-subtle);
   border-top: 1px dashed var(--border);

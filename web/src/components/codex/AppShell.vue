@@ -7,15 +7,24 @@
  *   default         主区内容(toolbar + conversation + dock + 各 pane)
  * 折叠态自管(.sidebar-collapsed),展开按钮由 CSS 兄弟选择器控制显隐。
  */
-import { ref } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 import CodexIcon from './layout/CodexIcon.vue';
 
 const COLLAPSED_KEY = 'kimi-ui.sidebar-collapsed';
-const collapsed = ref(localStorage.getItem(COLLAPSED_KEY) === '1');
+const storedCollapsed = localStorage.getItem(COLLAPSED_KEY);
+const narrowQuery = window.matchMedia('(max-width: 1100px)');
+const hasManualPreference = ref(storedCollapsed !== null);
+const collapsed = ref(storedCollapsed === null ? narrowQuery.matches : storedCollapsed === '1');
 function toggleCollapsed() {
   collapsed.value = !collapsed.value;
+  hasManualPreference.value = true;
   localStorage.setItem(COLLAPSED_KEY, collapsed.value ? '1' : '0');
 }
+function onNarrowChange(event: MediaQueryListEvent) {
+  if (!hasManualPreference.value) collapsed.value = event.matches;
+}
+onMounted(() => narrowQuery.addEventListener('change', onNarrowChange));
+onUnmounted(() => narrowQuery.removeEventListener('change', onNarrowChange));
 </script>
 
 <template>

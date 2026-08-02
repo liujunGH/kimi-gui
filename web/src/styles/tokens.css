@@ -39,7 +39,7 @@
 
   --text: #20242a;
   --text-2: rgba(32, 36, 42, 0.62);
-  --text-3: rgba(32, 36, 42, 0.4);
+  --text-3: rgba(32, 36, 42, 0.62);
 
   /* 品牌 */
   --accent: #1783ff;
@@ -89,7 +89,7 @@
 
   --text: #e8eaee;
   --text-2: rgba(232, 234, 238, 0.62);
-  --text-3: rgba(232, 234, 238, 0.4);
+  --text-3: rgba(232, 234, 238, 0.62);
 
   --accent: #4c9aff;
   --accent-hover: #6badff;

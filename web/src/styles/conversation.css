@@ -122,9 +122,9 @@
 }
 .sa-cancel:hover { background: var(--hover); color: var(--danger); }
 .sa-progress { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
-.sa-body { margin-top: 6px; font-size: var(--text-sm); line-height: 1.55; color: var(--text-2); }
-.sa-bar { margin-top: 10px; height: 3px; border-radius: var(--r-full); background: var(--bg-soft); overflow: hidden; }
-.sa-bar-fill { height: 100%; border-radius: inherit; background: var(--accent); }
+.sa-body { display: block; margin-top: 6px; font-size: var(--text-sm); line-height: 1.55; color: var(--text-2); }
+.sa-bar { display: block; margin-top: 10px; height: 3px; border-radius: var(--r-full); background: var(--bg-soft); overflow: hidden; }
+.sa-bar-fill { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
 .subagent-card.is-done .sa-bar-fill { background: var(--success); }
 .subagent-card.is-waiting .sa-body {
   background: var(--warning-soft);

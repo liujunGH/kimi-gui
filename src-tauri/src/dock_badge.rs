@@ -12,7 +12,9 @@ fn set_dock_badge_impl(app: &tauri::AppHandle, count: u32) {
         use objc2_app_kit::NSApplication;
         use objc2_foundation::NSString;
 
-        let Some(mtm) = MainThreadMarker::new() else { return };
+        let Some(mtm) = MainThreadMarker::new() else {
+            return;
+        };
         let tile = NSApplication::sharedApplication(mtm).dockTile();
         if count == 0 {
             tile.setBadgeLabel(None);

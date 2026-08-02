@@ -405,6 +405,7 @@ export interface WireConfig {
   default_provider?: string;
   default_model?: string;
   models?: Record<string, unknown>;
+  secondary_model?: unknown;
   thinking?: unknown;
   plan_mode?: boolean;
   yolo?: boolean;
@@ -415,6 +416,7 @@ export interface WireConfig {
   services?: unknown;
   merge_all_available_skills?: boolean;
   extra_skill_dirs?: string[];
+  extra_agent_dirs?: string[];
   loop_control?: unknown;
   background?: unknown;
   experimental?: Record<string, boolean>;

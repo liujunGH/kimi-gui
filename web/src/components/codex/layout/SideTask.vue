@@ -19,6 +19,8 @@ import { useUIState } from '../../../composables/codex/useUIState';
 
 const props = withDefaults(defineProps<SideTaskProps & { running?: boolean }>(), {
   running: false,
+  composerVisible: true,
+  draftKey: 'default',
 });
 const emit = defineEmits<{ (e: 'send', text: string): void }>();
 
@@ -39,6 +41,14 @@ const pillClass = computed(() => `pill-${props.status.kind}`);
 
 /** 迷你 Composer 输入(轮次 5:从装饰改成可用) */
 const draft = ref('');
+const drafts = new Map<string, string>();
+watch(
+  () => props.draftKey,
+  (next, previous) => {
+    if (previous) drafts.set(previous, draft.value);
+    draft.value = drafts.get(next) ?? '';
+  },
+);
 function send() {
   const text = draft.value.trim();
   if (!text || props.running) return;
@@ -71,7 +81,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <aside class="side-task" :class="{ open: shown }">
+  <aside v-if="shown" class="side-task open">
     <div class="st-head">
       <CodexIcon name="panel-side" />
       <span class="st-title">{{ props.title }}</span>
@@ -90,7 +100,7 @@ onUnmounted(() => {
     <div class="st-body">
       <slot />
     </div>
-    <div class="st-composer">
+    <div v-if="props.composerVisible" class="st-composer">
       <div class="composer">
         <div class="composer-input">
           <textarea

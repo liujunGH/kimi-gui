@@ -374,13 +374,14 @@ function gutterCls(cell: SplitCell): string | undefined {
     <template v-if="view === 'unified'">
       <template v-for="(h, hi) in hunkViews" :key="hi">
         <template v-for="(row, ri) in h.rows" :key="ri">
-          <div
+          <button
             v-if="ri === h.barAt && !expanded.has(hi)"
+            type="button"
             class="dl-collapsed"
             @click="expand(hi)"
           >
             ⋯ 显示折叠的 {{ h.collapsed }} 行 ⋯
-          </div>
+          </button>
           <div
             class="dl"
             :class="{
@@ -407,13 +408,14 @@ function gutterCls(cell: SplitCell): string | undefined {
     <template v-else>
       <template v-for="(h, hi) in hunkViews" :key="hi">
         <template v-for="(sr, sri) in h.splitRows" :key="sri">
-          <div
+          <button
             v-if="sri === h.splitBarAt && !expanded.has(hi)"
+            type="button"
             class="dl-collapsed"
             @click="expand(hi)"
           >
             ⋯ 显示折叠的 {{ h.collapsed }} 行 ⋯
-          </div>
+          </button>
           <div
             v-if="sr.type === 'hunk'"
             class="dl-split"

@@ -1,7 +1,7 @@
 # kimi-gui 功能补全路线图
 
-> 状态:0.1.1 已发行(2026-07-21);下方清单为历史执行记录,最新进展以 HANDOFF.md 为准。
-> 最终更新:2026-07-20
+> 状态:1.0.12 已发行(2026-08-03);下方清单为历史执行记录,最新进展以 HANDOFF.md 和 CHANGELOG.md 为准。
+> 最终更新:2026-08-03
 > 基于 ZCode 全量核对官方 App.vue + 设计文档 spec。
 
 ## 已完成（ZCode 做的）
@@ -69,5 +69,4 @@ quota(PTY抓取) / context用量 / resolveImage /
 | cron 自动化 | 需 daemon 端点验证 |
 | Git Worktree 隔离 | 需 daemon 端点验证 |
 | session fork 端点 | 需 M0 验证 |
-| quota REST 端点 | daemon 无端点（PTY 抓取已替代）|
-
+| quota REST 端点 | ✅ daemon 0.29+ 已接入 REST；旧 daemon 自动回退 PTY |

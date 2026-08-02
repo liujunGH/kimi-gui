@@ -16,6 +16,7 @@ import { SERVER_AUTH_UNAUTHORIZED_CODE } from '../../api/daemon/http';
 import { isPlaceholderSessionUsage } from '../../api/daemon/mappers';
 import type {
   AppConfig,
+  AppAgentConfigInput,
   AppInFlightTurn,
   AppMessage,
   AppSession,
@@ -819,6 +820,20 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
     rawState.sessionsHasMoreByWorkspace = cleared;
   }
 
+  /** Build a complete search index without replacing the paged sidebar list.
+   *  CodexApp keeps the returned rows in palette-local state, avoiding a large
+   *  sidebar DOM expansion when a user merely opens Cmd+K. */
+  async function listSessionsForSearch(): Promise<AppSession[]> {
+    const result = await listAllSessionsGlobal().catch((err) => {
+      console.warn('[kimi-web] listSessionsForSearch failed; using loaded sessions', err);
+      return null;
+    });
+    if (result === null) return [...rawState.sessions];
+    return result.error === undefined
+      ? result.sessions
+      : mergePartialSessionsWithCached(result.sessions);
+  }
+
   /**
    * Re-read GET /meta and apply the server-self fields (version, open-in
    * apps, auth bypass, backend engine). Called on first load and on every WS
@@ -831,6 +846,7 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
       .catch(() => null);
     if (m === null) return;
     rawState.serverVersion = m.serverVersion;
+    rawState.serverCapabilities = { ...m.capabilities };
     rawState.availableOpenInApps = m.openInApps;
     rawState.dangerousBypassAuth = m.dangerousBypassAuth;
     rawState.backend = m.backend;
@@ -1079,7 +1095,10 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
    * draft model + modes onto the new session. Throws on daemon failure so the
    * caller can surface the error via pushOperationFailure.
    */
-  async function createDraftSession(workspaceId: string): Promise<string | null> {
+  async function createDraftSession(
+    workspaceId: string,
+    agentConfig?: AppAgentConfigInput,
+  ): Promise<string | null> {
     const ws = mergedWorkspaces.value.find((w) => w.id === workspaceId);
     if (!ws) return null;
     // Capture the draft thinking level BEFORE any await: a concurrent session
@@ -1104,6 +1123,7 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
       workspaceId: workspaceIdForCreate,
       cwd: cwdForCreate,
       model: draftPick,
+      agentConfig,
     });
     modelProvider.draftModel.value = null; // applied — the next draft starts from the default
     // The create echo may return model as '' (same daemon quirk as /profile);
@@ -1158,6 +1178,7 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
     workspaceId: string,
     text: string,
     attachments?: PromptAttachment[],
+    agentConfig?: AppAgentConfigInput,
   ): Promise<void> {
     // Guard the whole "create draft session + submit first prompt" flow: the
     // session id doesn't exist until `createDraftSession` resolves, so the
@@ -1168,7 +1189,7 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
     if (startingFirstPromptWorkspaces.has(workspaceId)) return;
     startingFirstPromptWorkspaces.add(workspaceId);
     try {
-      const sid = await createDraftSession(workspaceId);
+      const sid = await createDraftSession(workspaceId, agentConfig);
       if (!sid) return;
       await submitPromptInternal(sid, text, attachments);
     } catch (err) {
@@ -1448,6 +1469,17 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
         rawState.sessionLoading = false;
       }
     }
+  }
+
+  /** A full-text search hit may not belong to the sidebar's paged session set.
+   *  Seed that one session before selecting it so snapshot synchronization has
+   *  a real row to update, without loading the complete session catalogue. */
+  async function selectSessionFromSearch(sessionId: string): Promise<void> {
+    if (!rawState.sessions.some((session) => session.id === sessionId)) {
+      const session = await getKimiWebApi().getSession(sessionId);
+      upsertSessionFront(session);
+    }
+    await selectSession(sessionId);
   }
 
   /** Internal: submit a prompt to a specific session, bypassing the queue check.
@@ -1767,14 +1799,15 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
   }
 
   /**
-   * Upload an image file to the daemon's /api/v1/files endpoint.
-   * Returns { fileId, name, mediaType } on success, or null on error (warning added to state).
+   * Upload any file to the daemon's /api/v1/files endpoint.
+   * The historical function name is retained because both app entry points bind
+   * it as `uploadImage`; the returned metadata is generic and preserves size.
    */
-  async function uploadImage(file: Blob, name?: string): Promise<{ fileId: string; name: string; mediaType: string } | null> {
+  async function uploadImage(file: Blob, name?: string): Promise<{ fileId: string; name: string; mediaType: string; size: number } | null> {
     try {
       const api = getKimiWebApi();
       const result = await api.uploadFile({ file, name });
-      return { fileId: result.id, name: result.name, mediaType: result.mediaType };
+      return { fileId: result.id, name: result.name, mediaType: result.mediaType, size: result.size };
     } catch (err) {
       pushOperationFailure('uploadImage', err);
       return null;
@@ -2740,15 +2773,34 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
     }
   }
 
-  /**
-   * Search files in the active session using the daemon searchFiles endpoint.
-   * Returns {path, name}[] — defensive, returns [] on error or no active session.
-   */
+  /** Search files without ever creating a session just because `@` was typed.
+   * 0.31+ exposes a workspace-scoped route, so a completely new workspace now
+   * works too. Older daemons fall back to the newest real session in that
+   * workspace; if there is none the completion list stays empty. */
   async function searchFiles(query: string): Promise<Array<{ path: string; name: string }>> {
-    const sid = rawState.activeSessionId;
+    const workspaceId = rawState.activeWorkspaceId ?? rawState.workspaces[0]?.id;
+    const workspace = mergedWorkspaces.value.find((item) => item.id === workspaceId);
+    const api = getKimiWebApi();
+    if (workspace) {
+      try {
+        const result = await api.searchWorkspaceFiles(workspace.id || workspace.root, {
+          query,
+          limit: 20,
+        });
+        return result.items.map((item) => ({ path: item.path, name: item.name }));
+      } catch {
+        // Pre-0.31 daemon: keep the session-scoped compatibility path below.
+      }
+    }
+    const sid =
+      rawState.activeSessionId ??
+      rawState.sessions.find(
+        (session) =>
+          !session.archived &&
+          (workspaceId === undefined || workspaceIdForSession(session) === workspaceId),
+      )?.id;
     if (!sid) return [];
     try {
-      const api = getKimiWebApi();
       const result = await api.searchFiles(sid, { query, limit: 20 });
       return result.items.map((item) => ({ path: item.path, name: item.name }));
     } catch {
@@ -2769,7 +2821,9 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
     loadWorkspaces,
     loadMoreSessions,
     loadAllSessions,
+    listSessionsForSearch,
     selectWorkspace,
+    selectSessionFromSearch,
     openWorkspace,
     upsertWorkspacePreserveOrder,
     applyWorkspaceEvent,

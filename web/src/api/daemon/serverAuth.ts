@@ -233,6 +233,11 @@ export function setCredential(value: string): void {
   }
 }
 
+/** Desktop-only credential path: keep the daemon token in process memory. */
+export function setEphemeralCredential(value: string): void {
+  memory = createStoredCredential(value);
+}
+
 /** Drop the credential (memory + localStorage). */
 export function clearCredential(): void {
   const rejected = memory;

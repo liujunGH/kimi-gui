@@ -322,6 +322,14 @@
 .att-chip.uploading { opacity: 0.72; }
 .att-chip.error { border-color: var(--danger-bd); }
 .att-thumb { width: 20px; height: 20px; flex: none; border-radius: 50%; object-fit: cover; display: block; }
+.att-file-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-2);
+  background: var(--active);
+}
+.att-file-icon .ic { width: 13px; height: 13px; }
 .att-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
 .att-status { flex: none; font-size: 11px; color: var(--text-3); }
 .att-status.err { color: var(--danger); }
@@ -338,3 +346,13 @@
 /* 工作区静态标签(会话中不可切换):pill 形态但不可点 */
 .perm-pill.ws-static { cursor: default; }
 .perm-pill.ws-static:hover { background: transparent; color: var(--text-2); }
+.perm-pill.agent-picker.locked { cursor: default; }
+.perm-pill.agent-picker.locked:hover { background: transparent; color: var(--text-2); }
+.agent-picker-label { max-width: 112px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-lock { padding: 1px 5px; border-radius: var(--r-full); background: var(--bg-soft); color: var(--text-3); font-size: 10px; }
+.agent-pop { width: min(330px, calc(100vw - 24px)) !important; max-height: 360px; overflow-y: auto; }
+.agent-pop .mp-name small { margin-left: 4px; color: var(--text-3); font-weight: 500; }
+.agent-picker-state { padding: 10px; color: var(--text-3); font-size: 12px; }
+.agent-manage { border: 0; border-top: 1px solid var(--border); background: transparent; color: var(--accent); padding: 9px 10px; text-align: left; cursor: pointer; }
+.att-size { flex: none; color: var(--text-3); font-size: 10px; }
+.att-retry { flex: none; border: 0; background: transparent; color: var(--accent); font-size: 11px; cursor: pointer; }

@@ -2,11 +2,12 @@
 
 mod daemon;
 mod dock_badge;
+mod runtime;
 mod shortcut;
 mod tray;
 mod usage;
 
-use daemon::{connect_daemon, Launch};
+use daemon::{connect_daemon, restart_daemon, Launch};
 use std::sync::Mutex;
 use tauri::{Manager, State, WindowEvent};
 
@@ -24,6 +25,23 @@ fn daemon_info(state: State<'_, SharedDaemon>) -> Result<Launch, String> {
         .map_err(|e| format!("lock error: {e}"))?
         .clone()
         .ok_or_else(|| "daemon 未连接(可能仍在启动中,稍后重试)".to_string())
+}
+
+/// 使用当前已安装的 Kimi CLI，原端口原凭证重启 GUI 正在连接的 daemon。
+/// shutdown 及新进程就绪都在阻塞线程完成，避免冻结 WebView。
+#[tauri::command]
+async fn restart_kimi_daemon(state: State<'_, SharedDaemon>) -> Result<Launch, String> {
+    let current = state
+        .0
+        .lock()
+        .map_err(|e| format!("lock error: {e}"))?
+        .clone()
+        .ok_or("daemon 尚未连接")?;
+    let next = tauri::async_runtime::spawn_blocking(move || restart_daemon(&current))
+        .await
+        .map_err(|e| e.to_string())??;
+    *state.0.lock().map_err(|e| format!("lock error: {e}"))? = Some(next.clone());
+    Ok(next)
 }
 
 /// 双击自定义标题栏(顶栏/侧栏品牌区):放大/还原窗口。
@@ -58,10 +76,26 @@ pub fn run() {
         .manage(SharedDaemon(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             daemon_info,
+            restart_kimi_daemon,
             toggle_window_zoom,
             quit_app,
             dock_badge::set_dock_badge,
-            usage::plan_usage
+            usage::plan_usage,
+            runtime::kimi_engine_status,
+            runtime::list_kimi_agents,
+            runtime::save_kimi_agent,
+            runtime::delete_kimi_agent,
+            runtime::read_kimi_system_prompt,
+            runtime::save_kimi_system_prompt,
+            runtime::list_kimi_mcp_config,
+            runtime::save_kimi_mcp_server,
+            runtime::delete_kimi_mcp_server,
+            runtime::read_kimi_workspace_context,
+            runtime::save_kimi_workspace_context,
+            runtime::create_kimi_settings_backup,
+            runtime::inspect_kimi_settings_backup,
+            runtime::restore_kimi_settings_backup,
+            runtime::run_kimi_maintenance
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
@@ -76,37 +110,7 @@ pub fn run() {
                         Err(_) => {
                             eprintln!("[kimi-gui] daemon 状态锁已 poison,跳过写实例信息");
                         }
-                    }
-
-                    // 把 token 注入到 webview:用 eval 调前端的 setCredential
-                    // (serverAuth 的 setCredential 是全局函数,写 localStorage + memory)
-                    // 用 localStorage 直接写(serverAuth 的 initServerAuth 会读它)
-                    // token/base 必须用 serde_json 转义成 JS 字符串字面量,防止引号/换行注入。
-                    let token_js = serde_json::to_string(&launch.token)
-                        .unwrap_or_else(|_| "\"\"".to_string());
-                    let base_js = serde_json::to_string(&launch.base)
-                        .unwrap_or_else(|_| "\"\"".to_string());
-                    let js = format!(
-                        r#"
-                        try {{
-                            var cred = JSON.stringify({{
-                                version: 1,
-                                credential: {token_js},
-                                expiresAt: Date.now() + 7*24*60*60*1000
-                            }});
-                            localStorage.setItem('kimi-web.server-credential', cred);
-                            localStorage.setItem('kimi-gui.daemon-base', {base_js});
-                            console.info('[kimi-gui] token + base injected via Rust eval');
-                        }} catch(e) {{
-                            console.error('[kimi-gui] token inject failed:', e);
-                        }}
-                        "#
-                    );
-                    if let Some(window) = app_handle.get_webview_window("main") {
-                        if let Err(e) = window.eval(&js) {
-                            eprintln!("[kimi-gui] eval 注入 token 失败: {e}");
-                        }
-                    }
+                    };
                 }
                 Err(e) => {
                     eprintln!("[kimi-gui] daemon 连接失败: {e}");
@@ -117,9 +121,6 @@ pub fn run() {
             if let Err(e) = tray::setup_tray(app.handle()) {
                 eprintln!("[kimi-gui] 托盘装配失败: {e}");
             }
-
-            // 3. 额度缓存预热(后台 PTY 抓取 /usage,不阻塞启动)
-            usage::warm_cache();
 
             Ok(())
         })

@@ -1,18 +1,15 @@
 /**
  * codex-app 入口 —— 真产品入口(web/app.html → /src/codex-app/main.ts)
  *
- * Tauri 环境下 token 注入:
- * Rust setup 异步连接 daemon → eval JS 写 localStorage('kimi-web.server-credential')。
- * 前端不依赖 Tauri IPC(__TAURI_INTERNALS__ 在 dev 外部 URL 不注入),
- * 而是轮询 localStorage 等 Rust eval 写入,最多等 10 秒。
- *
- * 浏览器环境(开发测试)无 token,走官方 fragment / 手输流程。
+ * 先同步初始化浏览器凭证并立即挂载 UI。Tauri 环境的 daemon 连接由
+ * CodexApp 在 shell 已可见后通过 IPC 完成，避免冷启动出现十秒空白页。
  */
 import { createApp } from 'vue';
 import CodexApp from './CodexApp.vue';
 import i18n from '../i18n';
 import { installClientErrorCapture } from '../debug/trace';
 import { initServerAuth } from '../api/daemon/serverAuth';
+import { setEphemeralCredential } from '../api/daemon/serverAuth';
 import '../composables/codex/useTheme';
 import '@fontsource-variable/inter/opsz.css';
 import '@fontsource-variable/inter/opsz-italic.css';
@@ -32,34 +29,38 @@ import '../styles/settings.css';
 
 installClientErrorCapture();
 
-/**
- * 等 token 到位再 mount。
- *
- * Tauri 环境:Rust eval 异步写 localStorage,轮询等它。
- * 浏览器环境:localStorage 无 token,等 3 秒后放弃(走官方 ServerAuthDialog)。
- */
-function hasCredential(): boolean {
-  try {
-    return !!localStorage.getItem('kimi-web.server-credential');
-  } catch {
-    return false;
+if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+  // Migrate away from older desktop builds that persisted the daemon bearer.
+  localStorage.removeItem('kimi-web.server-credential');
+}
+initServerAuth();
+
+async function bootstrapDesktopDaemon(): Promise<void> {
+  if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return;
+  localStorage.removeItem('kimi-gui.daemon-base');
+  const root = document.querySelector<HTMLElement>('#app');
+  if (root) {
+    root.innerHTML = '<main class="boot-status" role="status"><strong>Kimi Code</strong><span>正在连接本地服务…</span></main>';
+  }
+  const { invoke } = await import('@tauri-apps/api/core');
+  for (let i = 0; i < 40; i++) {
+    try {
+      const info = await invoke<{ base: string; token: string }>('daemon_info');
+      if (info?.token) {
+        setEphemeralCredential(info.token);
+        // Base URL is not secret and must be available before the API client is created.
+        localStorage.setItem('kimi-gui.daemon-base', info.base);
+        return;
+      }
+    } catch {
+      // daemon is still starting
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
   }
 }
 
-async function waitForCredential(maxWait = 10000, interval = 200): Promise<boolean> {
-  if (hasCredential()) return true;
-  for (let elapsed = 0; elapsed < maxWait; elapsed += interval) {
-    await new Promise((r) => setTimeout(r, interval));
-    if (hasCredential()) return true;
-  }
-  return false;
-}
-
-waitForCredential().then((ok) => {
-  if (!ok) {
-    // eslint-disable-next-line no-console
-    console.warn('[codex-app] 10 秒内未检测到 daemon token,走官方 ServerAuthDialog');
-  }
-  initServerAuth();
-  createApp(CodexApp).use(i18n).mount('#app');
-});
+bootstrapDesktopDaemon()
+  .catch((error) => console.warn('[codex-app] daemon preflight failed', error))
+  .finally(() => {
+    createApp(CodexApp).use(i18n).mount('#app');
+  });

@@ -15,7 +15,7 @@
  * 改渲染权限模式(manual/auto/yolo → 逐条确认/自动通过/完全自主)。
  */
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
-import type { DetailPaneProps, DetailPaneEmits, DetailPaneTab } from '../../../types/codex';
+import type { DetailPaneProps, DetailPaneTab, ChangedFile } from '../../../types/codex';
 import type { PermissionMode } from '../../../types';
 import CodexIcon from '../layout/CodexIcon.vue';
 import { useUIState } from '../../../composables/codex/useUIState';
@@ -31,14 +31,64 @@ interface ThinkingSegment {
   label: string;
 }
 
-const props = defineProps<DetailPaneProps & { thinkingSegments?: ThinkingSegment[] }>();
-const emit = defineEmits<DetailPaneEmits>();
+interface InspectTask {
+  id: string;
+  name: string;
+  kind: string;
+  state: 'run' | 'done' | 'fail';
+  timing: string;
+  meta?: string;
+  suspendedReason?: string;
+}
+interface InspectGoal {
+  objective: string;
+  status: 'active' | 'paused' | 'blocked' | 'complete';
+  turnsUsed: number;
+  tokensUsed: number;
+  wallClockMs: number;
+  remainingTokens?: number | null;
+  remainingTurns?: number | null;
+}
+interface InspectAutomation {
+  id: string;
+  schedule?: string;
+  recurring?: boolean;
+  missedCount?: number;
+  stale?: boolean;
+  time?: string;
+}
+interface InspectRuntime {
+  activity: string;
+  branch?: string;
+  ahead?: number;
+  behind?: number;
+  changes: ChangedFile[];
+  additions: number;
+  deletions: number;
+  tasks: InspectTask[];
+  goal?: InspectGoal | null;
+  automations: InspectAutomation[];
+  sessionCost: number;
+  warnings: number;
+}
+
+const props = defineProps<DetailPaneProps & {
+  thinkingSegments?: ThinkingSegment[];
+  inspect?: InspectRuntime;
+}>();
+const emit = defineEmits<{
+  (e: 'set-tab', t: DetailPaneTab): void;
+  (e: 'close'): void;
+  (e: 'open-review', path?: string): void;
+  (e: 'open-task', id: string): void;
+  (e: 'launch-prompt', text: string): void;
+}>();
 
 const ui = useUIState();
 const shown = computed(() => ui.detailPaneOpen.value);
 
 const TABS: { id: DetailPaneTab; label: string }[] = [
-  { id: 'thread', label: '线程' },
+  { id: 'thread', label: '概览' },
   { id: 'thinking', label: '思考' },
   { id: 'tools', label: '工具' },
   { id: 'tasks', label: '任务' },
@@ -63,8 +113,8 @@ function onClose() {
 
 const PERM_LABEL: Record<PermissionMode, string> = {
   manual: '逐条确认',
-  auto: '自动通过',
-  yolo: '完全自主',
+  yolo: 'YOLO',
+  auto: '自动',
 };
 
 const ctxLabel = computed(
@@ -73,6 +123,16 @@ const ctxLabel = computed(
 );
 
 const doneCount = computed(() => props.tasks.filter((t) => t.status === 'done').length);
+const activeRuntimeTasks = computed(() => props.inspect?.tasks.filter((t) => t.state === 'run') ?? []);
+const completedRuntimeTasks = computed(() => props.inspect?.tasks.filter((t) => t.state !== 'run') ?? []);
+
+function formatDuration(ms: number): string {
+  if (ms < 1_000) return `${ms}ms`;
+  const seconds = Math.round(ms / 1_000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}m ${seconds % 60}s`;
+}
 
 function taskClass(status: 'pending' | 'in_progress' | 'done') {
   return status === 'in_progress' ? 'progress' : status;
@@ -230,7 +290,7 @@ function onSearchKeydown(e: KeyboardEvent) {
 </script>
 
 <template>
-  <aside class="detail-pane" :class="{ open: shown }">
+  <aside v-if="shown" class="detail-pane open">
     <div class="dp-head">
       <button
         v-for="t in TABS"
@@ -249,7 +309,12 @@ function onSearchKeydown(e: KeyboardEvent) {
     <div class="dp-body">
       <div class="dp-pane" :class="{ active: tab === 'thread' }">
         <div class="dp-section">
-          <div class="dp-label">线程信息</div>
+          <div class="dp-label">会话</div>
+          <div class="dp-runtime-row">
+            <span class="dot" :class="props.inspect?.activity === 'running' ? 'dot-running' : 'dot-idle'"></span>
+            <strong>{{ props.inspect?.activity === 'running' ? '正在运行' : props.inspect?.activity === 'waiting' ? '等待操作' : '空闲' }}</strong>
+            <span v-if="props.inspect?.warnings" class="pill warning">{{ props.inspect.warnings }} 个警告</span>
+          </div>
           <div class="dp-kv">
             <span class="k">模型</span><span class="v">{{ props.threadInfo.model }}</span>
           </div>
@@ -260,7 +325,10 @@ function onSearchKeydown(e: KeyboardEvent) {
             <span class="k">权限</span><span class="v">{{ PERM_LABEL[props.threadInfo.permission] }}</span>
           </div>
           <div class="dp-kv">
-            <span class="k">创建</span><span class="v">{{ props.threadInfo.createdAt }}</span>
+            <span class="k">最近活动</span><span class="v">{{ props.threadInfo.createdAt }}</span>
+          </div>
+          <div class="dp-kv">
+            <span class="k">成本</span><span class="v">{{ props.inspect?.sessionCost ? `$${props.inspect.sessionCost.toFixed(4)}` : '—' }}</span>
           </div>
         </div>
         <div class="dp-section">
@@ -268,6 +336,20 @@ function onSearchKeydown(e: KeyboardEvent) {
           <div class="ctx-bar">
             <div class="ctx-fill" :style="{ width: props.threadInfo.context.pct + '%' }"></div>
           </div>
+        </div>
+        <div class="dp-section">
+          <div class="dp-label">Git 工作树</div>
+          <div class="dp-kv"><span class="k">分支</span><span class="v">{{ props.inspect?.branch || '非 Git 工作区' }}</span></div>
+          <div v-if="props.inspect?.branch" class="dp-kv"><span class="k">同步</span><span class="v">↑{{ props.inspect.ahead ?? 0 }} ↓{{ props.inspect.behind ?? 0 }}</span></div>
+          <button v-if="props.inspect?.changes.length" class="dp-summary-action" @click="emit('open-review')">
+            <span><strong>{{ props.inspect.changes.length }} 个文件</strong><small><b>+{{ props.inspect.additions }}</b> <em>-{{ props.inspect.deletions }}</em></small></span>
+            <CodexIcon name="chevron-right" />
+          </button>
+          <div v-else class="dp-empty">工作树干净</div>
+          <button v-for="file in props.inspect?.changes.slice(0, 8)" :key="file.path" class="dp-file" @click="emit('open-review', file.path)">
+            <span class="change-badge">{{ file.status }}</span><span>{{ file.path }}</span><small v-if="file.additions !== undefined || file.deletions !== undefined"><b>+{{ file.additions ?? 0 }}</b> <em>-{{ file.deletions ?? 0 }}</em></small>
+          </button>
+          <div v-if="(props.inspect?.changes.length ?? 0) > 8" class="dp-empty">还有 {{ props.inspect!.changes.length - 8 }} 个文件</div>
         </div>
       </div>
 
@@ -340,12 +422,38 @@ function onSearchKeydown(e: KeyboardEvent) {
       </div>
 
       <div class="dp-pane" :class="{ active: tab === 'tasks' }">
+        <div v-if="props.inspect?.goal" class="dp-section">
+          <div class="dp-label">目标</div>
+          <div class="dp-goal">
+            <div><strong>{{ props.inspect.goal.objective }}</strong><span class="pill" :class="{ success: props.inspect.goal.status === 'complete', warning: props.inspect.goal.status === 'blocked' }">{{ props.inspect.goal.status }}</span></div>
+            <small>{{ props.inspect.goal.turnsUsed }} turns · {{ props.inspect.goal.tokensUsed.toLocaleString() }} tokens · {{ formatDuration(props.inspect.goal.wallClockMs) }}</small>
+            <small v-if="props.inspect.goal.remainingTurns !== null && props.inspect.goal.remainingTurns !== undefined">剩余 {{ props.inspect.goal.remainingTurns }} turns</small>
+          </div>
+        </div>
         <div class="dp-section">
-          <div class="dp-label">任务 · {{ doneCount }}/{{ props.tasks.length }}</div>
+          <div class="dp-label">计划清单 · {{ doneCount }}/{{ props.tasks.length }}</div>
           <div v-for="(t, i) in props.tasks" :key="i" class="dp-task" :class="taskClass(t.status)">
             <span class="todo-state"><CodexIcon :name="taskIcon(t.status)" /></span>
             <span>{{ t.title }}</span>
           </div>
+          <div v-if="!props.tasks.length" class="dp-empty">Agent 尚未建立计划</div>
+        </div>
+        <div class="dp-section">
+          <div class="dp-label">Agents 与后台任务 · {{ activeRuntimeTasks.length }} 运行中</div>
+          <button v-for="task in activeRuntimeTasks" :key="task.id" class="dp-runtime-task running" @click="emit('open-task', task.id)">
+            <span class="dot dot-running"></span><span><strong>{{ task.name }}</strong><small>{{ task.kind }} · {{ task.timing }}<template v-if="task.suspendedReason"> · {{ task.suspendedReason }}</template></small></span><CodexIcon name="chevron-right" />
+          </button>
+          <button v-for="task in completedRuntimeTasks.slice(0, 8)" :key="task.id" class="dp-runtime-task" @click="emit('open-task', task.id)">
+            <CodexIcon :name="task.state === 'done' ? 'check-circle' : 'alert-triangle'" /><span><strong>{{ task.name }}</strong><small>{{ task.kind }} · {{ task.timing }}</small></span><CodexIcon name="chevron-right" />
+          </button>
+          <div v-if="!props.inspect?.tasks.length" class="dp-empty">没有 Agent 或后台任务</div>
+        </div>
+        <div class="dp-section">
+          <div class="dp-section-head"><div class="dp-label">自动化历史</div><button @click="emit('launch-prompt', '请创建一个定时任务：')"><CodexIcon name="plus" /> 创建</button></div>
+          <div v-for="job in props.inspect?.automations" :key="job.id" class="dp-automation">
+            <CodexIcon name="clock" /><span><strong>{{ job.schedule || job.id }}</strong><small>{{ job.recurring ? '循环' : '单次' }}<template v-if="job.time"> · {{ job.time }}</template><template v-if="job.missedCount"> · 补跑 {{ job.missedCount }} 次</template></small></span><span v-if="job.stale" class="pill warning">过期</span>
+          </div>
+          <div v-if="!props.inspect?.automations.length" class="dp-empty">本会话没有自动化触发记录</div>
         </div>
       </div>
     </div>

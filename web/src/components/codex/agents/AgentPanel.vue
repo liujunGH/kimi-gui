@@ -37,7 +37,7 @@ function iconVariant(a: Subagent, index: number): string {
 /** 行内状态点:working→running;suspended→waiting(待输入);其余无 */
 function dotOf(a: Subagent): string {
   if (a.status === 'working') return 'dot-running';
-  if (a.status === 'suspended') return 'dot-waiting';
+  if (a.status === 'suspended' || a.status === 'queued') return 'dot-waiting';
   return '';
 }
 function pctOf(a: Subagent): number {
@@ -65,7 +65,7 @@ onUnmounted(() => document.removeEventListener('keydown', onDocKeydown));
 </script>
 
 <template>
-  <aside class="agent-panel" :class="{ open: props.open }">
+  <aside v-if="props.open" class="agent-panel open">
     <div class="aph-head">
       <CodexIcon name="bot" />
       <span class="aph-title">子智能体</span>
@@ -81,22 +81,20 @@ onUnmounted(() => document.removeEventListener('keydown', onDocKeydown));
         v-for="a in props.active"
         :key="a.id"
         class="aph-row"
-        role="button"
-        tabindex="0"
-        @click="emit('inspect', a.id)"
-        @keydown.enter.self="emit('inspect', a.id)"
-        @keydown.space.prevent.self="emit('inspect', a.id)"
+        role="group"
       >
-        <span class="aph-icon" :class="iconVariant(a, 0)">{{ letterOf(a) }}</span>
-        <span class="aph-main">
-          <span class="aph-name">
-            <span v-if="dotOf(a)" class="dot" :class="dotOf(a)"></span>{{ a.name }}
+        <button type="button" class="aph-inspect" @click="emit('inspect', a.id)">
+          <span class="aph-icon" :class="iconVariant(a, 0)">{{ letterOf(a) }}</span>
+          <span class="aph-main">
+            <span class="aph-name">
+              <span v-if="dotOf(a)" class="dot" :class="dotOf(a)"></span>{{ a.name }}
+            </span>
+            <span class="aph-sum">{{ sumOf(a) }}</span>
+            <span v-if="a.progress" class="aph-bar">
+              <span class="aph-bar-fill" :style="{ width: pctOf(a) + '%' }"></span>
+            </span>
           </span>
-          <span class="aph-sum">{{ sumOf(a) }}</span>
-          <span v-if="a.progress" class="aph-bar">
-            <span class="aph-bar-fill" :style="{ width: pctOf(a) + '%' }"></span>
-          </span>
-        </span>
+        </button>
         <button
           v-if="a.status === 'working'"
           class="aph-cancel"
@@ -113,17 +111,15 @@ onUnmounted(() => document.removeEventListener('keydown', onDocKeydown));
         v-for="(a, i) in completedShown"
         :key="a.id"
         class="aph-row"
-        role="button"
-        tabindex="0"
-        @click="emit('inspect', a.id)"
-        @keydown.enter.self="emit('inspect', a.id)"
-        @keydown.space.prevent.self="emit('inspect', a.id)"
+        role="group"
       >
-        <span class="aph-icon" :class="iconVariant(a, i)">{{ letterOf(a) }}</span>
-        <span class="aph-main">
-          <span class="aph-name">{{ a.name }}</span>
-          <span class="aph-sum">{{ sumOf(a) }}</span>
-        </span>
+        <button type="button" class="aph-inspect" @click="emit('inspect', a.id)">
+          <span class="aph-icon" :class="iconVariant(a, i)">{{ letterOf(a) }}</span>
+          <span class="aph-main">
+            <span class="aph-name">{{ a.name }}</span>
+            <span class="aph-sum">{{ sumOf(a) }}</span>
+          </span>
+        </button>
       </div>
       <button v-if="hasMore" class="aph-more" @click="shown += 10">再显示 10 个</button>
     </div>
@@ -135,7 +131,12 @@ onUnmounted(() => document.removeEventListener('keydown', onDocKeydown));
 .ap-body .ap-label:not(:first-child) {
   margin-top: 14px;
 }
-/* aph-row 保留 div + role="button"(行内嵌了 aph-cancel 按钮,换 <button> 会造成按钮套按钮);
-   键盘焦点可见性 */
-.aph-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.aph-inspect {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: 10px;
+  text-align: left;
+}
+.aph-inspect:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 </style>

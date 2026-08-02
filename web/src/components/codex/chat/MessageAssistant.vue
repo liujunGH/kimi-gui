@@ -10,9 +10,8 @@
  * 替代了 codex-demo 时代的极简 renderRich(正则替换),
  * 现在产品入口用真 markdown 渲染。
  */
-import { computed } from 'vue';
+import { computed, defineAsyncComponent } from 'vue';
 import type { ChatTurn, TodoView } from '../../../types';
-import Markdown from '../../chat/Markdown.vue';
 import CodexIcon from '../layout/CodexIcon.vue';
 import ThinkingBlock from './ThinkingBlock.vue';
 import ToolCallCard from './ToolCallCard.vue';
@@ -20,6 +19,9 @@ import TodoCard from './TodoCard.vue';
 import ApprovalCard from '../approval/ApprovalCard.vue';
 import { fromApprovalBlock } from '../approval/approvalMapper';
 import { useUIState } from '../../../composables/codex/useUIState';
+import { needsRichMarkdown } from '../../../lib/markdownPerformance';
+
+const Markdown = defineAsyncComponent(() => import('../../chat/Markdown.vue'));
 
 const ui = useUIState();
 const globalThinking = computed(() => ui.globalThinking.value);
@@ -79,10 +81,12 @@ function copyAll() {
       />
       <div v-else-if="b.kind === 'text' && b.text" class="a-content">
         <Markdown
+          v-if="(props.running && i === lastTextIdx) || needsRichMarkdown(b.text)"
           :text="b.text"
           :streaming="props.running && i === lastTextIdx"
           :open-file="props.openFile"
         />
+        <div v-else class="plain-assistant-text">{{ b.text }}</div>
       </div>
       <ToolCallCard v-else-if="b.kind === 'tool'" :call="b.tool" @inspect="emit('inspect', 'tools')" />
     </template>
@@ -111,4 +115,8 @@ function copyAll() {
 .msg-assistant:hover .foot-copy,
 .msg-assistant:focus-within .foot-copy { opacity: 1; }
 .foot-copy:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.plain-assistant-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 </style>

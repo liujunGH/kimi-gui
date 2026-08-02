@@ -6,7 +6,7 @@
  * pinnedIds:置顶的 session id 列表(契约外补充,轮次 0.3 后加;轮次 3 由 ZCode 接真源)。
  * emits 契约见 SidebarEmits;'open-settings' 是补充 emit(底栏设置入口)。
  */
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import type { Session } from '../../../types';
 import type { SidebarProps, SidebarEmits, WorkspaceSortMode } from '../../../types/codex';
 import CodexIcon from '../layout/CodexIcon.vue';
@@ -64,6 +64,28 @@ const visibleWorkspaces = computed(() => {
   if (props.filter === 'all') return props.workspaces;
   return props.workspaces.filter((ws) => sessionsOf(ws.name).length > 0);
 });
+
+// A large Kimi home can contain dozens of one-off workspaces. Mounting every
+// WorkspaceGroup also mounts every group header/menu and one document listener,
+// even though most rows are far below the scroll viewport. Keep the sidebar
+// progressive while always retaining the active workspace as an escape hatch.
+const WORKSPACE_PAGE = 12;
+const workspaceLimit = ref(WORKSPACE_PAGE);
+const displayedWorkspaces = computed(() => {
+  const visible = visibleWorkspaces.value;
+  if (visible.length <= workspaceLimit.value) return visible;
+  const included = new Set(visible.slice(0, workspaceLimit.value).map((ws) => ws.id));
+  const active = visible.find((ws) => ws.id === props.currentWorkspaceId);
+  if (active) included.add(active.id);
+  return visible.filter((ws) => included.has(ws.id));
+});
+const hiddenWorkspaceCount = computed(
+  () => visibleWorkspaces.value.length - displayedWorkspaces.value.length,
+);
+const canCollapseWorkspaces = computed(
+  () => workspaceLimit.value > WORKSPACE_PAGE && visibleWorkspaces.value.length > WORKSPACE_PAGE,
+);
+watch(() => props.filter, () => { workspaceLimit.value = WORKSPACE_PAGE; });
 /** 筛选零匹配空态 */
 const showFilterEmpty = computed(() => props.filter !== 'all' && filteredSessions.value.length === 0);
 
@@ -102,13 +124,13 @@ function sessionsOf(wsName: string): Session[] {
       </slot>
     </div>
 
-    <div class="sidebar-search" title="搜索线程 ⌘K" @click="emit('search')">
+    <button type="button" class="sidebar-search" title="搜索线程 ⌘K" @click="emit('search')">
       <div class="search-box">
         <CodexIcon name="search" />
         <span>搜索线程</span>
         <span class="kbd">⌘K</span>
       </div>
-    </div>
+    </button>
 
     <StatusFilter :filter="props.filter" @set-filter="(f) => emit('set-filter', f)" />
 
@@ -144,7 +166,7 @@ function sessionsOf(wsName: string): Session[] {
       </section>
 
       <WorkspaceGroup
-        v-for="ws in visibleWorkspaces"
+        v-for="ws in displayedWorkspaces"
         :key="ws.id"
         :workspace="ws"
         :sessions="sessionsOf(ws.name)"
@@ -164,6 +186,24 @@ function sessionsOf(wsName: string): Session[] {
         @delete-workspace="emit('delete-workspace', $event)"
         @copy-path="emit('copy-path', $event)"
       />
+      <div v-if="hiddenWorkspaceCount > 0 || canCollapseWorkspaces" class="workspace-pager">
+        <button
+          v-if="hiddenWorkspaceCount > 0"
+          type="button"
+          class="workspace-pager-btn"
+          @click="workspaceLimit += WORKSPACE_PAGE"
+        >
+          显示更多工作区（剩余 {{ hiddenWorkspaceCount }}）
+        </button>
+        <button
+          v-else
+          type="button"
+          class="workspace-pager-btn"
+          @click="workspaceLimit = WORKSPACE_PAGE"
+        >
+          收起工作区
+        </button>
+      </div>
       <div v-if="showFilterEmpty" class="sf-empty">没有符合筛选的会话</div>
     </div>
 

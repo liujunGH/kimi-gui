@@ -29,13 +29,14 @@ import type {
 import { useComposerDraft } from '../../../composables/useComposerDraft';
 import { useInputHistory } from '../../../composables/useInputHistory';
 import CodexIcon from '../layout/CodexIcon.vue';
-import { useToast } from '../layout/Toast.vue';
 import ComposerModes from './ComposerModes.vue';
 import PermPicker from './PermPicker.vue';
 import ModePicker from './ModePicker.vue';
 import WorkspacePicker from '../layout/WorkspacePicker.vue';
 import ContextMeter from './ContextMeter.vue';
 import ModelPicker from './ModelPicker.vue';
+import AgentPicker from './AgentPicker.vue';
+import type { KimiAgentProfile } from '../../../composables/useKimiRuntime';
 import SlashMenu from './SlashMenu.vue';
 import MentionMenu from './MentionMenu.vue';
 
@@ -53,11 +54,14 @@ const props = withDefaults(
       sessionId?: string;
       /** 会话累计成本(USD),透传给 ContextMeter */
       cost?: number;
-      /** 图片上传(daemon uploadImage);提供后 paste/drop 可上传图片 */
-      uploadImage?: (file: Blob, name?: string) => Promise<{ fileId: string; name: string; mediaType: string } | null>;
+      agents?: KimiAgentProfile[];
+      currentAgent?: string;
+      agentsLoading?: boolean;
+      /** 文件上传(沿用历史 prop 名);提供后 picker / paste / drop 可上传任意文件 */
+      uploadImage?: (file: Blob, name?: string) => Promise<{ fileId: string; name: string; mediaType: string; size?: number } | null>;
     }
   >(),
-  { builtin: () => [], skills: () => [], files: () => [], sessionTitle: '', placeholder: '' },
+  { builtin: () => [], skills: () => [], files: () => [], agents: () => [], currentAgent: 'default', sessionTitle: '', placeholder: '' },
 );
 const emit = defineEmits<ComposerEmits>();
 
@@ -68,7 +72,6 @@ const { text, textareaRef, autosize, loadForEdit, clearDraft } = useComposerDraf
 
 // shell 式 ↑/↓ 已发消息召回 —— 见 useInputHistory;键位编排留在本组件(见 onKeydown)
 const history = useInputHistory({ text, textareaRef, autosize, sessionId: () => props.sessionId });
-const { toast } = useToast();
 
 /** 补全检测:'/' 开头单 token → slash;最后 token 以 @ 起头 → mention */
 const assist = computed(() => {
@@ -216,46 +219,78 @@ interface PendingAttachment {
   url: string;
   uploading: boolean;
   error: boolean;
+  errorMessage?: string;
+  blob: Blob;
   fileId?: string;
   mediaType?: string;
+  size?: number;
+  kind: 'image' | 'video' | 'file';
 }
 const attachments = ref<PendingAttachment[]>([]);
 const fileInputEl = ref<HTMLInputElement | null>(null);
+const MAX_ATTACHMENT_COUNT = 20;
+const MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024;
+
+function formatBytes(size?: number): string {
+  if (!size) return '0 B';
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
+async function uploadAttachment(att: PendingAttachment): Promise<void> {
+  if (!props.uploadImage || att.blob.size > MAX_ATTACHMENT_BYTES) return;
+  att.uploading = true;
+  att.error = false;
+  att.errorMessage = undefined;
+  try {
+    const result = await props.uploadImage(att.blob, att.name);
+    if (result) {
+      att.fileId = result.fileId;
+      att.mediaType = result.mediaType || att.mediaType;
+      att.size = result.size ?? att.size;
+    } else {
+      att.error = true;
+      att.errorMessage = 'daemon 未接受这个文件';
+    }
+  } catch (error) {
+    att.error = true;
+    att.errorMessage = error instanceof Error ? error.message : '上传失败';
+  } finally {
+    att.uploading = false;
+  }
+}
 
 async function handleFiles(files: FileList | File[]) {
   if (!props.uploadImage) return;
-  const arr = Array.from(files);
-  let rejected = 0;
+  const room = Math.max(0, MAX_ATTACHMENT_COUNT - attachments.value.length);
+  const arr = Array.from(files).slice(0, room);
   for (const file of arr) {
-    const isImage = file.type.startsWith('image/') || file.type.startsWith('video/');
-    if (!isImage) {
-      rejected++;
-      continue;
-    }
+    const kind = file.type.startsWith('image/')
+      ? 'image'
+      : file.type.startsWith('video/')
+        ? 'video'
+        : 'file';
     const att: PendingAttachment = {
       localId: crypto.randomUUID(),
       name: file.name,
       url: URL.createObjectURL(file),
       uploading: true,
       error: false,
+      blob: file,
+      kind,
+      mediaType: file.type || 'application/octet-stream',
+      size: file.size,
     };
     attachments.value.push(att);
-    try {
-      const result = await props.uploadImage(file, file.name);
-      if (result) {
-        att.fileId = result.fileId;
-        att.mediaType = result.mediaType;
-      } else {
-        att.error = true;
-      }
-    } catch {
-      att.error = true;
-    } finally {
+    if (file.size > MAX_ATTACHMENT_BYTES) {
       att.uploading = false;
+      att.error = true;
+      att.errorMessage = '单个文件不能超过 100 MB';
+      continue;
     }
+    await uploadAttachment(att);
   }
-  // 不支持的类型不再静默吞掉(普通文件上传是协议侧待排期项)
-  if (rejected) toast(`${rejected} 个文件暂不支持(仅图片/视频),可用 @ 引用文件`);
 }
 
 function removeAttachment(localId: string) {
@@ -300,9 +335,11 @@ function buildAttachments(): { fileId: string; kind: 'image' | 'video' | 'file';
     .filter((a) => a.fileId && !a.uploading && !a.error)
     .map((a) => ({
       fileId: a.fileId!,
-      kind: (a.mediaType?.startsWith('video/') ? 'video' : 'image') as 'image' | 'video' | 'file',
+      kind: a.kind,
       url: a.url,
       name: a.name,
+      mediaType: a.mediaType,
+      size: a.size,
     }));
 }
 
@@ -360,10 +397,13 @@ defineExpose({ setText, focus });
         class="att-chip"
         :class="{ uploading: att.uploading, error: att.error }"
       >
-        <img v-if="att.url" :src="att.url" class="att-thumb" />
-        <span class="att-name">{{ att.name }}</span>
+        <img v-if="att.kind === 'image'" :src="att.url" class="att-thumb" :alt="att.name" />
+        <span v-else class="att-thumb att-file-icon"><CodexIcon name="file" /></span>
+        <span class="att-name" :title="`${att.name} · ${att.mediaType} · ${formatBytes(att.size)}`">{{ att.name }}</span>
+        <span class="att-size">{{ formatBytes(att.size) }}</span>
         <span v-if="att.uploading" class="att-status">上传中…</span>
-        <span v-else-if="att.error" class="att-status err">失败</span>
+        <button v-else-if="att.error && (att.size ?? 0) <= MAX_ATTACHMENT_BYTES" class="att-retry" :title="att.errorMessage" @click="uploadAttachment(att)">重试</button>
+        <span v-else-if="att.error" class="att-status err" :title="att.errorMessage">{{ att.errorMessage }}</span>
         <button class="att-remove" @click="removeAttachment(att.localId)"><CodexIcon name="x" /></button>
       </div>
     </div>
@@ -371,7 +411,6 @@ defineExpose({ setText, focus });
     <input
       ref="fileInputEl"
       type="file"
-      accept="image/*,video/*"
       multiple
       style="display:none"
       @change="onFileInputChange"
@@ -391,7 +430,7 @@ defineExpose({ setText, focus });
 
     <div class="composer-toolbar">
       <div class="toolbar-group">
-        <button v-if="props.uploadImage" class="attach-btn" title="添加图片附件" @click="pickFile">
+        <button v-if="props.uploadImage" class="attach-btn" title="添加文件附件" @click="pickFile">
           <CodexIcon name="paperclip" />
         </button>
         <WorkspacePicker
@@ -410,6 +449,14 @@ defineExpose({ setText, focus });
           <CodexIcon name="file" />
           <span class="ellipsis wp-pill-name">{{ currentWsName }}</span>
         </span>
+        <AgentPicker
+          :agents="props.agents"
+          :current="props.currentAgent"
+          :loading="props.agentsLoading"
+          :locked="Boolean(props.sessionId)"
+          @select="(name) => emit('set-agent', name)"
+          @manage="emit('manage-agents')"
+        />
         <PermPicker :permission="props.permission" @set-permission="(p) => emit('set-permission', p)" />
         <ModePicker :modes="props.modes" @toggle-mode="(m) => emit('toggle-mode', m)" />
       </div>

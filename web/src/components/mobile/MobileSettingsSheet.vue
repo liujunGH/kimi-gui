@@ -71,7 +71,7 @@ function onColorScheme(v: string): void {
   emit('setColorScheme', v as ColorScheme);
 }
 
-const PERM_MODES: PermissionMode[] = ['manual', 'auto', 'yolo'];
+const PERM_MODES: PermissionMode[] = ['manual', 'yolo', 'auto'];
 
 // Identity is the model id — display/model names can collide across providers.
 const currentModel = computed<AppModel | undefined>(() =>

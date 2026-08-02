@@ -6,10 +6,15 @@ import { buildRestUrl, buildWsUrl } from '../config';
 import { traceKeyEvent } from '../../debug/trace';
 import type {
   AppConfig,
+  AppAgentConfigInput,
+  AppMcpServer,
+  AppSearchResult,
+  AppToolDescriptor,
   AppGoal,
   AppMessage,
   AppMessageRole,
   AppModel,
+  AppOAuthUsage,
   AppProvider,
   ProviderRefreshResult,
   AppSession,
@@ -376,6 +381,7 @@ export class DaemonKimiWebApi implements KimiWebApi {
     cwd?: string;
     model?: string;
     workspaceId?: string;
+    agentConfig?: AppAgentConfigInput;
   }): Promise<AppSession> {
     // The real daemon requires `metadata` to be an object (rejects a missing
     // metadata with 40001), so always send it — with cwd when provided.
@@ -387,7 +393,18 @@ export class DaemonKimiWebApi implements KimiWebApi {
     // only understands cwd, still creates the session in the right folder.
     if (input.workspaceId !== undefined) body['workspace_id'] = input.workspaceId;
     if (input.title !== undefined) body['title'] = input.title;
-    if (input.model !== undefined) body['agent_config'] = { model: input.model };
+    const agentConfig: Record<string, unknown> = {};
+    const configured = input.agentConfig;
+    if (input.model !== undefined) agentConfig['model'] = input.model;
+    if (configured?.model !== undefined) agentConfig['model'] = configured.model;
+    if (configured?.systemPrompt !== undefined) agentConfig['system_prompt'] = configured.systemPrompt;
+    if (configured?.tools !== undefined) agentConfig['tools'] = configured.tools;
+    if (configured?.mcpServers !== undefined) agentConfig['mcp_servers'] = configured.mcpServers;
+    if (configured?.thinking !== undefined) agentConfig['thinking'] = configured.thinking;
+    if (configured?.permissionMode !== undefined) agentConfig['permission_mode'] = configured.permissionMode;
+    if (configured?.planMode !== undefined) agentConfig['plan_mode'] = configured.planMode;
+    if (configured?.swarmMode !== undefined) agentConfig['swarm_mode'] = configured.swarmMode;
+    if (Object.keys(agentConfig).length > 0) body['agent_config'] = agentConfig;
     const data = await this.http.post<WireSession>('/sessions', body);
     return toAppSession(data);
   }
@@ -998,6 +1015,79 @@ export class DaemonKimiWebApi implements KimiWebApi {
     };
   }
 
+  async searchWorkspaceFiles(
+    workspace: string,
+    input: { query: string; limit?: number },
+  ): Promise<{ items: Array<{ path: string; name: string; kind: 'file' | 'directory' | 'symlink'; score: number; matchPositions: number[] }>; truncated: boolean }> {
+    const data = await this.http.post<WireSearchFilesResult>('/workspace/fs:search', {
+      workspace,
+      query: input.query,
+      limit: input.limit ?? 20,
+      follow_gitignore: true,
+    });
+    return {
+      items: data.items.map((item) => ({
+        path: item.path,
+        name: item.name,
+        kind: item.kind,
+        score: item.score,
+        matchPositions: item.match_positions,
+      })),
+      truncated: data.truncated,
+    };
+  }
+
+  async searchAll(input: {
+    query: string;
+    mode?: 'terms' | 'literal';
+    op?: 'AND' | 'OR';
+    role?: 'user' | 'assistant' | 'title';
+    sort?: 'score' | 'time_desc' | 'time_asc';
+    pageSize?: number;
+    pageToken?: string;
+  }): Promise<AppSearchResult> {
+    const data = await this.http.post<{
+      items: Array<{ session_id: string; workspace_id: string; session_title: string; agent_id: string; role: 'user' | 'assistant' | 'title'; snippet: string; time: number; turn?: number; step_id?: string; score: number }>;
+      has_more: boolean;
+      page_token?: string;
+      incomplete?: 'candidate_cap';
+      index_state: { state: 'building' | 'ready' | 'readonly'; indexed_sessions: number; total_sessions: number; documents: number };
+      source: 'live' | 'index';
+    }>('/search', {
+      query: input.query,
+      mode: input.mode ?? 'terms',
+      op: input.op ?? 'AND',
+      role: input.role,
+      sort: input.sort ?? 'score',
+      page_size: input.pageSize ?? 50,
+      page_token: input.pageToken,
+    });
+    return {
+      items: data.items.map((item) => ({
+        sessionId: item.session_id,
+        workspaceId: item.workspace_id,
+        sessionTitle: item.session_title,
+        agentId: item.agent_id,
+        role: item.role,
+        snippet: item.snippet,
+        time: item.time,
+        turn: item.turn,
+        stepId: item.step_id,
+        score: item.score,
+      })),
+      hasMore: data.has_more,
+      pageToken: data.page_token,
+      incomplete: data.incomplete,
+      indexState: {
+        state: data.index_state.state,
+        indexedSessions: data.index_state.indexed_sessions,
+        totalSessions: data.index_state.total_sessions,
+        documents: data.index_state.documents,
+      },
+      source: data.source,
+    };
+  }
+
   async grepFiles(
     sessionId: string,
     input: { pattern: string; regex?: boolean; caseSensitive?: boolean },
@@ -1200,12 +1290,7 @@ export class DaemonKimiWebApi implements KimiWebApi {
   // Available in daemon 0.29+. Returns quota info without PTY scraping.
   // -------------------------------------------------------------------------
 
-  async getOAuthUsage(): Promise<{
-    kind: string;
-    summary: { label: string; used: number; limit: number; reset_hint: string };
-    limits: { label: string; used: number; limit: number; reset_hint: string }[];
-    extra_usage: { label: string; used: number; limit: number; reset_hint: string } | null;
-  } | null> {
+  async getOAuthUsage(): Promise<AppOAuthUsage | null> {
     try {
       return await this.http.get('/oauth/usage');
     } catch {
@@ -1308,6 +1393,35 @@ export class DaemonKimiWebApi implements KimiWebApi {
     return toProviderRefreshResult(data);
   }
 
+  async listTools(sessionId?: string): Promise<AppToolDescriptor[]> {
+    const query = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : '';
+    const data = await this.http.get<{ tools: Array<{ name: string; description: string; input_schema: unknown; source: 'builtin' | 'skill' | 'mcp'; mcp_server_id?: string; active?: boolean }> }>(`/tools${query}`);
+    return data.tools.map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      inputSchema: tool.input_schema,
+      source: tool.source,
+      mcpServerId: tool.mcp_server_id,
+      active: tool.active,
+    }));
+  }
+
+  async listMcpServers(): Promise<AppMcpServer[]> {
+    const data = await this.http.get<{ servers: Array<{ id: string; name: string; transport: 'stdio' | 'http' | 'sse'; status: 'connected' | 'connecting' | 'disconnected' | 'error'; last_error?: string; tool_count: number }> }>('/mcp/servers');
+    return data.servers.map((server) => ({
+      id: server.id,
+      name: server.name,
+      transport: server.transport,
+      status: server.status,
+      lastError: server.last_error,
+      toolCount: server.tool_count,
+    }));
+  }
+
+  async restartMcpServer(id: string): Promise<{ restarting: true }> {
+    return this.http.post<{ restarting: true }>(`/mcp/servers/${encodeURIComponent(id)}:restart`);
+  }
+
   // -------------------------------------------------------------------------
   // Config — REAL endpoints
   // -------------------------------------------------------------------------
@@ -1324,6 +1438,7 @@ export class DaemonKimiWebApi implements KimiWebApi {
       defaultProvider: 'default_provider',
       defaultModel: 'default_model',
       models: 'models',
+      secondaryModel: 'secondary_model',
       thinking: 'thinking',
       planMode: 'plan_mode',
       yolo: 'yolo',
@@ -1334,6 +1449,7 @@ export class DaemonKimiWebApi implements KimiWebApi {
       services: 'services',
       mergeAllAvailableSkills: 'merge_all_available_skills',
       extraSkillDirs: 'extra_skill_dirs',
+      extraAgentDirs: 'extra_agent_dirs',
       loopControl: 'loop_control',
       background: 'background',
       experimental: 'experimental',

@@ -4,6 +4,30 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.12] - 2026-08-03
+
+### 新增
+
+- **Kimi Engine 管理**:设置页同时显示已安装 CLI 与当前 daemon 版本;可调用官方更新命令升级 CLI,确认后用指定新版 CLI 原位重启 loopback daemon,并在重连后刷新旧 WebSocket 状态
+- **额度与运行诊断**:接入 daemon 0.29+ 的 OAuth usage REST 数据,展示 5 小时/周额度与重置时间;旧 daemon 保留 PTY 回退;上下文额度为 0% 时也能正确显示
+- **Agent 与扩展配置**:GUI 增加 Agent 选择与管理、主/次模型、Provider、Skills/插件、MCP、Hooks、权限和附加工作目录等入口
+- **数据维护**:归档搜索与恢复、历史导入、配置检查、备份/恢复及旧 Kimi 数据迁移能力集中到设置页
+- **会话检查**:Inspect 面板补充会话、思考、工具与变更信息,并增强命令面板、Agent 面板和 Review 工作流
+
+### 性能
+
+- 工作区/会话侧栏渐进渲染,搜索改为 daemon 全文检索并防抖,减少大型历史库的首屏与输入开销
+- 长会话采用消息窗口化与稳定滚动锚点;Markdown、KaTeX、Mermaid 按需加载,较重解析可转入 worker
+- 收敛任务轮询、工作区状态加载和重复计算,降低后台 daemon/API 压力与界面抖动
+
+### 修复
+
+- 修复 CLI 已安装且 daemon 已连接时仍反复提示“找不到 kimi CLI”的错误启动 toast
+- 修复升级 CLI 后旧 daemon/旧 WebSocket 仍让设置页显示旧版本的问题;重启过程避免误杀远程实例与版本降级
+- 修复审批失败后无法重试、队列/草稿/工作区状态边界、多 Agent 取消与前后台任务状态等交互问题
+- 修复归档/导入/迁移失败反馈不足及部分设置写入错误目标的问题,强化备份与恢复前校验
+- 发布流水线增加质量门禁、同 tag 并发保护,并保留更新产物 rebase 冲突的自动处理
+
 ## [1.0.11] - 2026-07-26
 
 ### 修复
@@ -172,6 +196,7 @@
 - 项目骨架:官方 kimi-web fork(vite 多页面)+ Tauri 2 壳(daemon 拉起/token 注入/托盘)
 - 静态交互原型 `prototype/`(视觉契约:SVG 图标体系、token 配色、双主题)
 
+[1.0.12]: https://github.com/liujunGH/kimi-gui/releases/tag/v1.0.12
 [1.0.0]: https://github.com/liujunGH/kimi-gui/releases/tag/v1.0.0
 [0.2.1]: https://github.com/liujunGH/kimi-gui/releases/tag/v0.2.1
 [0.2.0]: https://github.com/liujunGH/kimi-gui/releases/tag/v0.2.0

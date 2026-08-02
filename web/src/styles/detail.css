@@ -5,7 +5,7 @@
 
 .detail-pane {
   position: absolute; top: 0; right: 0; bottom: 0;
-  width: 360px; max-width: 92%;
+  width: 400px; max-width: 92%;
   display: flex; flex-direction: column;
   background: var(--bg);
   border-left: 1px solid var(--border-soft);
@@ -85,3 +85,32 @@
 .dp-task.done .todo-state { color: var(--success); }
 .dp-task.progress .todo-state { color: var(--accent); }
 .dp-task.pending .todo-state { color: var(--text-3); }
+
+.dp-runtime-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: var(--text-sm); }
+.dp-runtime-row .pill { margin-left: auto; }
+.dot-idle { background: var(--text-3); }
+.pill.warning { color: var(--warning); border-color: var(--warning-bd); background: var(--warning-soft); }
+.pill.success { color: var(--success); border-color: var(--success-bd); background: var(--success-soft); }
+.dp-summary-action { width: 100%; display: flex; align-items: center; justify-content: space-between; margin: 8px 0; padding: 9px 10px; border: 1px solid var(--border-soft); border-radius: var(--r-md); text-align: left; }
+.dp-summary-action:hover, .dp-file:hover, .dp-runtime-task:hover { background: var(--hover); }
+.dp-summary-action > span { display: flex; align-items: center; gap: 8px; }
+.dp-summary-action small b, .dp-file small b { color: var(--success); }
+.dp-summary-action small em, .dp-file small em { color: var(--danger); font-style: normal; }
+.dp-file { width: 100%; min-width: 0; display: grid; grid-template-columns: 28px 1fr auto; gap: 7px; align-items: center; padding: 5px 3px; color: var(--text-2); font: 11px/1.4 var(--font-mono); text-align: left; }
+.dp-file > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.change-badge { display: grid; place-items: center; height: 18px; border-radius: 4px; background: var(--bg-soft); color: var(--accent); font-weight: 700; }
+.dp-empty { padding: 10px 0; color: var(--text-3); font-size: var(--text-sm); }
+.dp-goal { display: flex; flex-direction: column; gap: 5px; padding: 10px; border: 1px solid var(--accent-bd); border-radius: var(--r-md); background: var(--accent-soft); }
+.dp-goal > div { display: flex; justify-content: space-between; gap: 8px; }
+.dp-goal small { color: var(--text-3); }
+.dp-runtime-task { width: 100%; display: grid; grid-template-columns: 18px 1fr 16px; gap: 8px; align-items: center; padding: 8px 3px; text-align: left; }
+.dp-runtime-task + .dp-runtime-task { border-top: 1px solid var(--border-soft); }
+.dp-runtime-task > span:nth-child(2) { min-width: 0; display: flex; flex-direction: column; }
+.dp-runtime-task small { color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dp-section-head { display: flex; align-items: center; justify-content: space-between; }
+.dp-section-head .dp-label { margin: 0; }
+.dp-section-head button { display: flex; align-items: center; gap: 4px; color: var(--accent); font-size: 11px; }
+.dp-automation { display: grid; grid-template-columns: 18px 1fr auto; gap: 8px; align-items: center; padding: 8px 0; }
+.dp-automation + .dp-automation { border-top: 1px solid var(--border-soft); }
+.dp-automation > span:nth-child(2) { min-width: 0; display: flex; flex-direction: column; }
+.dp-automation small { color: var(--text-3); }

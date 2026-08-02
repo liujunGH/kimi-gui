@@ -235,6 +235,8 @@ export interface ComposerEmits {
   (e: 'command', cmd: string): void; // 斜杠命令执行(如 /compact /goal /fork)
   (e: 'select-workspace', id: string): void; // 工作区 pill 切换
   (e: 'add-workspace', path: string): void; // 原生文件夹选择后添加
+  (e: 'set-agent', name: string): void;
+  (e: 'manage-agents'): void;
 }
 
 /** 模型元信息:daemon 返回(不同账号能用的模型不同,不写死)。 */
@@ -312,7 +314,7 @@ export interface QueuePanelProps {
 
 export interface QueuePanelEmits {
   (e: 'reorder', from: number, to: number): void;
-  (e: 'promote-to-steer', id: string): void;
+  (e: 'steer-all'): void;
   (e: 'edit', id: string): void;
   (e: 'remove', id: string): void;
 }
@@ -425,6 +427,10 @@ export interface SideTaskProps {
   title: string;
   status: { text: string; kind: 'accent' | 'success' | 'warning' };
   thread: { name: string; ws: string; dot: 'running' | 'waiting' | 'done' };
+  /** agent transcript 尚无可靠回复端点时隐藏输入框。 */
+  composerVisible?: boolean;
+  /** 按线程隔离未发送草稿。 */
+  draftKey?: string;
 }
 
 // ThreadMenu / FileMenu / Toast:见 ARCHITECTURE.md 第 4.8 节,纯 UI 组件,

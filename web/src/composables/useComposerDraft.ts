@@ -1,5 +1,5 @@
 // apps/kimi-web/src/composables/useComposerDraft.ts
-import { nextTick, ref, watch } from 'vue';
+import { getCurrentScope, nextTick, onScopeDispose, ref, watch } from 'vue';
 import { draftStorageKey, safeGetString, safeRemove, safeSetString } from '../lib/storage';
 
 export interface ComposerDraftDeps {
@@ -30,6 +30,14 @@ export function useComposerDraft(deps: ComposerDraftDeps) {
 
   const text = ref(loadDraft(sessionId()));
   const textareaRef = ref<HTMLTextAreaElement | null>(null);
+  let saveTimer: ReturnType<typeof setTimeout> | undefined;
+  const SAVE_DEBOUNCE_MS = 300;
+
+  function flushDraft(sid = sessionId()): void {
+    clearTimeout(saveTimer);
+    saveTimer = undefined;
+    saveDraft(sid, text.value);
+  }
 
   function autosize(): void {
     const el = textareaRef.value;
@@ -44,15 +52,15 @@ export function useComposerDraft(deps: ComposerDraftDeps) {
 
   watch(text, (value) => {
     void nextTick(autosize);
-    // Persist the live draft for the current session (empty clears the entry).
-    saveDraft(sessionId(), value);
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => saveDraft(sessionId(), value), SAVE_DEBOUNCE_MS);
   });
 
   // Switching sessions: stash the draft under the OLD session, then load the new
   // session's draft into the box.
   watch(sessionId, (newSid, oldSid) => {
     if (newSid === oldSid) return;
-    saveDraft(oldSid, text.value);
+    flushDraft(oldSid);
     text.value = loadDraft(newSid);
     void nextTick(autosize);
   });
@@ -80,8 +88,12 @@ export function useComposerDraft(deps: ComposerDraftDeps) {
    * composer), causing the next mount to reload the stale draft.
    */
   function clearDraft(): void {
+    clearTimeout(saveTimer);
+    saveTimer = undefined;
     saveDraft(sessionId(), '');
   }
+
+  if (getCurrentScope()) onScopeDispose(() => flushDraft());
 
   return { text, textareaRef, autosize, loadForEdit, clearDraft };
 }

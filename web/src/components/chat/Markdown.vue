@@ -4,12 +4,6 @@ import { computed, inject, nextTick, onMounted, onUnmounted, reactive, ref, watc
 import { useI18n } from 'vue-i18n';
 import {
   MarkdownRender,
-  enableKatex,
-  enableMermaid,
-  setKaTeXWorker,
-  clearKaTeXWorker,
-  setMermaidWorker,
-  clearMermaidWorker,
 } from 'markstream-vue';
 import type { MarkdownIt } from 'markstream-vue';
 import { useIsDark } from '../../composables/useIsDark';
@@ -17,8 +11,7 @@ import type { FilePreviewRequest } from '../../types';
 import { collectFilePathAliases, findFilePathLinks } from '../../lib/filePathLinks';
 import { markdownRenderPlan } from '../../lib/markdownPerformance';
 import { copyTextToClipboard } from '../../lib/clipboard';
-import * as katexWorkerModule from 'markstream-vue/workers/katexRenderer.worker?worker&type=module';
-import * as mermaidWorkerModule from 'markstream-vue/workers/mermaidParser.worker?worker&type=module';
+import { ensureMarkdownFeatures } from '../../lib/markdownWorkers';
 import Tooltip from '../ui/Tooltip.vue';
 import Icon from '../ui/Icon.vue';
 // px-based CSS build (our app is px, not rem). Imported here so the styles
@@ -33,14 +26,12 @@ import 'markstream-vue/index.px.css';
 // scope. Without the CSS the math renders unstyled, so both must travel
 // together.
 import 'katex/dist/katex.min.css';
-enableKatex();
 
 // Mermaid diagram rendering. enableMermaid() registers the default
 // `import('mermaid')` loader — same pattern as enableKatex(). Without a worker,
 // mermaid.parse() runs on the main thread; with a worker (set via
 // setMermaidWorker), the MermaidBlockNode can validate partial-stream code
 // off-thread so the UI stays responsive during live diagram output.
-enableMermaid();
 
 // ---------------------------------------------------------------------------
 // Off-main-thread workers for KaTeX and Mermaid
@@ -57,12 +48,6 @@ enableMermaid();
 // absent, everything runs on the main thread.
 // ---------------------------------------------------------------------------
 
-// Tear down any previous worker (e.g. from HMR) before setting a new one.
-clearKaTeXWorker();
-clearMermaidWorker();
-
-setKaTeXWorker(new katexWorkerModule.default());
-setMermaidWorker(new mermaidWorkerModule.default());
 
 // Only `$$…$$` display math is rendered; single `$` inline math is disabled so
 // prices, env vars, and shell paths (`$5`, `$PATH`, `$HOME/bin`) stay literal
@@ -93,6 +78,12 @@ const props = withDefaults(
     streaming?: boolean;
   }>(),
   { streaming: false },
+);
+
+watch(
+  () => props.text,
+  (text) => ensureMarkdownFeatures(text ?? ''),
+  { immediate: true },
 );
 
 const final = computed(() => !props.streaming);

@@ -302,6 +302,10 @@ export interface TaskItem {
    *  to its inline tool card, so the card's "Open detail" button can be hidden
    *  when the task is no longer available. */
   parentToolCallId?: string;
+  /** 子智能体精细阶段；不能只由通用 task status 推断。 */
+  subagentPhase?: 'queued' | 'working' | 'suspended' | 'completed' | 'failed';
+  suspendedReason?: string;
+  swarmIndex?: number;
 }
 
 export interface ConversationStatus {

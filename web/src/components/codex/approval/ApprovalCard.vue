@@ -1,8 +1,7 @@
 <script lang="ts">
 /**
- * 模块级审批卡栈:多张审批卡并存时,y/a/n/p 单键只作用于栈顶
- * (「最近一张未处理」的卡)。挂载 push、卸载移除;快捷键 handler
- * 统一委派给栈顶卡的 act(见 prototype mock/shared.js bindApprovalKeys)。
+ * 模块级审批卡注册表:多张审批卡并存时,y/a/n/p 单键只作用于
+ * 用户最近聚焦/点击的卡，不再隐式命中最后挂载的不可见卡。
  * 本阶段卡不会被标记「已处理」(动作轮次 3 走 client),栈顶即最近挂载。
  */
 type ApprovalActKey = 'approve' | 'session' | 'reject' | 'feedback';
@@ -13,9 +12,11 @@ interface ApprovalCardEntry {
 }
 
 const approvalCardStack: ApprovalCardEntry[] = [];
+let activeApprovalCardId: string | null = null;
 
 function topApprovalCard(): ApprovalCardEntry | undefined {
-  return approvalCardStack.at(-1);
+  return approvalCardStack.find((entry) => entry.id === activeApprovalCardId)
+    ?? approvalCardStack.at(0);
 }
 </script>
 
@@ -169,12 +170,24 @@ function submitFeedback() {
 // 卡栈 + y/a/n/p 单键(只对栈顶卡生效;修饰键组合不触发,对齐 prototype)
 // ---------------------------------------------------------------------------
 const stackEntry: ApprovalCardEntry = { id: props.approvalId, act };
+function activateCard() {
+  activeApprovalCardId = props.approvalId;
+  for (const card of document.querySelectorAll<HTMLElement>('[data-codex-approval-id]')) {
+    card.classList.toggle('shortcut-active', card.dataset.codexApprovalId === props.approvalId);
+  }
+}
 onMounted(() => {
   approvalCardStack.push(stackEntry);
+  if (activeApprovalCardId === null) activateCard();
 });
 onUnmounted(() => {
   const i = approvalCardStack.indexOf(stackEntry);
   if (i >= 0) approvalCardStack.splice(i, 1);
+  if (activeApprovalCardId === props.approvalId) {
+    activeApprovalCardId = approvalCardStack[0]?.id ?? null;
+    document.querySelector<HTMLElement>(`[data-codex-approval-id="${activeApprovalCardId ?? ''}"]`)
+      ?.classList.add('shortcut-active');
+  }
   clearTimeout(pressTimer);
 });
 
@@ -195,7 +208,14 @@ useHotkeys([
 </script>
 
 <template>
-  <div class="approval" :class="{ 'feedback-open': feedbackOpen }">
+  <div
+    class="approval"
+    :class="{ 'feedback-open': feedbackOpen }"
+    :data-codex-approval-id="props.approvalId"
+    tabindex="0"
+    @focusin="activateCard"
+    @pointerdown="activateCard"
+  >
     <div class="approval-head">
       <span class="ah-icon"><CodexIcon :name="headIcon" /></span>
       <span class="ah-kind">{{ kindLabel }}</span>

@@ -34,8 +34,8 @@ const emit = defineEmits<{ (e: 'open-detail'): void }>();
 /** 权限协议值 → UI 标签 */
 const PERM_LABEL: Record<PermissionMode, string> = {
   manual: '逐条确认',
-  auto: '自动通过',
-  yolo: '完全自主',
+  yolo: 'YOLO',
+  auto: '自动',
 };
 
 const open = ref(false);
@@ -53,7 +53,11 @@ const modelText = computed(() => (props.model ? `kimi-code/${props.model}` : '�
 const effortText = computed(() => props.effort ?? '—');
 const permText = computed(() => (props.permission ? PERM_LABEL[props.permission] : '—'));
 const statusText = computed(() => (props.running ? '运行中' : '空闲'));
-const hasQuota = computed(() => props.quota.q5h > 0 || props.quota.qWeek > 0);
+// Zero is a valid reading (fresh window), not evidence that the daemon lacks
+// quota support. A reset timestamp proves the REST/fallback payload was read.
+const hasQuota = computed(
+  () => props.quota.q5hReset !== '' || props.quota.qWeekReset !== '' || props.quota.q5h > 0 || props.quota.qWeek > 0,
+);
 const costText = computed(() => (props.cost && props.cost > 0 ? `$${props.cost.toFixed(2)}` : ''));
 
 function toggle() {
@@ -125,12 +129,12 @@ onUnmounted(() => {
     <div class="ck-sep"></div>
     <template v-if="hasQuota">
       <div class="ck-row">
-        <span class="k">5 小时额度</span>
-        <span class="v">{{ props.quota.q5h }}%({{ props.quota.q5hReset }} 后重置)</span>
+        <span class="k">5 小时已用</span>
+        <span class="v">{{ props.quota.q5h }}%<template v-if="props.quota.q5hReset">（{{ props.quota.q5hReset }}后重置）</template></span>
       </div>
       <div class="ck-row">
-        <span class="k">每周额度</span>
-        <span class="v">{{ props.quota.qWeek }}%({{ props.quota.qWeekReset }} 后重置)</span>
+        <span class="k">每周已用</span>
+        <span class="v">{{ props.quota.qWeek }}%<template v-if="props.quota.qWeekReset">（{{ props.quota.qWeekReset }}后重置）</template></span>
       </div>
     </template>
     <template v-else>
