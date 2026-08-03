@@ -45,6 +45,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
+      - name: 安装 Tauri Linux 测试依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
       - run: pnpm install --frozen-lockfile
       - name: 前端类型、测试、样式与生产构建
         run: |
