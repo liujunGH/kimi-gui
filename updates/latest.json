@@ -1,15 +1,15 @@
 {
-  "version": "1.0.13",
-  "notes": "\n### 改进\n\n- **顶部任务上下文**:工作区与 Agent 从输入框底部迁移到顶部任务栏;新任务可直接切换,已有任务显示固定上下文,下拉菜单向下展开并保持互斥\n- **长对话导航**:离开对话底部后显示浮动“回到底部”按钮;点击平滑返回实时内容,用户主动上翻时新消息不会抢夺滚动位置\n\n### 修复\n\n- **macOS 窗口拖动**:补齐 Tauri 2 原生拖动权限和深层标题栏命中区域,并在标题栏空白处显式调用 `startDragging()`;同步阻止 WebView 把拖动误判成文字选择\n- **输入区密度**:移除底部重复的工作区与 Agent 控件,保留附件、权限、模式、额度、模型和发送等当前输入相关操作\n\n",
-  "pub_date": "2026-08-03T01:51:39Z",
+  "version": "1.0.14",
+  "notes": "\n### 改进\n\n- **审批可靠性**:无法关联到已加载工具调用的待审批请求会在对话末尾独立显示;提交期间禁用重复操作并显示进行中状态,失败时保留卡片和反馈内容供重试\n- **时间显示**:消息、归档记录、任务活动和会话详情统一按用户本机时区格式化,不再直接展示 daemon 的 UTC 时间\n\n### 修复\n\n- **危险操作弹窗**:修复全局 danger 按钮样式覆盖确认文字颜色的问题;归档等红色确认按钮恢复白字红底,并补齐模态语义与默认焦点\n- **更新检查弹窗**:更新弹窗移到设置页/主页面条件分支之外,在设置页手动检查到新版本后立即显示,无需返回主页\n- **Windows 冷启动**:桌面端启动 Kimi daemon 时显式使用 `kimi web --no-open`,不再额外打开浏览器 Web 页面;旧 CLI 继续回退 `server run`\n\n",
+  "pub_date": "2026-08-03T03:04:28Z",
   "platforms": {
     "darwin-aarch64": {
       "url": "https://raw.githubusercontent.com/liujunGH/kimi-gui/main/updates/Kimi.Code_aarch64.app.tar.gz",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxamNCZUF4TXZNYW9SeDl2eDU3bDI3NUJOdStXTTRlUWw1UWlsODZkeFNXZEJGd3F4S2Y4VlU0TDlPT1gyVFBNbXRpa1pya09DUlhtOGg5Nm5nOG04V0FFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1NzIxODk4CWZpbGU6S2ltaS5Db2RlX2FhcmNoNjQuYXBwLnRhci5negpZd0hDcGtnMW4vZkRWdGpIb2JkdE02YVFLMXBHOG9pYkVnOXpGT3JZSFJmZU54dTc3MWRkNHJUY3MvN0hmVUN4cmhzNThCbDhMU0pIRUJWcmFteGlCUT09Cg=="
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxamNHZDBXamFXK3dhYUE0K0s2Y1kxZUFNaXpEL3dSUzMyMW1hc0FTVHJvTE15eTQzMnNacTl4a1phWHBuM3VScWNsQzVIV1dOM2ZYY0x0UldKTCtvT0E0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1NzI2MjY3CWZpbGU6S2ltaS5Db2RlX2FhcmNoNjQuYXBwLnRhci5negpkb00xSlY0SnZiUUI0OU5yUTY0RGRLWjNJVGxqdU03WmJIYklVQzJ5bFNCR05ueHhTVGM1WTJVRHdDN0RTTkxjZUMwOGdxdUdyUWRkcnJOVkpMeXFCUT09Cg=="
     },
     "windows-x86_64": {
       "url": "https://raw.githubusercontent.com/liujunGH/kimi-gui/main/updates/Kimi.Code_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxamJ0SkwzWHBRaXhwMlhPYXhLR2VOM3MwdDBFVm5scVZScXFRakxQbjBRczIzdFM1dVFESlRHVUVsenRTS2VZMnRmRU9rZXJJalg3YzNUbG1MNVdtRXdvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1NzIxODk5CWZpbGU6S2ltaS5Db2RlXzEuMC4xM194NjQtc2V0dXAuZXhlCmJkRTJFN05GWmEyWndtY0o2OTEwU2d3OCtOazM1OVJMc0E4bGZadUtSSHJ6ckVNNkc3WllIenJna2Ura2pmczI1MHlpdjJrbWdTenIyaGZRbXZndENBPT0K"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxamYwdEhuTWI2ZmtHcFRFZGlwVGRzU2pvazNQT1dVRFZYWWROeCtXOUhDV2I1cmVGL2ZTaDFlNUZmcWxYVUtWeWNONUlka2N2TUZBdU13ZlJzMzNUMWdVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1NzI2MjY4CWZpbGU6S2ltaS5Db2RlXzEuMC4xNF94NjQtc2V0dXAuZXhlCitFZVJHQUtmR3phZFNxUktKNnZ5YzdjMGREREZicFUyajlLN040STFSNFd5V0RYTW03dFZ1aDc5azZ2amxPY1ZuNjlKUVUrVnpMTEU2TS9OenZCRUJRPT0K"
     }
   }
 }
