@@ -1137,4 +1137,4 @@ ROADMAP 给 kimi3 的 5 项全部完成，vue-tsc 全绿，`verify5.mjs` 10 断�
 - **长对话导航**:`ConversationPane` 增加按需出现的“回到底部”浮动按钮;保留既有滚锚策略,用户上翻时不抢滚动,主动返回后继续跟随流式内容。
 - **窗口拖动最终修复**:Tauri capability 增加 `core:window:allow-start-dragging`;标题栏与侧栏品牌区使用 deep drag region,并预加载窗口 API 显式调用 `startDragging()`,同步 `preventDefault()` 避免 WebKit 文字选择。
 - **交互验收**:浏览器验证回到底部出现/点击/消失闭环且控制台零错误;原生应用验证顶部布局、向下弹层、菜单互斥及标题栏拖动不再产生文字选区。
-- **发版验收**:四处版本号均为 1.0.13;web 39 文件/673 tests、类型检查、样式 baseline、生产构建、`cargo fmt --check`、Rust 4 tests 与锁文件一致性全部通过。1.0.13 DMG 已完成镜像校验、挂载、版本/arm64/深度签名检查,SHA-256 为 `0a8e0dd68be8318e660313ba03f62237cb9da1fed4d9bb5a111999a33392fb95`。
+- **发版验收**:四处版本号均为 1.0.13;web 39 文件/673 tests、类型检查、样式 baseline、生产构建、`cargo fmt --check`、Rust 4 tests 与锁文件一致性全部通过。本地候选 DMG SHA-256 为 `0a8e0dd68be8318e660313ba03f62237cb9da1fed4d9bb5a111999a33392fb95`;GitHub Actions 全绿后线上深度重签 DMG 已重新下载并通过镜像、挂载、版本/arm64/签名检查,最终 SHA-256 为 `7c040d574b329cef101f1bbbba0a6eca813c0662aee457aaa032d362714d7662`,Homebrew Cask 已同步。
