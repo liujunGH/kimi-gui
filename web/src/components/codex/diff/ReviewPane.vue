@@ -27,8 +27,10 @@ const props = withDefaults(
     files: ChangedFile[];
     hunksByFile: Record<string, DiffHunk[]>;
     branch?: string;
+    selectedPath?: string | null;
+    loading?: boolean;
   }>(),
-  { branch: '' },
+  { branch: '', selectedPath: null, loading: false },
 );
 
 const { reviewPaneOpen, closeReview } = useUIState();
@@ -38,11 +40,19 @@ const emit = defineEmits<{
   (e: 'request-fix', path: string): void;
 }>();
 
-const selected = ref(props.files[0]?.path ?? '');
+const selected = ref(
+  (props.selectedPath && props.files.some((file) => file.path === props.selectedPath)
+    ? props.selectedPath
+    : props.files[0]?.path) ?? '',
+);
 watch(
-  () => props.files,
-  (fs) => {
-    if (!fs.some((f) => f.path === selected.value)) selected.value = fs[0]?.path ?? '';
+  () => [props.files, props.selectedPath] as const,
+  ([fs, selectedPath]) => {
+    if (selectedPath && fs.some((file) => file.path === selectedPath)) {
+      selected.value = selectedPath;
+    } else if (!fs.some((file) => file.path === selected.value)) {
+      selected.value = fs[0]?.path ?? '';
+    }
   },
 );
 function selectFile(path: string) {
@@ -230,7 +240,18 @@ function baseName(path: string): string {
               让 Kimi 修复
             </button>
           </div>
-          <DiffLines v-if="f.path === selected" :hunks="props.hunksByFile[f.path] ?? []" />
+          <div v-if="props.loading && props.selectedPath === f.path" class="rp-diff-state">
+            <span class="rp-spinner" aria-hidden="true" />
+            正在加载差异…
+          </div>
+          <DiffLines
+            v-else-if="(props.hunksByFile[f.path] ?? []).length"
+            :hunks="props.hunksByFile[f.path] ?? []"
+            :collapsible="false"
+          />
+          <div v-else class="rp-diff-state">
+            此文件没有可显示的文本差异，可能是未跟踪、二进制或已删除文件。
+          </div>
         </div>
       </div>
     </div>

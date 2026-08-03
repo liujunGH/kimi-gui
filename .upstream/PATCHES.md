@@ -73,7 +73,15 @@
 
 - `web/src/types.ts`:被 `web/src/types/codex.ts` import 类型(`ChatTurn` / `TurnBlock` / `ToolCall` / `TodoView` / `PermissionMode` / `Session` / `Workspace`)。只读引用。
 - `web/src/composables/useKimiWebClient.ts`:被 `web/src/composables/codex/useKimiClient.ts` import 类型(`ReturnType<typeof useKimiWebClient>`)。只读引用。
-- `web/src/lib/slashCommands.ts`:内置命令元数据,`composables/codex/useSlashMenu`(轮次 3 实现)会读取。只读引用。
+- `web/src/lib/slashCommands.ts`:菜单投影层；自 2026-08-03 起从本地 `commandRegistry.ts` 的完整分类映射生成，不再独立维护精简白名单。
+
+### `web/src/lib/slashCommands.ts`（2026-08-03 · Codex · 命令分类改造）
+
+**改动**：移除独立硬编码的 16 条 GUI 白名单，改为从 `commandRegistry.ts` 生成菜单；增加完整上游 built-in 识别，使隐藏命令手输时也进入分类分发而不是普通消息。
+
+**原因**：官方 TUI 0.31.1 有 40 个主命令，官方 kimi-web 仍只维护精简列表，导致 `/reload` 等命令静默缺失。GUI 需要额外的 surface/执行器适配层，而上游暂未提供该元数据。
+
+**冲突风险**：中。上游若新增 daemon command manifest/capabilities，应优先改为消费官方元数据；在此之前保留本地映射与同步脚本。
 
 ### `web/src/components/chat/Markdown.vue`(2026-07-20 · kimi3 · 轮次 7+)
 

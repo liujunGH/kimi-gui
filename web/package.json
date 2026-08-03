@@ -1,6 +1,6 @@
 {
   "name": "@moonshot-ai/kimi-web",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -9,7 +9,10 @@
     "build": "vite build",
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest run",
-    "check:style": "node scripts/check-style.mjs"
+    "check:style": "node scripts/check-style.mjs",
+    "commands:check": "node scripts/sync-upstream-commands.mjs",
+    "commands:check-latest": "node scripts/sync-upstream-commands.mjs --latest",
+    "commands:sync-latest": "node scripts/sync-upstream-commands.mjs --latest --write"
   },
   "dependencies": {
     "@chenglou/pretext": "0.0.8",

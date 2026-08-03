@@ -11,6 +11,7 @@ import type {
   AppMessage,
   AppModel,
   AppProvider,
+  AppProviderFormInput,
   AppSession,
   AppSkill,
   OAuthLoginStartResult,
@@ -26,6 +27,7 @@ import {
 import { beginLocalTurn, settleLocalTurn } from './useWorkspaceState';
 import type { ActivityState } from '../../types';
 import type { ExtendedState } from '../useKimiWebClient';
+import { buildProviderWriteModels } from '../../lib/providerConfig';
 
 const STARRED_MODELS_STORAGE_KEY = STORAGE_KEYS.starredModels;
 
@@ -470,19 +472,62 @@ export function useModelProviderState(
     }
   }
 
-  /** Add a provider, then reload providers + models */
-  async function addProvider(input: {
-    type: string;
-    apiKey?: string;
-    baseUrl?: string;
-    defaultModel?: string;
-  }): Promise<void> {
+  /** Add a provider, then reload providers, models and redacted config. */
+  async function addProvider(input: AppProviderFormInput): Promise<boolean> {
     try {
       const api = getKimiWebApi();
-      await api.addProvider(input);
-      await Promise.all([loadProviders(), loadModels()]);
+      await api.addProvider({
+        id: input.id,
+        type: input.type,
+        apiKey: input.apiKey,
+        baseUrl: input.baseUrl,
+        defaultModel: input.defaultModel,
+        models: buildProviderWriteModels(
+          input.id,
+          input.modelNames,
+          input.newModelContextSize,
+          undefined,
+          models.value,
+        ),
+      });
+      const [nextConfig] = await Promise.all([api.getConfig(), loadProviders(), loadModels()]);
+      rawState.config = nextConfig;
+      return true;
     } catch (err) {
       pushOperationFailure('addProvider', err);
+      return false;
+    }
+  }
+
+  /** Replace an existing manual provider. GET /config is deliberately redacted:
+   * it gives us model metadata but never the stored credential. Omitting
+   * apiKey from PUT tells the daemon to retain that credential unchanged. */
+  async function updateProvider(id: string, input: AppProviderFormInput): Promise<boolean> {
+    try {
+      const api = getKimiWebApi();
+      const [config, catalog] = await Promise.all([api.getConfig(), api.listModels()]);
+      const writeModels = buildProviderWriteModels(
+        id,
+        input.modelNames,
+        input.newModelContextSize,
+        config.models,
+        catalog,
+      );
+      if (writeModels.length === 0) throw new Error('Provider 至少需要一个模型');
+      await api.updateProvider(id, {
+        id: input.id,
+        type: input.type,
+        apiKey: input.apiKey,
+        baseUrl: input.baseUrl,
+        defaultModel: input.defaultModel,
+        models: writeModels,
+      });
+      const [nextConfig] = await Promise.all([api.getConfig(), loadProviders(), loadModels()]);
+      rawState.config = nextConfig;
+      return true;
+    } catch (err) {
+      pushOperationFailure('updateProvider', err);
+      return false;
     }
   }
 
@@ -592,6 +637,7 @@ export function useModelProviderState(
     toggleStarModel,
     activateSkill,
     addProvider,
+    updateProvider,
     deleteProvider,
     refreshProvider,
     refreshAllProviders,

@@ -16,6 +16,7 @@ import type {
   AppModel,
   AppOAuthUsage,
   AppProvider,
+  AppProviderWriteInput,
   ProviderRefreshResult,
   AppSession,
   AppSkill,
@@ -90,6 +91,19 @@ import type {
   WireLogoutResult,
 } from './wire';
 import { DaemonEventSocket } from './ws';
+
+function toWireProviderModelInput(model: AppProviderWriteInput['models'][number]): Record<string, unknown> {
+  const wire: Record<string, unknown> = {
+    model: model.model,
+    max_context_size: model.maxContextSize,
+  };
+  if (model.displayName !== undefined) wire['display_name'] = model.displayName;
+  if (model.capabilities !== undefined) wire['capabilities'] = model.capabilities;
+  if (model.maxOutputSize !== undefined) wire['max_output_size'] = model.maxOutputSize;
+  if (model.supportEfforts !== undefined) wire['support_efforts'] = model.supportEfforts;
+  if (model.adaptiveThinking !== undefined) wire['adaptive_thinking'] = model.adaptiveThinking;
+  return wire;
+}
 
 function safeExportFileName(contentDisposition: string | undefined, fallback: string): string {
   if (contentDisposition === undefined) return fallback;
@@ -1340,30 +1354,25 @@ export class DaemonKimiWebApi implements KimiWebApi {
   }
 
   // -------------------------------------------------------------------------
-  // Models + Providers
-  // PRESUMED — not in current daemon docs; isolated here, swap when backend defines them.
+  // Models + Providers — Kimi Code 0.31.1 daemon contract.
   // -------------------------------------------------------------------------
 
   async listModels(): Promise<AppModel[]> {
-    // PRESUMED endpoint: GET /v1/models → { items: WireModel[] }
     const data = await this.http.get<{ items: WireModel[] }>('/models');
     return data.items.map(toAppModel);
   }
 
   async listProviders(): Promise<AppProvider[]> {
-    // PRESUMED endpoint: GET /v1/providers → { items: WireProvider[] }
     const data = await this.http.get<{ items: WireProvider[] }>('/providers');
     return data.items.map(toAppProvider);
   }
 
-  async addProvider(input: {
-    type: string;
-    apiKey?: string;
-    baseUrl?: string;
-    defaultModel?: string;
-  }): Promise<AppProvider> {
-    // PRESUMED endpoint: POST /v1/providers → WireProvider
-    const body: Record<string, unknown> = { type: input.type };
+  async addProvider(input: AppProviderWriteInput): Promise<AppProvider> {
+    const body: Record<string, unknown> = {
+      id: input.id,
+      type: input.type,
+      models: input.models.map(toWireProviderModelInput),
+    };
     if (input.apiKey !== undefined) body['api_key'] = input.apiKey;
     if (input.baseUrl !== undefined) body['base_url'] = input.baseUrl;
     if (input.defaultModel !== undefined) body['default_model'] = input.defaultModel;
@@ -1371,9 +1380,27 @@ export class DaemonKimiWebApi implements KimiWebApi {
     return toAppProvider(data);
   }
 
-  async deleteProvider(id: string): Promise<{ deleted: true }> {
-    // PRESUMED endpoint: DELETE /v1/providers/{id} → { deleted: true }
-    return this.http.delete<{ deleted: true }>(`/providers/${encodeURIComponent(id)}`);
+  async updateProvider(id: string, input: AppProviderWriteInput): Promise<AppProvider> {
+    const body: Record<string, unknown> = {
+      type: input.type,
+      models: input.models.map(toWireProviderModelInput),
+    };
+    if (input.id !== id) body['new_id'] = input.id;
+    // Tri-state daemon contract: omit to retain, empty string to clear, any
+    // other value to replace. The GUI intentionally never reads the old key.
+    if (input.apiKey !== undefined) body['api_key'] = input.apiKey;
+    // Empty Base URL clears the previous value; omitted default model clears it.
+    body['base_url'] = input.baseUrl ?? '';
+    if (input.defaultModel !== undefined) body['default_model'] = input.defaultModel;
+    const data = await this.http.put<{ provider: WireProvider }>(
+      `/providers/${encodeURIComponent(id)}`,
+      body,
+    );
+    return toAppProvider(data.provider);
+  }
+
+  async deleteProvider(id: string): Promise<void> {
+    await this.http.delete<void>(`/providers/${encodeURIComponent(id)}`);
   }
 
   async refreshProvider(id: string): Promise<ProviderRefreshResult> {

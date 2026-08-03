@@ -20,7 +20,8 @@
 │  ┌─────────────────────────────────────────────────────┐       │
 │  │  🔒 协议层(fork 官方,不动)                          │       │
 │  │  web/src/api/daemon/*  (8 文件,纯 TS,零 Vue)        │       │
-│  │  web/src/lib/slashCommands.ts (纯 TS)               │       │
+│  │  web/src/lib/commandRegistry.ts (命令 surface/执行器)│       │
+│  │  web/src/lib/slashCommands.ts (菜单投影,纯 TS)      │       │
 │  └─────────────────────────────────────────────────────┘       │
 │                          ↑ 只读调用                              │
 │  ┌─────────────────────────────────────────────────────┐       │
@@ -43,7 +44,8 @@
 ```
 
 **铁律**:
-- 🔒 协议层**绝不改**(git merge 命脉)
+- 🔒 daemon 协议层**绝不臆造端点**(git merge 命脉)
+- 命令层以发布版快照为上游事实,GUI 分类在 `commandRegistry.ts` 显式维护并由测试防漏
 - 🟡 状态层**唯一**能 import `api/*`;组件**不能**直接 import `api/*`
 - 🟢 视觉层组件**不碰协议层**;数据走 props 或 inject
 
@@ -77,8 +79,10 @@ kimi-gui/
 │   │   │       ├── mappers.ts               wire → app 类型映射
 │   │   │       └── serverAuth.ts            token / auth
 │   │   │
-│   │   ├── lib/                            🔒 fork 官方,不动
-│   │   │   ├── slashCommands.ts            内置命令元数据(15 条)
+│   │   ├── lib/                            纯 TS 工具 + 上游适配
+│   │   │   ├── upstreamSlashCommands.json  Kimi 发布版完整命令/别名快照
+│   │   │   ├── commandRegistry.ts          GUI/TUI/通用分类与执行映射
+│   │   │   ├── slashCommands.ts            从映射生成菜单 + 合并动态 Skills
 │   │   │   ├── workspaceOrder.ts           工作区排序
 │   │   │   └── ...                         其他纯 TS 工具
 │   │   │
@@ -469,7 +473,7 @@ interface ComposerEmits {
 
 // SlashMenu.vue(/ 触发)
 interface SlashMenuProps {
-  builtin: BuiltinCommand[];       // 15 条写死,来自 lib/slashCommands.ts
+  builtin: BuiltinCommand[];       // 从 commandRegistry 的可执行 GUI 映射生成
   skills: Skill[];                 // 动态,来自 /sessions/{id}/skills,标 isSkill
   query: string;                   // 当前过滤词(v-model 传入)
 }

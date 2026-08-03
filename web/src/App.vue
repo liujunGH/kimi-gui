@@ -40,9 +40,10 @@ import { openDialogCount } from './composables/dialogStack';
 import type { SwarmMember } from './composables/swarmGroups';
 import ServerAuthDialog from './components/ServerAuthDialog.vue';
 import { initServerAuth, onAuthRequired } from './api/daemon/serverAuth';
-import type { AppConfig, ThinkingLevel } from './api/types';
+import type { AppConfig, AppProviderFormInput, ThinkingLevel } from './api/types';
 import { commitLevel, effectiveThinkingLevel, segmentsFor } from './lib/modelThinking';
 import { stripSkillPrefix } from './lib/slashCommands';
+import { resolveBuiltinCommand, type CommandMapping } from './lib/commandRegistry';
 import Button from './components/ui/Button.vue';
 import IconButton from './components/ui/IconButton.vue';
 import Icon from './components/ui/Icon.vue';
@@ -413,8 +414,12 @@ async function handleComposerSelectModel(modelId: string): Promise<void> {
   }
 }
 
-async function handleAddProvider(input: { type: string; apiKey?: string; baseUrl?: string; defaultModel?: string }): Promise<void> {
+async function handleAddProvider(input: AppProviderFormInput): Promise<void> {
   await client.addProvider(input);
+}
+
+async function handleUpdateProvider(id: string, input: AppProviderFormInput): Promise<void> {
+  await client.updateProvider(id, input);
 }
 
 async function handleRefreshProvider(id: string): Promise<void> {
@@ -497,101 +502,125 @@ async function handleEditMessage(payload: {
   conversationPaneRef.value?.loadComposerForEdit(payload.text, payload.attachments);
 }
 
-// Handler for slash commands emitted by Composer (via ConversationPane)
+function commandNotice(message: string, severity: 'info' | 'warning' = 'warning'): void {
+  client.notifyCommand(t('commands.notice.title'), message, severity);
+}
+
+function explainNonExecutableCommand(command: string, mapping: Exclude<CommandMapping, { kind: 'command' }>): void {
+  if (mapping.kind === 'native-ui') {
+    commandNotice(t('commands.notice.nativeUi', { command, location: t(mapping.locationKey) }), 'info');
+  } else if (mapping.kind === 'tui-only') {
+    commandNotice(t('commands.notice.tuiOnly', { command }));
+  } else {
+    commandNotice(
+      mapping.reason === 'daemon-api'
+        ? t('commands.notice.daemonApi', { command })
+        : t('commands.notice.notImplemented', { command }),
+    );
+  }
+}
+
+function activateSkillCommand(cmd: string): void {
+  const space = cmd.indexOf(' ');
+  const name = stripSkillPrefix((space === -1 ? cmd : cmd.slice(0, space)).slice(1));
+  const args = space === -1 ? undefined : cmd.slice(space + 1).trim() || undefined;
+  if (!name) return;
+  if (!client.activeSessionId.value && client.activeWorkspaceId.value) {
+    void client.startSessionAndActivateSkill(client.activeWorkspaceId.value, name, args);
+  } else {
+    void client.activateSkill(name, args);
+  }
+}
+
+// Central slash-command dispatcher. Upstream aliases and surface classification
+// are resolved by commandRegistry.ts before any app action is selected.
 function handleCommand(cmd: string): void {
-  // `/compact <text>` carries an optional free-text instruction steering what
-  // the summary should focus on (TUI parity).
-  if (cmd === '/compact' || cmd.startsWith('/compact ')) {
-    client.compact(cmd.slice('/compact'.length).trim() || undefined);
+  const space = cmd.indexOf(' ');
+  const token = space === -1 ? cmd : cmd.slice(0, space);
+  const arg = space === -1 ? '' : cmd.slice(space + 1).trim();
+  const resolved = resolveBuiltinCommand(token);
+  if (resolved === null) {
+    activateSkillCommand(cmd);
     return;
   }
-  // `/swarm` toggles swarm mode; `/swarm on|off` sets it; `/swarm <task>` enables
-  // swarm and runs the task right away (TUI parity).
-  if (cmd === '/swarm' || cmd.startsWith('/swarm ')) {
-    const arg = cmd.slice('/swarm'.length).trim();
-    if (arg === 'on') client.setSwarmMode(true);
-    else if (arg === 'off') client.setSwarmMode(false);
-    else if (arg) { client.setSwarmMode(true); void client.sendPrompt(arg); }
-    else void client.toggleSwarmMode();
+
+  const { mapping } = resolved;
+  if (mapping.kind !== 'command') {
+    explainNonExecutableCommand(token, mapping);
     return;
   }
-  // `/goal <objective>` creates a goal (and submits it); `/goal pause|resume|cancel`
-  // controls the active one; bare `/goal` toggles goal mode for the next message.
-  if (cmd === '/goal' || cmd.startsWith('/goal ')) {
-    const arg = cmd.slice('/goal'.length).trim();
-    if (arg === 'pause' || arg === 'resume' || arg === 'cancel') client.controlGoal(arg);
-    else if (arg) void client.createGoal(arg);
-    else client.toggleGoalMode();
+  if (mapping.availability === 'idle-only' && running.value) {
+    commandNotice(t('commands.notice.idleOnly', { command: token }));
     return;
   }
-  // `/btw <question>` opens (creating if needed) the side chat and asks it; bare
-  // `/btw` toggles the side-chat tab for the active session.
-  if (cmd === '/btw' || cmd.startsWith('/btw ')) {
-    const arg = cmd.slice('/btw'.length).trim();
-    if (!arg && client.sideChatVisible.value) {
-      // Use the detail-layer close so detailTarget is cleared too; the bare
-      // client.closeSideChat() only hides the panel and leaves detailTarget set.
-      closeSideChat();
-    } else {
-      void openSideChatTab(arg || undefined);
-    }
-    return;
-  }
-  switch (cmd) {
-    // `/new` and `/clear` are aliases: both open the onboarding composer. The
-    // session is only created when the user sends the first message.
-    case '/new':
-    case '/clear':
+
+  switch (mapping.action) {
+    case 'compact':
+      client.compact(arg || undefined);
+      break;
+    case 'swarm':
+      if (arg === 'on') client.setSwarmMode(true);
+      else if (arg === 'off') client.setSwarmMode(false);
+      else if (arg) { client.setSwarmMode(true); void client.sendPrompt(arg); }
+      else void client.toggleSwarmMode();
+      break;
+    case 'goal':
+      if (arg === 'pause' || arg === 'resume' || arg === 'cancel') client.controlGoal(arg);
+      else if (arg) void client.createGoal(arg);
+      else client.toggleGoalMode();
+      break;
+    case 'btw':
+      if (!arg && client.sideChatVisible.value) closeSideChat();
+      else void openSideChatTab(arg || undefined);
+      break;
+    case 'new':
       handleCreateSession();
       break;
-    case '/fork':
+    case 'fork':
       void client.forkSession();
       break;
-    case '/export':
+    case 'exportDebugZip':
       void client.exportSession();
       break;
-    case '/undo':
+    case 'undo':
       void client.undo();
       break;
-    case '/plan':
+    case 'plan':
       client.togglePlanMode();
       break;
-    case '/auto':
+    case 'auto':
       client.setPermission('auto');
       break;
-    case '/yolo':
+    case 'yolo':
       client.setPermission('yolo');
       break;
-    case '/thinking':
-      // No popover anchor from a slash command — step to the next level.
+    case 'thinking':
       client.setThinking(nextThinkingLevel(client.thinking.value));
       break;
-    case '/status':
+    case 'status':
       showStatusPanel.value = true;
       break;
-    case '/login':
+    case 'login':
       openLogin();
       break;
-    default: {
-      // Not a built-in command → treat it as a session skill activation
-      // (the user picked `/skill:<skill>` from the menu, or typed
-      // `/<skill> args`). Strip the `skill:` display prefix — the REST API
-      // takes the bare skill name. The daemon answers an unknown name with
-      // skill.not_found, surfaced as a warning, so a stray slash is harmless.
-      // With no active session, create one first (same path as the first
-      // prompt) so the activation isn't silently dropped on the new-session
-      // screen.
-      const space = cmd.indexOf(' ');
-      const name = stripSkillPrefix((space === -1 ? cmd : cmd.slice(0, space)).slice(1));
-      const args = space === -1 ? undefined : cmd.slice(space + 1).trim() || undefined;
-      if (!name) break;
-      if (!client.activeSessionId.value && client.activeWorkspaceId.value) {
-        void client.startSessionAndActivateSkill(client.activeWorkspaceId.value, name, args);
-      } else {
-        void client.activateSkill(name, args);
-      }
+    case 'settings':
+      showSettings.value = true;
       break;
-    }
+    case 'title':
+      if (!client.activeSessionId.value) commandNotice(t('commands.notice.sessionRequired', { command: token }));
+      else if (!arg) commandNotice(t('commands.notice.titleUsage'));
+      else void client.renameSession(client.activeSessionId.value, arg);
+      break;
+    case 'copy':
+      conversationPaneRef.value?.copyLastAssistantMessage();
+      break;
+    case 'reload':
+      // Kimi SDK 0.31.1 exposes reloadSession(), but kimi web's public REST API
+      // does not expose a session reload route/capability yet. Never substitute
+      // a whole-daemon restart: it disrupts unrelated sessions and is not the
+      // same operation. Keep the command visible and explain the real blocker.
+      commandNotice(t('commands.notice.reloadDaemonApi'));
+      break;
   }
 }
 
@@ -1023,9 +1052,11 @@ function openPr(url: string): void {
     <ProviderManager
       v-if="showProviders"
       :providers="client.providers.value"
+      :models="client.models.value"
       :loading="providersLoading"
       :unavailable="providersUnavailable"
       @add="handleAddProvider($event)"
+      @update="handleUpdateProvider"
       @refresh="handleRefreshProvider($event)"
       @delete="confirmDeleteProvider($event)"
       @open-login="() => { showProviders = false; openLogin(); }"

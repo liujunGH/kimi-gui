@@ -25,8 +25,15 @@ import type { DiffHunk } from '../../../types/codex';
 import CodexIcon from '../layout/CodexIcon.vue';
 
 const props = withDefaults(
-  defineProps<{ hunks: DiffHunk[]; highlight?: boolean; compact?: boolean }>(),
-  { highlight: true, compact: false },
+  defineProps<{
+    hunks: DiffHunk[];
+    highlight?: boolean;
+    compact?: boolean;
+    /** Review renders one selected file at a time, so it can show every line.
+     *  Compact inline diffs keep folding enabled for conversation performance. */
+    collapsible?: boolean;
+  }>(),
+  { highlight: true, compact: false, collapsible: true },
 );
 
 type ViewMode = 'unified' | 'split';
@@ -217,7 +224,7 @@ const hunkViews = computed<HunkView[]>(() =>
     let oldNo = h.oldStart;
     let newNo = h.newStart;
     const lines = h.lines;
-    const collapsible = lines.length > COLLAPSE_THRESHOLD;
+    const collapsible = props.collapsible && lines.length > COLLAPSE_THRESHOLD;
     const hiddenEnd = lines.length - COLLAPSE_TAIL;
     const rows: Row[] = lines.map((l, i) => {
       const row: Row = {

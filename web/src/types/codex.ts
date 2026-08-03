@@ -112,6 +112,8 @@ export interface ThreadRowEmits {
  */
 export interface ConversationPaneProps {
   turns: ChatTurn[];
+  /** 当前会话 id。用于把真正的会话切换与同一会话内的历史消息前插区分开。 */
+  sessionId?: string;
   /** Pending approvals that could not be anchored to a loaded tool-use turn. */
   pendingApprovals?: ApprovalRequestSummary[];
   pendingQuestion?: QuestionRequestSummary;
@@ -259,7 +261,7 @@ export interface QuotaInfo {
 
 // SlashMenu(/ 触发)
 export interface SlashMenuProps {
-  builtin: BuiltinCommand[]; // 15 条,from lib/slashCommands.ts
+  builtin: BuiltinCommand[]; // 由 commandRegistry.ts 的 GUI 映射生成
   skills: Skill[]; // 动态,from /sessions/{id}/skills
   query: string; // 当前过滤词(v-model 双向)
   skillsLoading: boolean; // ZCode 提供:kimi3 只读决定 skeleton
@@ -383,6 +385,11 @@ export interface Subagent {
   status: SubagentStatus;
   progress?: { current: number; total: number };
   summary?: string;
+  /** Spawn-time model route reconstructed from tool/profile/config. The daemon
+   *  currently does not include the bound model in subagent lifecycle events. */
+  model?: string;
+  modelRoute?: 'primary' | 'secondary';
+  modelHint?: string;
   /** 已运行时长(已完成 agent 的耗时,如 "12s" "1m 3s");kimi3 报的契约缺字段 */
   elapsed?: string;
 }

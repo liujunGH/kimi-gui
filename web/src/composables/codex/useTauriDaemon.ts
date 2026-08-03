@@ -88,17 +88,6 @@ async function fetchPlanUsage(): Promise<PlanUsage | null> {
   }
 }
 
-/** 双击自定义标题栏 → 放大/还原窗口(Overlay 标题栏样式下由前端手动触发) */
-async function toggleWindowZoom(): Promise<void> {
-  if (!isTauriEnv()) return;
-  try {
-    const { invoke } = await import('@tauri-apps/api/core');
-    await invoke('toggle_window_zoom');
-  } catch {
-    /* 忽略 */
-  }
-}
-
 const WINDOW_DRAG_BLOCKERS = [
   'button',
   'a',
@@ -145,8 +134,6 @@ export function useTauriDaemon() {
     fetch: fetchDaemonInfo,
     /** 计划额度(PTY 抓 /usage;浏览器返回 null) */
     fetchPlanUsage,
-    /** 双击标题栏放大/还原窗口 */
-    toggleWindowZoom,
     /** 标题栏空白处按下时显式开始原生窗口拖动 */
     startWindowDragging,
   };

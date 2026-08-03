@@ -20,9 +20,10 @@ import { useTheme } from '../composables/codex/useTheme';
 import { useTauriDaemon } from '../composables/codex/useTauriDaemon';
 import { getCredential, onAuthRequired, setEphemeralCredential } from '../api/daemon/serverAuth';
 import { getKimiWebApi } from '../api';
-import { SLASH_COMMANDS } from '../lib/slashCommands';
+import { parseSlash, SLASH_COMMANDS } from '../lib/slashCommands';
+import { resolveBuiltinCommand, type CommandMapping } from '../lib/commandRegistry';
 import i18n from '../i18n';
-import type { ChatTurn, TodoView } from '../types';
+import type { ChatTurn, TaskItem, TodoView, ToolCall } from '../types';
 import type {
   ChangedFile,
   ContextInfo,
@@ -68,8 +69,9 @@ import { fromApprovalBlock } from '../components/codex/approval/approvalMapper';
 import AgentPicker from '../components/codex/composer/AgentPicker.vue';
 import { copyTextToClipboard } from '../lib/clipboard';
 import { kimiRuntime, type KimiAgentProfile } from '../composables/useKimiRuntime';
-import type { AppAgentConfigInput } from '../api/types';
+import type { AppAgentConfigInput, AppConfig, AppProviderFormInput } from '../api/types';
 import { quotaInfoFromOAuthUsage } from '../lib/quotaUsage';
+import { resolveSubagentModel, type SubagentModelResolution } from '../lib/subagentModel';
 
 const SettingsPage = defineAsyncComponent(
   () => import('../components/codex/settings/SettingsPage.vue'),
@@ -149,20 +151,6 @@ onMounted(() => {
     }
   }, 12000);
 });
-
-// 双击标题栏放大/还原(macOS Overlay 标题栏样式下没有原生行为,手动实现):
-// 模板级 @dblclick 绑定在 .app-toolbar / .sidebar-brand,非交互元素时才触发
-const { toggleWindowZoom } = tauriDaemon;
-function onTitlebarDblClick(e: MouseEvent) {
-  const t = e.target as HTMLElement | null;
-  if (
-    t?.closest(
-      'button, a, input, textarea, select, [role="button"], .toolbar-thinking-toggle, .thread-menu, .ws-menu, .wp-pop, .model-pop',
-    )
-  )
-    return;
-  void toggleWindowZoom();
-}
 
 // 3. 侧栏 + Composer 状态
 const filter = ref<SessionFilter>((localStorage.getItem('kimi-ui.session-filter') as SessionFilter) || 'all');
@@ -670,25 +658,77 @@ const composerEffort = computed<EffortLevel | null>(() => {
 
 // ---------------------------------------------------------------- 子智能体
 
+const parentAgentToolsById = computed<Map<string, ToolCall>>(() => {
+  const tools = new Map<string, ToolCall>();
+  for (const turn of conversationTurns.value) {
+    for (const block of turn.blocks ?? []) {
+      if (block.kind === 'tool') tools.set(block.tool.id, block.tool);
+    }
+  }
+  return tools;
+});
+
+function subagentModelResolution(task: TaskItem): SubagentModelResolution {
+  const config = client.config.value as AppConfig | null;
+  return resolveSubagentModel({
+    parentTool: task.parentToolCallId ? parentAgentToolsById.value.get(task.parentToolCallId) : undefined,
+    swarmIndex: task.swarmIndex,
+    subagentType: task.subagentType,
+    profiles: agentProfiles.value,
+    primaryModelId: client.status.value?.modelId || undefined,
+    secondaryModelId: config?.secondaryModel?.model,
+  });
+}
+
+function subagentModelName(modelId: string | undefined): string {
+  if (!modelId) return '未配置';
+  const model = (client.models.value ?? []).find((item) => item.id === modelId || item.model === modelId);
+  return model?.displayName || model?.model || modelId.replace(/^.*\//, '');
+}
+
+function subagentModelHint(resolution: SubagentModelResolution): string {
+  const basis = {
+    tool: '启动参数',
+    profile: 'Agent 配置',
+    default: '默认路由规则',
+    fallback: '次级模型未配置后的回退规则',
+  }[resolution.basis];
+  return `daemon 暂未返回子智能体实际模型字段；此处根据${basis}与当前配置推导，历史任务若配置已变更可能有偏差。`;
+}
+
+function subagentSummary(task: TaskItem): string {
+  if (task.suspendedReason) return task.suspendedReason;
+  if (task.summary) return task.summary;
+  const text = task.text?.trim().replace(/\s+/g, ' ');
+  if (text) return text.length > 120 ? `${text.slice(0, 119)}…` : text;
+  return task.meta ?? task.output?.[0] ?? '';
+}
+
 const subagents = computed<Subagent[]>(() =>
   (client.tasks.value ?? [])
     .filter((t) => t.kind === 'subagent')
-    .map((t) => ({
-      id: t.id,
-      name: t.name,
-      status:
-        t.subagentPhase === 'queued'
-          ? 'queued'
-          : t.subagentPhase === 'suspended'
-            ? 'suspended'
-            : t.subagentPhase === 'completed' || t.state === 'done'
-              ? 'completed'
-              : t.subagentPhase === 'failed' || t.state === 'fail'
-                ? 'failed'
-                : 'working',
-      summary: t.suspendedReason ?? t.meta ?? t.output?.[0] ?? '',
-      elapsed: t.timing,
-    })),
+    .map((t) => {
+      const model = subagentModelResolution(t);
+      return {
+        id: t.id,
+        name: t.name,
+        status:
+          t.subagentPhase === 'queued'
+            ? 'queued'
+            : t.subagentPhase === 'suspended'
+              ? 'suspended'
+              : t.subagentPhase === 'completed' || t.state === 'done'
+                ? 'completed'
+                : t.subagentPhase === 'failed' || t.state === 'fail'
+                  ? 'failed'
+                  : 'working',
+        summary: subagentSummary(t),
+        elapsed: t.timing,
+        model: subagentModelName(model.modelId),
+        modelRoute: model.route,
+        modelHint: subagentModelHint(model),
+      };
+    }),
 );
 const activeSubagents = computed(() =>
   subagents.value.filter((s) => ['working', 'queued', 'suspended'].includes(s.status)),
@@ -700,6 +740,16 @@ const completedSubagents = computed(() =>
 const sideSubTask = computed(() => {
   const id = ui.sideTaskSubagentId.value;
   return id ? (client.tasks.value ?? []).find((t) => t.id === id) ?? null : null;
+});
+const sideSubTaskModel = computed(() => {
+  const task = sideSubTask.value;
+  if (!task) return null;
+  const resolution = subagentModelResolution(task);
+  return {
+    name: subagentModelName(resolution.modelId),
+    route: resolution.route,
+    hint: subagentModelHint(resolution),
+  };
 });
 // 侧边对话(/btw)真数据
 const sideChatTurns = computed(() => client.sideChatTurns.value ?? []);
@@ -777,6 +827,14 @@ function onEditMessage(turn: ChatTurn) {
 
 function onSend(text: string, mode: ComposerMode, attachments?: PromptAttachment[]) {
   if (!text.trim() && !attachments?.length) return;
+  // Commands that accept arguments remain in the composer until Enter. Route
+  // them through the same registry as menu-selected bare commands; otherwise
+  // `/compact ...`, `/goal ...`, `/title ...`, etc. become ordinary prompts.
+  const parsedCommand = attachments?.length ? null : parseSlash(text.trim());
+  if (parsedCommand && resolveBuiltinCommand(parsedCommand.cmd)) {
+    handleCommand(text.trim());
+    return;
+  }
   if (client.connection.value !== 'connected') {
     toast('未连接到 daemon,无法发送');
     return;
@@ -851,89 +909,102 @@ const EFFORT_TO_THINKING: Record<EffortLevel, string> = {
   Max: 'max',
 };
 
-/**
- * 斜杠命令处理(从官方 App.vue handleCommand 移植)
- * 处理所有无参命令(acceptsInput 命令在输入框留参,用户发消息时走 onSend)
- */
+function explainNonExecutableCommand(command: string, mapping: Exclude<CommandMapping, { kind: 'command' }>): void {
+  if (mapping.kind === 'native-ui') toast(`${command} 已映射到 GUI：${i18n.global.t(mapping.locationKey)}`);
+  else if (mapping.kind === 'tui-only') toast(`${command} 只适用于终端 TUI，在 GUI 中不执行`);
+  else if (mapping.reason === 'daemon-api') toast(`${command} 的 daemon Web API 尚未开放`);
+  else toast(`${command} 已完成分类，但 GUI 交互尚未实现`);
+}
+
+/** Registry-backed slash-command dispatcher for the actual desktop entry. */
 function handleCommand(cmd: string): void {
-  // 带参命令:从消息文本里解析(command 可能含参数,如 "/compact 只保留 API 相关")
-  if (cmd.startsWith('/compact')) {
-    void client.compact(cmd.slice('/compact'.length).trim() || undefined);
+  const space = cmd.indexOf(' ');
+  const token = space === -1 ? cmd : cmd.slice(0, space);
+  const arg = space === -1 ? '' : cmd.slice(space + 1).trim();
+  const resolved = resolveBuiltinCommand(token);
+  if (resolved === null) {
+    const stripped = token.slice(1);
+    if (stripped) void client.activateSkill(stripped, arg || undefined);
     return;
   }
-  if (cmd.startsWith('/swarm')) {
-    const arg = cmd.slice('/swarm'.length).trim();
-    if (arg === 'on') client.setSwarmMode(true);
-    else if (arg === 'off') client.setSwarmMode(false);
-    else if (arg) { client.setSwarmMode(true); void client.sendPrompt(arg); }
-    else void client.toggleSwarmMode();
+
+  const { mapping } = resolved;
+  if (mapping.kind !== 'command') {
+    explainNonExecutableCommand(token, mapping);
     return;
   }
-  if (cmd.startsWith('/goal')) {
-    const arg = cmd.slice('/goal'.length).trim();
-    if (arg === 'pause' || arg === 'resume' || arg === 'cancel') client.controlGoal(arg);
-    else if (arg) void client.createGoal(arg);
-    else client.toggleGoalMode();
+  if (mapping.availability === 'idle-only' && conversationRunning.value) {
+    toast(`${token} 只能在会话空闲时执行`);
     return;
   }
-  if (cmd.startsWith('/btw')) {
-    const arg = cmd.slice('/btw'.length).trim();
-    // 裸 /btw 是 toggle(对齐官方):开着就关,关着就开侧边分栏
-    if (arg) void client.openSideChat(arg);
-    else if (ui.sideTaskOpen.value) client.closeSideChat();
-    else ui.openSideTask('thread');
-    return;
-  }
-  switch (cmd) {
-    case '/new':
-    case '/clear':
+
+  switch (mapping.action) {
+    case 'compact':
+      void client.compact(arg || undefined);
+      break;
+    case 'swarm':
+      if (arg === 'on') client.setSwarmMode(true);
+      else if (arg === 'off') client.setSwarmMode(false);
+      else if (arg) { client.setSwarmMode(true); void client.sendPrompt(arg); }
+      else void client.toggleSwarmMode();
+      break;
+    case 'goal':
+      if (arg === 'pause' || arg === 'resume' || arg === 'cancel') client.controlGoal(arg);
+      else if (arg) void client.createGoal(arg);
+      else client.toggleGoalMode();
+      break;
+    case 'btw':
+      if (arg) void client.openSideChat(arg);
+      else if (ui.sideTaskOpen.value) client.closeSideChat();
+      else ui.openSideTask('thread');
+      break;
+    case 'new':
       client.clearActiveSession();
       break;
-    case '/fork':
+    case 'fork':
       void client.forkSession();
       break;
-    case '/copy':
+    case 'copy':
       void copyLatestAssistantResponse();
       break;
-    case '/export':
+    case 'exportDebugZip':
       void client.exportSession();
       break;
-    case '/undo':
+    case 'undo':
       void client.undo();
       break;
-    case '/plan':
+    case 'plan':
       client.togglePlanMode();
       break;
-    case '/auto':
+    case 'auto':
       client.setPermission('auto');
       break;
-    case '/yolo':
+    case 'yolo':
       client.setPermission('yolo');
       break;
-    case '/thinking':
+    case 'thinking':
       client.setThinking('high');
       break;
-    case '/status':
+    case 'status':
       ui.openDetail('tasks');
       break;
-    case '/login':
+    case 'login':
       toast('已通过 daemon token 自动登录');
       break;
-    case '/review':
-      if (changedFiles.value.length) ui.openReview();
-      else toast('暂无改动');
-      break;
-    case '/permissions':
-      settingsSection.value = 'permissions';
+    case 'settings':
+      settingsSection.value = 'general';
       settingsOpen.value = true;
       break;
-    default: {
-      // 未匹配 → 当 skill 激活(排除已知非 skill)
-      const stripped = cmd.slice(1).split(' ')[0];
-      if (stripped && !['login', 'status'].includes(stripped)) {
-        void client.activateSkill(stripped);
-      }
-    }
+    case 'title':
+      if (!client.activeSessionId.value) toast('请先打开一个会话');
+      else if (!arg) toast('请输入新标题，例如：/title 修复登录问题');
+      else void client.renameSession(client.activeSessionId.value, arg);
+      break;
+    case 'reload':
+      // SDK has reloadSession(), but the daemon's public REST API does not.
+      // Restarting the whole daemon is intentionally not treated as equivalent.
+      toast('/reload 已识别，但 Kimi 0.31.1 的 daemon Web API 尚未开放会话重载接口');
+      break;
   }
 }
 
@@ -1184,13 +1255,20 @@ async function openProviderManager() {
   providerManagerLoading.value = true;
   try { await client.loadProviders(); } finally { providerManagerLoading.value = false; }
 }
-async function addProvider(input: { type: string; apiKey?: string; baseUrl?: string; defaultModel?: string }) {
+async function addProvider(input: AppProviderFormInput) {
   providerAdding.value = true;
   try {
-    await client.addProvider(input);
-    toast('Provider 已保存');
+    if (await client.addProvider(input)) toast('Provider 已保存');
   } finally {
     providerAdding.value = false;
+  }
+}
+async function updateProvider(id: string, input: AppProviderFormInput) {
+  providerBusyIds.value = [...new Set([...providerBusyIds.value, id])];
+  try {
+    if (await client.updateProvider(id, input)) toast('Provider 已更新');
+  } finally {
+    providerBusyIds.value = providerBusyIds.value.filter((item) => item !== id);
   }
 }
 async function refreshProvider(id: string) {
@@ -1395,7 +1473,6 @@ async function searchFiles(q: string) {
         class="app-toolbar"
         data-tauri-drag-region="deep"
         @mousedown="tauriDaemon.startWindowDragging"
-        @dblclick="onTitlebarDblClick"
       >
         <button class="btn" data-tauri-drag-region="false" @click="settingsOpen = false">
           <CodexIcon name="chevron-right" style="transform: rotate(180deg)" />
@@ -1453,7 +1530,6 @@ async function searchFiles(q: string) {
       class="app-toolbar"
       data-tauri-drag-region="deep"
       @mousedown="tauriDaemon.startWindowDragging"
-      @dblclick="onTitlebarDblClick"
     >
       <!-- toolbar -->
       <span class="toolbar-title" data-tauri-drag-region>{{ activeSession?.title || sidebarCurrentWs || 'Kimi Code' }}</span>
@@ -1540,6 +1616,8 @@ async function searchFiles(q: string) {
     <!-- 对话流(审批卡由 MessageAssistant 按 turn.approval 内联渲染) -->
     <ConversationPane
       v-if="conversationTurns.length || conversationRunning || standaloneApprovals.length"
+      :key="client.activeSessionId.value ?? 'draft'"
+      :session-id="client.activeSessionId.value ?? undefined"
       :turns="conversationTurns"
       :todos-by-turn="todosByTurn"
       :running="conversationRunning"
@@ -1688,12 +1766,36 @@ async function searchFiles(q: string) {
             <strong>{{ sideSubTask.name }}</strong>
             <span style="color: var(--text-3)"> · {{ sideSubTask.timing }}</span>
           </p>
+          <div v-if="sideSubTaskModel" class="sat-model" :title="sideSubTaskModel.hint">
+            <span>{{ sideSubTaskModel.route === 'secondary' ? '次级模型' : '主模型' }}</span>
+            <strong>{{ sideSubTaskModel.name }}</strong>
+            <span class="sat-inferred">配置推导</span>
+          </div>
           <p v-if="sideSubTask.suspendedReason" style="color: var(--warning)">
             等待输入：{{ sideSubTask.suspendedReason }}。请在主对话中的问题卡片回复。
           </p>
           <p v-else-if="sideSubTask.meta" style="color: var(--text-2)">{{ sideSubTask.meta }}</p>
-          <pre v-if="(sideSubTask.output ?? []).length">{{ (sideSubTask.output ?? []).join('\n') }}</pre>
-          <p v-else style="color: var(--text-3)">该子智能体暂无输出记录。</p>
+          <section v-if="sideSubTask.text?.trim()" class="sat-section">
+            <span class="sat-label">回复正文</span>
+            <pre>{{ sideSubTask.text.trimEnd() }}</pre>
+          </section>
+          <section v-if="(sideSubTask.output ?? []).length" class="sat-section">
+            <span class="sat-label">执行记录 · {{ sideSubTask.output?.length ?? 0 }} 行</span>
+            <pre>{{ (sideSubTask.output ?? []).join('\n') }}</pre>
+          </section>
+          <section
+            v-if="sideSubTask.summary && sideSubTask.summary !== sideSubTask.text?.trim()"
+            class="sat-section"
+          >
+            <span class="sat-label">结果摘要</span>
+            <div class="sat-summary">{{ sideSubTask.summary }}</div>
+          </section>
+          <p
+            v-if="!sideSubTask.text?.trim() && !(sideSubTask.output ?? []).length && !sideSubTask.summary"
+            style="color: var(--text-3)"
+          >
+            该子智能体暂无可用输出记录。
+          </p>
         </div>
       </div>
       <!-- thread 模式:侧边对话(/btw) -->
@@ -1732,6 +1834,8 @@ async function searchFiles(q: string) {
       :files="changedFiles"
       :hunks-by-file="hunksByFile"
       :branch="client.gitInfo.value?.branch ?? ''"
+      :selected-path="client.selectedDiffPath.value"
+      :loading="client.fileDiffLoading.value"
       @select-file="onSelectDiffFile"
       @request-fix="onRequestReviewFix"
     />
@@ -1779,11 +1883,13 @@ async function searchFiles(q: string) {
   <ProviderManager
     v-if="showProviderManager"
     :providers="client.providers.value ?? []"
+    :models="client.models.value ?? []"
     :oauth-available="false"
     :loading="providerManagerLoading"
     :busy-ids="providerBusyIds"
     :adding="providerAdding"
     @add="addProvider"
+    @update="updateProvider"
     @refresh="refreshProvider"
     @delete="onDeleteProvider"
     @open-login="() => toast('请先在账户页登录 Kimi，再刷新 Provider')"

@@ -1148,3 +1148,20 @@ ROADMAP 给 kimi3 的 5 项全部完成，vue-tsc 全绿，`verify5.mjs` 10 断�
 - **发行质量**:release workflow 的 Rust 门禁加入 `cargo test --locked`;发行前验收为 web 41 文件/679 tests、类型检查、样式 baseline、生产构建、`cargo fmt --check`、Rust 5 tests、锁文件一致性与浏览器控制台零错误全部通过。本地候选 DMG 已通过挂载、版本 `1.0.14`、arm64 和深度签名检查,SHA-256 为 `63ba754f89cc71055c437709fceca010d22da88b325251c82f6cf8a9bedc63eb`。
 - **CI 平台修正**:首次 tag 运行证明 Actions 额度正常,但 Ubuntu 质量 job 在新增 Rust tests 后因缺少 GLib/WebKitGTK 系统库失败;workflow 已补齐 Tauri Linux 测试依赖,保留 Rust 门禁并通过 `workflow_dispatch` 从修正后的 `main` 重跑同一 `1.0.14` 发行。
 - **线上发行验收**:GitHub Actions `30780370017` 的 quality/prepare/macOS/Windows/manifest 全绿;Release DMG、NSIS、MSI、app.tar.gz 和 `latest.json` 齐全。线上 DMG 已通过挂载、版本/arm64/深度签名检查,SHA-256 为 `06883ab5d7f6787344b3e87d437a29ee4bcb1eb0ad5550584b00f22dd9f49815`;Release 与仓库 `latest.json` 完全一致且含 macOS/Windows 双平台,Homebrew Cask 已同步到 1.0.14。
+
+## 1.0.14 后续 · 命令分类与防漏改造 · 2026-08-03
+
+- **来源分离**：`upstreamSlashCommands.json` 固定 Kimi Code 0.31.1 发布版 40 个主命令/别名；`commandRegistry.ts` 单独维护 GUI/TUI/通用分类、空闲条件与执行器，`slashCommands.ts` 只负责菜单投影和动态 Skills 合并。
+- **完整性门禁**：`commandRegistry.test.ts` 校验所有上游命令均已分类且 GUI token 不冲突；`commands:check(-latest)` / `commands:sync-latest` 用于发现上游新增命令。首次校验即发现此前清点遗漏的实验命令 `/secondary_model`，已映射到设置页次级模型。
+- **执行链修复**：`App.vue` 与实际桌面入口 `codex-app/CodexApp.vue` 都改为统一注册表分发；带参命令不再作为普通 prompt 发送，未知官方命令不再误调用 Skill；原有 `/export`→debug ZIP 行为作为显式兼容 override 保留。
+- **reload 边界**：`/reload` 已进入菜单并可识别；Kimi 0.31.1 Node SDK 有 `reloadSession()`，但 daemon REST 无公开路由，所以 GUI 明确提示能力阻塞，不以重启全 daemon 代替。
+- **阶段验收**：类型检查通过；42 files / 683 tests 全绿；上游发布版 40 命令校验通过；真实浏览器验证 `/reload` 菜单/提示、`/settings` 页面映射、`/reload-tui` TUI-only 提示、`/title` 带参路由，干净页面控制台无 error/warn。
+
+## 版本锚点 · 1.0.15 · 2026-08-03
+
+- **Provider 可维护性**：已保存 Provider 的非敏感配置重新可见并可编辑；API Key 永不回显且留空保持原值，OAuth Provider 明确只读，写入契约同步 Kimi Code 0.31.1。
+- **命令体系**：Kimi Code 0.31.1 的 40 个发布版命令/别名全部进入来源快照和分类注册表；GUI、通用、TUI 能力边界可解释，新增上游命令由脚本和测试共同防漏。
+- **长会话与窗口交互**：进入或切换已有会话默认定位到底部；macOS 标题栏移除与系统双击行为竞争的手动最大化逻辑，消除放大/还原振荡。
+- **子智能体透明度**：任务列表与详情保留完整回复、执行进度和结果摘要，并按主/次模型配置展示明确标注为“配置推导”的模型路由；长进度可展开查看隐藏行。
+- **Review 可读性**：面板加宽、文件树压缩、长行换行，选中文件展示完整 diff；同步修复选中路径失配及加载、空内容、二进制、未跟踪和删除状态不可辨的问题。
+- **发行验收**：Kimi 0.31.1 的 40 个命令快照一致；类型检查、44 files / 694 tests、样式 baseline、生产构建、`cargo fmt --check`、Rust 5 tests 与锁文件一致性全部通过。本地 `1.0.15` DMG 已通过挂载、arm64、深度签名和版本检查，SHA-256 为 `689eb567889cd756161a5e7789328e9a63dff0169f7e584fcc48e6d2fa9f91d4`；GitHub 双平台发行结果待回填。

@@ -612,8 +612,7 @@ export interface KimiEventConnection {
 }
 
 // ---------------------------------------------------------------------------
-// Model + Provider (app-facing, camelCase)
-// PRESUMED — not in current daemon docs; isolated in adapter, swap when backend defines them.
+// Model + Provider (app-facing, camelCase; Kimi Code 0.31.1 daemon contract)
 // ---------------------------------------------------------------------------
 
 export interface AppModel {
@@ -651,6 +650,41 @@ export interface AppProvider {
   status: 'connected' | 'error' | 'unconfigured';
   /** Model ids available from this provider */
   models?: string[];
+}
+
+/** Provider form payload used by the GUI. Model names are raw upstream model
+ * ids (without the local `<provider>/` alias prefix). Existing model metadata
+ * is resolved and preserved by the client before it calls the daemon. */
+export interface AppProviderFormInput {
+  id: string;
+  type: string;
+  apiKey?: string;
+  baseUrl?: string;
+  defaultModel?: string;
+  modelNames: string[];
+  /** Context size assigned only to newly added model ids. */
+  newModelContextSize: number;
+}
+
+/** Full daemon write shape. This stays below the UI layer so replacing a
+ * provider can preserve metadata that the compact form does not edit. */
+export interface AppProviderModelInput {
+  model: string;
+  maxContextSize: number;
+  displayName?: string;
+  capabilities?: string[];
+  maxOutputSize?: number;
+  supportEfforts?: string[];
+  adaptiveThinking?: boolean;
+}
+
+export interface AppProviderWriteInput {
+  id: string;
+  type: string;
+  apiKey?: string;
+  baseUrl?: string;
+  defaultModel?: string;
+  models: AppProviderModelInput[];
 }
 
 export interface ProviderRefreshResult {
@@ -834,11 +868,12 @@ export interface KimiWebApi {
   browseFs(path?: string): Promise<FsBrowseResult>;
   getFsHome(): Promise<{ home: string; recentRoots: string[] }>;
 
-  // PRESUMED — not in current daemon docs; isolated in adapter, swap when backend defines them.
+  // Kimi daemon model catalog + Provider management.
   listModels(): Promise<AppModel[]>;
   listProviders(): Promise<AppProvider[]>;
-  addProvider(input: { type: string; apiKey?: string; baseUrl?: string; defaultModel?: string }): Promise<AppProvider>;
-  deleteProvider(id: string): Promise<{ deleted: true }>;
+  addProvider(input: AppProviderWriteInput): Promise<AppProvider>;
+  updateProvider(id: string, input: AppProviderWriteInput): Promise<AppProvider>;
+  deleteProvider(id: string): Promise<void>;
   refreshProvider(id: string): Promise<ProviderRefreshResult>;
   refreshAllProviders(): Promise<ProviderRefreshResult>;
   refreshOAuthProviderModels(): Promise<ProviderRefreshResult>;

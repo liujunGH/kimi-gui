@@ -208,6 +208,86 @@ describe('DaemonKimiWebApi.getSessionGoal', () => {
   });
 });
 
+describe('DaemonKimiWebApi provider writes', () => {
+  beforeEach(() => {
+    vi.stubGlobal('location', { search: '?debug=1' });
+    vi.stubGlobal('fetch', vi.fn());
+    clearTrace();
+  });
+
+  afterEach(() => {
+    clearTrace();
+    vi.unstubAllGlobals();
+  });
+
+  it('uses the daemon replace endpoint and omits a saved key when the edit leaves it blank', async () => {
+    vi.mocked(fetch).mockResolvedValue(envelope({
+      provider: {
+        id: 'openai-renamed',
+        type: 'openai_responses',
+        base_url: 'https://example.test/v1',
+        default_model: 'openai-renamed/model-a',
+        has_api_key: true,
+        status: 'connected',
+        models: ['openai-renamed/model-a'],
+      },
+    }));
+
+    await createApi().updateProvider('openai/main', {
+      id: 'openai-renamed',
+      type: 'openai_responses',
+      baseUrl: 'https://example.test/v1',
+      defaultModel: 'model-a',
+      models: [{ model: 'model-a', maxContextSize: 128_000 }],
+    });
+
+    expect(vi.mocked(fetch).mock.calls[0]?.[0]).toBe(
+      'http://daemon.test/api/v1/providers/openai%2Fmain',
+    );
+    const init = vi.mocked(fetch).mock.calls[0]?.[1];
+    expect(init?.method).toBe('PUT');
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      new_id: 'openai-renamed',
+      type: 'openai_responses',
+      base_url: 'https://example.test/v1',
+      default_model: 'model-a',
+      models: [{ model: 'model-a', max_context_size: 128_000 }],
+    });
+    expect(body).not.toHaveProperty('api_key');
+  });
+
+  it('sends a replacement key but redacts it from debug traces', async () => {
+    vi.mocked(fetch).mockResolvedValue(envelope({
+      provider: {
+        id: 'local', type: 'openai', has_api_key: true, status: 'connected', models: ['local/model-a'],
+      },
+    }));
+    const replacement = 'KEY_MUST_NOT_ENTER_TRACE';
+
+    await createApi().updateProvider('local', {
+      id: 'local',
+      type: 'openai',
+      apiKey: replacement,
+      models: [{ model: 'model-a', maxContextSize: 64_000 }],
+    });
+
+    expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body))).toHaveProperty('api_key', replacement);
+    expect(traceToJsonl()).not.toContain(replacement);
+    expect(traceToJsonl()).toContain('[redacted]');
+  });
+
+  it('accepts the daemon 204 response when deleting a manual provider', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 204 }));
+
+    await expect(createApi().deleteProvider('local/provider')).resolves.toBeUndefined();
+    expect(vi.mocked(fetch).mock.calls[0]?.[0]).toBe(
+      'http://daemon.test/api/v1/providers/local%2Fprovider',
+    );
+    expect(vi.mocked(fetch).mock.calls[0]?.[1]?.method).toBe('DELETE');
+  });
+});
+
 describe('DaemonKimiWebApi.connectEvents', () => {
   let connection: KimiEventConnection | undefined;
 

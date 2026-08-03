@@ -295,6 +295,12 @@ export interface TaskItem {
   timing: string;
   meta?: string;
   output?: string[];
+  /** Concatenated live assistant output from the subagent. This is separate
+   *  from `output`, which contains tool/progress lines. */
+  text?: string;
+  /** Terminal result summary supplied by subagent.completed / REST preview. */
+  summary?: string;
+  subagentType?: string;
   /** Background subagents only — the dock lists these; foreground subagents
    *  render inline as the `Agent` tool card instead. */
   runInBackground?: boolean;

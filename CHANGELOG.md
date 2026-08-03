@@ -4,6 +4,28 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [未发布]
+
+## [1.0.15] - 2026-08-03
+
+### 改进
+
+- **Provider 配置管理**：已配置项现在可查看完整非敏感配置；手动 Provider 可修改 ID、类型、Base URL、默认模型和模型列表，OAuth Provider 明确标为只读；API Key 始终不回显，编辑留空会由 daemon 保留原密钥
+- **Provider 接口兼容**：新增与编辑改用 Kimi Code 0.31.1 的完整 Provider 写入契约，保存时保留已有模型的上下文、能力与思考元数据，设置页进入模型分区后立即刷新 Provider 列表
+- **斜杠命令架构**：引入 Kimi Code 0.31.1 的 40 条完整命令/别名快照，并为每条命令声明通用、GUI 或 TUI surface 及执行方式；菜单从映射生成，新增上游命令不再静默遗漏
+- **命令分发**：菜单点击、手输别名和带参数命令统一走注册表；`/settings`、`/title` 接入 GUI 动作，`/reload-tui` 等隐藏命令会解释所属 surface
+- **上游维护**：新增发布版校验、main 分支比较和快照同步脚本，完整性测试要求每条上游命令恰好完成一次分类
+- **子智能体可见性**：列表和详情展示完整回复、执行进度与结果摘要；按主/次模型配置推导实际模型路由并明确标注推导来源，较长进度提供可展开的隐藏行计数
+- **Review 可读性**：Review 面板改为更宽的响应式布局，文件树减少占高，长行自动换行；选中文件默认展示完整 diff，不再被通用折叠策略截断
+
+### 修复
+
+- `/reload` 现在可被发现和识别；当前 daemon Web API 未开放会话重载时显示准确说明，不再作为普通消息或 Skill 发送
+- 修复 Codex 产品入口中 `/compact <参数>`、`/goal <参数>`、`/title <标题>` 等带参命令被当作普通消息发送的问题
+- **会话初始定位**：进入或切换已有长会话时默认定位到最底部，并避免顶部加载观察器在初始化阶段抢走滚动位置
+- **macOS 标题栏双击**：移除与系统行为竞争的手动最大化切换，避免放大后立即还原或还原后立即放大的振荡，同时保留原生拖动与双击行为
+- **Review 空白状态**：修复选中文件路径与父级不同步导致内容为空的问题，并补齐加载中、空 diff、二进制、未跟踪和已删除文件提示
+
 ## [1.0.14] - 2026-08-03
 
 ### 改进
@@ -221,6 +243,7 @@
 - 项目骨架:官方 kimi-web fork(vite 多页面)+ Tauri 2 壳(daemon 拉起/token 注入/托盘)
 - 静态交互原型 `prototype/`(视觉契约:SVG 图标体系、token 配色、双主题)
 
+[1.0.15]: https://github.com/liujunGH/kimi-gui/releases/tag/v1.0.15
 [1.0.14]: https://github.com/liujunGH/kimi-gui/releases/tag/v1.0.14
 [1.0.13]: https://github.com/liujunGH/kimi-gui/releases/tag/v1.0.13
 [1.0.12]: https://github.com/liujunGH/kimi-gui/releases/tag/v1.0.12

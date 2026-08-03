@@ -1,5 +1,7 @@
 // apps/kimi-web/src/lib/slashCommands.ts
-// Pure TS — no Vue, no side effects. Slash-command metadata + parsers.
+// Pure TS — no Vue, no side effects. Slash-command presentation + parsers.
+
+import { executableCommandMappings, resolveBuiltinCommand } from './commandRegistry';
 
 export interface SlashCommand {
   name: string;
@@ -21,24 +23,31 @@ export interface SlashCommand {
   acceptsInput?: boolean;
 }
 
-export const SLASH_COMMANDS: SlashCommand[] = [
-  { name: '/new',        desc: 'commands.new.desc' },
-  { name: '/clear',      desc: 'commands.clear.desc' },
-  { name: '/login',      desc: 'commands.login.desc' },
-  { name: '/plan',       desc: 'commands.plan.desc' },
-  { name: '/swarm',      desc: 'commands.swarm.desc', acceptsInput: true },
-  { name: '/goal',       desc: 'commands.goal.desc', acceptsInput: true },
-  { name: '/btw',        desc: 'commands.btw.desc', acceptsInput: true },
-  { name: '/auto',       desc: 'commands.auto.desc' },
-  { name: '/yolo',       desc: 'commands.yolo.desc' },
-  { name: '/thinking',   desc: 'commands.thinking.desc' },
-  { name: '/compact',    desc: 'commands.compact.desc', acceptsInput: true },
-  { name: '/undo',       desc: 'commands.undo.desc' },
-  { name: '/fork',       desc: 'commands.fork.desc' },
-  { name: '/copy',       desc: 'commands.copy.desc' },
-  { name: '/export',     desc: 'commands.export.desc' },
-  { name: '/status',     desc: 'commands.status.desc' },
-];
+const DESCRIPTION_OVERRIDES: Readonly<Record<string, string>> = {
+  clear: 'commands.clear.desc',
+};
+
+const MENU_ORDER = [
+  'new', 'clear', 'login', 'settings', 'plan', 'swarm', 'goal', 'btw',
+  'auto', 'yolo', 'thinking', 'reload', 'compact', 'undo', 'fork', 'title',
+  'copy', 'export', 'status',
+] as const;
+const MENU_ORDER_INDEX = new Map<string, number>(MENU_ORDER.map((name, index) => [name, index]));
+
+/**
+ * GUI-presented commands are derived from the exhaustive upstream adapter.
+ * Classification lives in commandRegistry.ts; this list is no longer an
+ * independent allow-list that can silently drift away from Kimi Code.
+ */
+export const SLASH_COMMANDS: SlashCommand[] = executableCommandMappings()
+  .flatMap((mapping) => mapping.menuNames.map((name) => ({
+      name: `/${name}`,
+      desc: DESCRIPTION_OVERRIDES[name] ?? mapping.descriptionKey,
+      acceptsInput: mapping.acceptsInput,
+    })))
+  .sort((left, right) =>
+    (MENU_ORDER_INDEX.get(left.name.slice(1)) ?? Number.MAX_SAFE_INTEGER) -
+    (MENU_ORDER_INDEX.get(right.name.slice(1)) ?? Number.MAX_SAFE_INTEGER));
 
 /**
  * Parse a slash command from the start of the input string.
@@ -62,6 +71,11 @@ export function parseSlash(input: string): { cmd: string; arg: string } | null {
     cmd: input.slice(0, spaceIdx),
     arg: input.slice(spaceIdx + 1),
   };
+}
+
+/** True for every upstream built-in, including commands hidden from the menu. */
+export function isBuiltinSlashCommand(command: string): boolean {
+  return resolveBuiltinCommand(command) !== null;
 }
 
 /** The prefix marking a slash item as a skill activation (`/skill:<name>`). */

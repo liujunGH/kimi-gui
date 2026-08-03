@@ -1247,7 +1247,11 @@ function focusComposer(): void {
   (dockedComposerRef.value ?? emptyComposerRef.value)?.focus();
 }
 
-defineExpose({ loadComposerForEdit, focusComposer });
+function copyLastAssistantMessage(): void {
+  chatPaneRef.value?.copyFinalSummary();
+}
+
+defineExpose({ loadComposerForEdit, focusComposer, copyLastAssistantMessage });
 </script>
 
 <template>

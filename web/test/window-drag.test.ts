@@ -33,4 +33,19 @@ describe('desktop window drag contract', () => {
     expect(app).toContain('@mousedown="tauriDaemon.startWindowDragging"');
     expect(sidebar).toContain('@mousedown="startWindowDragging"');
   });
+
+  it('lets the Tauri drag region own double-click zoom exactly once', () => {
+    const app = readProjectFile('../src/codex-app/CodexApp.vue');
+    const sidebar = readProjectFile('../src/components/codex/sidebar/Sidebar.vue');
+    const tauriBridge = readProjectFile('../src/composables/codex/useTauriDaemon.ts');
+    const rustCommands = readProjectFile('../../src-tauri/src/lib.rs');
+
+    // Tauri's injected drag-region listener already toggles maximization on a
+    // double click. A Vue dblclick handler or a second Rust toggle immediately
+    // reverses that native action (maximize → restore, or restore → maximize).
+    expect(app).not.toContain('@dblclick="onTitlebarDblClick"');
+    expect(sidebar).not.toContain('@dblclick="onBrandDblclick"');
+    expect(tauriBridge).not.toContain('toggleWindowZoom');
+    expect(rustCommands).not.toContain('toggle_window_zoom');
+  });
 });

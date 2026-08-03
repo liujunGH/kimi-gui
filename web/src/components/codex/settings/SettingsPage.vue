@@ -651,6 +651,7 @@ async function restoreSettingsBackup(): Promise<void> {
 }
 watch(active, (section) => {
   if (section === 'archive') void loadArchive();
+  else if (section === 'models-providers') void Promise.all([client.loadModels(), client.loadProviders()]);
   else if (section === 'agents') void loadAgentCenter();
   else if (section === 'engine') void loadEngine();
   else if (section === 'plugins-skills') void loadTools();

@@ -1281,6 +1281,15 @@ function pushWarning(warning: AppWarning): void {
   rawState.warnings = [...rawState.warnings, warning];
 }
 
+/** Public, presentation-neutral notice hook for app-level command routing. */
+function notifyCommand(
+  title: string,
+  message: string,
+  severity: AppNotice['severity'] = 'warning',
+): void {
+  pushWarning({ severity, title, message });
+}
+
 // Drop every "Realtime connection error" notice pushed by the WS onError
 // handler. Matched by severity + the localized wsTitle (the same i18n instance
 // used to push it), so other errors are left untouched.
@@ -1896,6 +1905,9 @@ function toUiTask(task: AppTask): TaskItem {
     timing,
     meta,
     output,
+    text: task.text,
+    summary: task.outputPreview,
+    subagentType: task.subagentType,
     runInBackground: task.runInBackground,
     parentToolCallId: task.parentToolCallId,
     subagentPhase: task.subagentPhase,
@@ -2919,6 +2931,7 @@ export function useKimiWebClient() {
     controlGoal: workspaceState.controlGoal,
     enqueue: workspaceState.enqueue,
     dismissWarning: workspaceState.dismissWarning,
+    notifyCommand,
     renameSession: workspaceState.renameSession,
     renameWorkspace: workspaceState.renameWorkspace,
     deleteWorkspace: workspaceState.deleteWorkspace,
@@ -2959,6 +2972,7 @@ export function useKimiWebClient() {
     setModel: modelProvider.setModel,
     toggleStarModel: modelProvider.toggleStarModel,
     addProvider: modelProvider.addProvider,
+    updateProvider: modelProvider.updateProvider,
     deleteProvider: modelProvider.deleteProvider,
     refreshProvider: modelProvider.refreshProvider,
     refreshAllProviders: modelProvider.refreshAllProviders,

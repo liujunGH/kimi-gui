@@ -114,6 +114,10 @@
 .sa-head { display: flex; align-items: center; gap: 8px; }
 .sa-name { font-family: var(--font-mono); font-size: var(--text-sm); font-weight: 600; }
 .sa-status { margin-left: auto; font-size: var(--text-sm); color: var(--text-2); white-space: nowrap; }
+.sa-model {
+  display: block; margin-top: 5px;
+  font: 11px var(--font-mono); color: var(--text-3);
+}
 /* 取消按钮:仅 working 卡渲染(SubagentCard),点击 @click.stop 不触发卡片 inspect */
 .sa-cancel {
   flex: none; display: grid; place-items: center;
@@ -175,6 +179,11 @@
 .aph-icon.v3 { background: var(--warning-soft); color: var(--warning); }
 .aph-main { flex: 1; min-width: 0; }
 .aph-name { display: flex; align-items: center; gap: 7px; font-size: var(--text-md); font-weight: 550; }
+.aph-model {
+  display: block; margin-top: 2px;
+  font: 11px var(--font-mono); color: var(--accent);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .aph-sum { margin-top: 2px; font-size: var(--text-sm); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .aph-time { flex: none; font-size: 11px; color: var(--text-3); }
 .aph-bar { margin-top: 7px; height: 3px; border-radius: var(--r-full); background: var(--bg-soft); overflow: hidden; }

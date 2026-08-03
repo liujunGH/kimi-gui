@@ -89,6 +89,9 @@ onUnmounted(() => document.removeEventListener('keydown', onDocKeydown));
             <span class="aph-name">
               <span v-if="dotOf(a)" class="dot" :class="dotOf(a)"></span>{{ a.name }}
             </span>
+            <span v-if="a.model" class="aph-model" :title="a.modelHint">
+              {{ a.modelRoute === 'secondary' ? '次级模型' : '主模型' }} · {{ a.model }}
+            </span>
             <span class="aph-sum">{{ sumOf(a) }}</span>
             <span v-if="a.progress" class="aph-bar">
               <span class="aph-bar-fill" :style="{ width: pctOf(a) + '%' }"></span>
@@ -117,6 +120,9 @@ onUnmounted(() => document.removeEventListener('keydown', onDocKeydown));
           <span class="aph-icon" :class="iconVariant(a, i)">{{ letterOf(a) }}</span>
           <span class="aph-main">
             <span class="aph-name">{{ a.name }}</span>
+            <span v-if="a.model" class="aph-model" :title="a.modelHint">
+              {{ a.modelRoute === 'secondary' ? '次级模型' : '主模型' }} · {{ a.model }}
+            </span>
             <span class="aph-sum">{{ sumOf(a) }}</span>
           </span>
         </button>

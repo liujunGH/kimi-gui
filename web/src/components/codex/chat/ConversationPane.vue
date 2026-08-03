@@ -43,6 +43,9 @@ const contentEl = ref<HTMLElement | null>(null);
 const sentinelEl = ref<HTMLElement | null>(null);
 const nearBottom = ref(true);
 const visibleCount = ref(PAGE);
+// 首次挂载/切换会话时先锁住实时末端。否则顶部 IntersectionObserver
+// 可能在首个 nextTick 前抢先加载历史消息，浏览器的原生滚动锚定会把视口留在中段。
+const initialTailPending = ref(true);
 
 const total = computed(() => props.turns.length);
 const shownTurns = computed(() => props.turns.slice(Math.max(0, total.value - visibleCount.value)));
@@ -96,15 +99,16 @@ function onTocSelect(turnId: string) {
   if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-// 会话切换(旧首 turn 已不在列表 = 真切换)时重置窗口并回滚贴底;
-// 旧首 turn 仍在 = daemon 前插了更早消息(加载更早),保持窗口与滚动位置
+// 产品入口会传 sessionId；因此真正的会话切换不再依赖首条 turn 猜测。
+// fallback 仅供 demo/旧调用方使用：旧首 turn 仍在代表 daemon 前插了历史。
 watch(
   () => props.turns[0]?.id,
   (_first, prevFirst) => {
+    if (props.sessionId) return;
     if (prevFirst && props.turns.some((t) => t.id === prevFirst)) return;
     visibleCount.value = PAGE;
     nearBottom.value = true;
-    void maybeFollow();
+    void settleInitialTail();
   },
 );
 
@@ -116,7 +120,9 @@ function onScroll() {
     scrollRaf = 0;
     const el = scrollEl.value;
     if (!el) return;
-    nearBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+    // 初始化期间的滚动全部来自程序写入；不让中间帧误判为用户上翻。
+    nearBottom.value = initialTailPending.value
+      || el.scrollHeight - el.scrollTop - el.clientHeight < 48;
     updateActiveToc();
   });
 }
@@ -154,6 +160,51 @@ async function maybeFollow() {
   if (el && nearBottom.value) el.scrollTop = el.scrollHeight;
 }
 
+let initialTailRaf = 0;
+let initialTailGeneration = 0;
+async function settleInitialTail() {
+  const generation = ++initialTailGeneration;
+  initialTailPending.value = true;
+  nearBottom.value = true;
+  await nextTick();
+  cancelAnimationFrame(initialTailRaf);
+
+  // 两个布局帧都写到底部：第一帧处理 Vue DOM，第二帧覆盖异步组件首次落位
+  // 和浏览器原生 scroll anchoring。最多锁 8 帧，避免正在流式输出时阻止用户上翻；
+  // 之后 ResizeObserver 接管图片/Markdown 增高。
+  let stableFrames = 0;
+  let frames = 0;
+  let previousHeight = -1;
+  const pin = () => {
+    if (generation !== initialTailGeneration) return;
+    const el = scrollEl.value;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    nearBottom.value = true;
+    const height = el.scrollHeight;
+    frames++;
+    stableFrames = height === previousHeight ? stableFrames + 1 : 0;
+    previousHeight = height;
+    if (stableFrames >= 2 || frames >= 8) {
+      initialTailPending.value = false;
+      updateActiveToc();
+      return;
+    }
+    initialTailRaf = requestAnimationFrame(pin);
+  };
+  initialTailRaf = requestAnimationFrame(pin);
+}
+
+watch(
+  () => props.sessionId,
+  (next, prev) => {
+    if (next === prev) return;
+    visibleCount.value = PAGE;
+    void settleInitialTail();
+  },
+  { flush: 'post' },
+);
+
 watch(
   () => [props.turns.length, props.turns[props.turns.length - 1]?.blocks?.length],
   maybeFollow,
@@ -166,14 +217,14 @@ let observer: IntersectionObserver | null = null;
 let resizeObserver: ResizeObserver | null = null;
 function followBottom() {
   const el = scrollEl.value;
-  if (el && nearBottom.value) el.scrollTop = el.scrollHeight;
+  if (el && (initialTailPending.value || nearBottom.value)) el.scrollTop = el.scrollHeight;
 }
 onMounted(() => {
-  maybeFollow();
+  void settleInitialTail();
   if (sentinelEl.value && typeof IntersectionObserver !== 'undefined') {
     observer = new IntersectionObserver(
       (entries) => {
-        if (entries.some((e) => e.isIntersecting)) void loadMore();
+        if (!initialTailPending.value && entries.some((e) => e.isIntersecting)) void loadMore();
       },
       { root: scrollEl.value, rootMargin: '120px' },
     );
@@ -189,6 +240,8 @@ onUnmounted(() => {
   observer?.disconnect();
   resizeObserver?.disconnect();
   cancelAnimationFrame(scrollRaf);
+  cancelAnimationFrame(initialTailRaf);
+  initialTailGeneration++;
 });
 
 // 哨兵在 v-if="canLoadMore" 内,初始短会话时不存在;渲染出来后要补观察,

@@ -358,8 +358,7 @@ export interface WireFsEntry {
 }
 
 // ---------------------------------------------------------------------------
-// Model + Provider wire DTOs
-// PRESUMED — not in current daemon docs; isolated here, swap when backend defines them.
+// Model catalog + Provider wire DTOs (Kimi Code 0.31.1 daemon contract).
 // ---------------------------------------------------------------------------
 
 export interface WireModel {

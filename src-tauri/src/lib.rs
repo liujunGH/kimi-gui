@@ -44,17 +44,6 @@ async fn restart_kimi_daemon(state: State<'_, SharedDaemon>) -> Result<Launch, S
     Ok(next)
 }
 
-/// 双击自定义标题栏(顶栏/侧栏品牌区):放大/还原窗口。
-/// titleBarStyle=Overlay 下没有原生标题栏,双击 zoom 由前端 dblclick 手动触发。
-#[tauri::command]
-fn toggle_window_zoom(window: tauri::Window) {
-    if window.is_maximized().unwrap_or(false) {
-        let _ = window.unmaximize();
-    } else {
-        let _ = window.maximize();
-    }
-}
-
 /// 应用内退出入口(设置页/命令面板;托盘菜单之外的兜底退出路径)。
 #[tauri::command]
 fn quit_app(app: tauri::AppHandle) {
@@ -77,7 +66,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             daemon_info,
             restart_kimi_daemon,
-            toggle_window_zoom,
             quit_app,
             dock_badge::set_dock_badge,
             usage::plan_usage,

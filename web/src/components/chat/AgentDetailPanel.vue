@@ -61,9 +61,12 @@ const progressGroups = computed(() => groupProgress(progressLines.value));
 /** Group keys whose folded output is expanded. */
 const expandedGroups = ref<Set<string>>(new Set());
 
-const OUTPUT_FOLD_THRESHOLD = 8;
-const OUTPUT_HEAD = 5;
-const OUTPUT_TAIL = 2;
+// Keep ordinary output fully visible. Very large groups stay folded for DOM
+// performance, with an explicit hidden-line count so folding cannot look like
+// daemon-side truncation.
+const OUTPUT_FOLD_THRESHOLD = 24;
+const OUTPUT_HEAD = 12;
+const OUTPUT_TAIL = 4;
 
 function isExpanded(key: string): boolean {
   return expandedGroups.value.has(key);
@@ -128,7 +131,7 @@ watch(
         <div class="ap-field-body ap-live">{{ liveText }}</div>
       </div>
       <div v-if="progressGroups.length > 0" class="ap-field">
-        <span class="ap-field-label">Progress</span>
+        <span class="ap-field-label">Progress · {{ progressLines.length }} lines</span>
         <div class="ap-field-body ap-progress">
           <div v-for="group in progressGroups" :key="group.key" class="ap-group">
             <div v-if="group.call" class="ap-call">
@@ -138,11 +141,19 @@ watch(
             <div v-if="group.output.length > 0" class="ap-output">
               <template v-if="group.output.length <= OUTPUT_FOLD_THRESHOLD || isExpanded(group.key)">
                 <div v-for="(line, li) in group.output" :key="li" class="ap-out-line">{{ line }}</div>
+                <button
+                  v-if="group.output.length > OUTPUT_FOLD_THRESHOLD"
+                  type="button"
+                  class="ap-fold"
+                  @click="toggleGroup(group.key)"
+                >
+                  Collapse
+                </button>
               </template>
               <template v-else>
                 <div v-for="(line, li) in group.output.slice(0, OUTPUT_HEAD)" :key="li" class="ap-out-line">{{ line }}</div>
                 <button type="button" class="ap-fold" @click="toggleGroup(group.key)">
-                  … ({{ foldCount(group) }} more)
+                  Show all · {{ foldCount(group) }} hidden lines
                 </button>
                 <div v-for="(line, li) in group.output.slice(-OUTPUT_TAIL)" :key="'t' + li" class="ap-out-line">{{ line }}</div>
               </template>
