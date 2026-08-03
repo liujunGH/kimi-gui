@@ -16,6 +16,7 @@ import { useTheme } from '../../../composables/codex/useTheme';
 import { useKimiClient } from '../../../composables/codex/useKimiClient';
 import { useUpdater } from '../../../composables/codex/useUpdater';
 import { useToast } from '../layout/Toast.vue';
+import { formatLocalDate } from '../../../lib/formatMessageTime';
 import {
   kimiNativeAvailable,
   kimiRuntime,
@@ -1208,7 +1209,7 @@ watch(() => props.initialSection, (section) => { active.value = section; });
                 <span class="ai-icon"><CodexIcon name="archive" /></span>
                 <div class="ai-info">
                   <div class="ai-name">{{ s.title || s.id }}</div>
-                  <div class="ai-meta">归档于 {{ s.updatedAt?.slice(0, 10) ?? '未知' }}<template v-if="s.cwd"> · {{ s.cwd }}</template></div>
+                  <div class="ai-meta">归档于 {{ s.updatedAt ? formatLocalDate(s.updatedAt) : '未知' }}<template v-if="s.cwd"> · {{ s.cwd }}</template></div>
                 </div>
                 <button class="ai-restore" @click="onRestore(s.id)">恢复</button>
               </div>

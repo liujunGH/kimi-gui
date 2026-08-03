@@ -55,6 +55,7 @@ jobs:
       - name: Rust 格式与锁文件一致性
         run: |
           cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+          cargo test --manifest-path src-tauri/Cargo.toml --locked
           cargo metadata --manifest-path src-tauri/Cargo.toml --locked --no-deps >/dev/null
 
   # ---------- 0. 先建 Release(避免矩阵两个平台抢建) ----------

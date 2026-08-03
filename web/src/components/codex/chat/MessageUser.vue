@@ -8,13 +8,14 @@ import { computed, onUnmounted, ref } from 'vue';
 import type { ChatTurn, TurnAttachment } from '../../../types';
 import AttachmentChip from '../../chat/AttachmentChip.vue';
 import CodexIcon from '../layout/CodexIcon.vue';
+import { formatLocalTime } from '../../../lib/formatMessageTime';
 
 const props = defineProps<{ turn: ChatTurn }>();
 const emit = defineEmits<{ (e: 'edit', turn: ChatTurn): void }>();
 
 const meta = computed(() => {
   const t = props.turn.createdAt;
-  return t ? t.slice(11, 16) : '';
+  return t ? formatLocalTime(t) : '';
 });
 
 /** 轻量灯箱:图片/视频附件点击放大查看 */

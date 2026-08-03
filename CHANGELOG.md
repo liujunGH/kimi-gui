@@ -4,6 +4,19 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.14] - 2026-08-03
+
+### 改进
+
+- **审批可靠性**:无法关联到已加载工具调用的待审批请求会在对话末尾独立显示;提交期间禁用重复操作并显示进行中状态,失败时保留卡片和反馈内容供重试
+- **时间显示**:消息、归档记录、任务活动和会话详情统一按用户本机时区格式化,不再直接展示 daemon 的 UTC 时间
+
+### 修复
+
+- **危险操作弹窗**:修复全局 danger 按钮样式覆盖确认文字颜色的问题;归档等红色确认按钮恢复白字红底,并补齐模态语义与默认焦点
+- **更新检查弹窗**:更新弹窗移到设置页/主页面条件分支之外,在设置页手动检查到新版本后立即显示,无需返回主页
+- **Windows 冷启动**:桌面端启动 Kimi daemon 时显式使用 `kimi web --no-open`,不再额外打开浏览器 Web 页面;旧 CLI 继续回退 `server run`
+
 ## [1.0.13] - 2026-08-03
 
 ### 改进
@@ -208,6 +221,7 @@
 - 项目骨架:官方 kimi-web fork(vite 多页面)+ Tauri 2 壳(daemon 拉起/token 注入/托盘)
 - 静态交互原型 `prototype/`(视觉契约:SVG 图标体系、token 配色、双主题)
 
+[1.0.14]: https://github.com/liujunGH/kimi-gui/releases/tag/v1.0.14
 [1.0.13]: https://github.com/liujunGH/kimi-gui/releases/tag/v1.0.13
 [1.0.12]: https://github.com/liujunGH/kimi-gui/releases/tag/v1.0.12
 [1.0.0]: https://github.com/liujunGH/kimi-gui/releases/tag/v1.0.0

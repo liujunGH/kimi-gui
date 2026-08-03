@@ -1,3 +1,58 @@
+type LocalDateTimeParts = {
+  year: string;
+  month: string;
+  day: string;
+  hour: string;
+  minute: string;
+};
+
+function localDateTimeParts(iso: string, timeZone?: string): LocalDateTimeParts | null {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  const options: Intl.DateTimeFormatOptions = {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  };
+  if (timeZone) options.timeZone = timeZone;
+  const values = Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', options)
+      .formatToParts(date)
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, part.value]),
+  );
+  return {
+    year: values.year ?? '',
+    month: values.month ?? '',
+    day: values.day ?? '',
+    hour: values.hour ?? '',
+    minute: values.minute ?? '',
+  };
+}
+
+/** Full timestamp rendered in the user's local time zone by default. */
+export function formatLocalDateTime(iso: string, timeZone?: string): string {
+  const parts = localDateTimeParts(iso, timeZone);
+  return parts
+    ? `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`
+    : iso;
+}
+
+/** Calendar date rendered in the user's local time zone by default. */
+export function formatLocalDate(iso: string, timeZone?: string): string {
+  const parts = localDateTimeParts(iso, timeZone);
+  return parts ? `${parts.year}-${parts.month}-${parts.day}` : iso;
+}
+
+/** Clock time rendered in the user's local time zone by default. */
+export function formatLocalTime(iso: string, timeZone?: string): string {
+  const parts = localDateTimeParts(iso, timeZone);
+  return parts ? `${parts.hour}:${parts.minute}` : iso;
+}
+
 // Format an ISO timestamp for display beneath a user message bubble.
 // - Today:        14:32
 // - Yesterday:    昨天 14:32

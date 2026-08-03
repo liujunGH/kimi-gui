@@ -26,6 +26,7 @@ const emit = defineEmits<{ (e: 'confirm', value: string): void; (e: 'cancel'): v
 
 const text = ref(props.initial);
 const inputEl = ref<HTMLInputElement | null>(null);
+const confirmEl = ref<HTMLButtonElement | null>(null);
 
 function confirm() {
   const v = text.value.trim();
@@ -47,8 +48,12 @@ watch(
 onMounted(() => {
   document.addEventListener('keydown', onKeydown);
   void nextTick(() => {
-    inputEl.value?.focus();
-    inputEl.value?.select();
+    if (props.input) {
+      inputEl.value?.focus();
+      inputEl.value?.select();
+    } else {
+      confirmEl.value?.focus();
+    }
   });
 });
 onUnmounted(() => document.removeEventListener('keydown', onKeydown));
@@ -56,8 +61,8 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
 
 <template>
   <div class="pd-overlay" @click.self="emit('cancel')">
-    <div class="prompt-dialog" role="dialog" :aria-label="props.title">
-      <div class="pd-title">{{ props.title }}</div>
+    <div class="prompt-dialog" role="dialog" aria-modal="true" aria-labelledby="prompt-dialog-title">
+      <div id="prompt-dialog-title" class="pd-title">{{ props.title }}</div>
       <div v-if="props.description" class="pd-desc">{{ props.description }}</div>
       <input
         v-if="props.input"
@@ -68,8 +73,8 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
         @keydown.enter.prevent="confirm"
       />
       <div class="pd-actions">
-        <button class="btn" @click="emit('cancel')">取消</button>
-        <button class="btn pd-confirm" :class="{ danger: props.danger }" @click="confirm">
+        <button type="button" class="btn" @click="emit('cancel')">取消</button>
+        <button ref="confirmEl" type="button" class="btn pd-confirm" :class="{ danger: props.danger }" @click="confirm">
           {{ props.confirmLabel }}
         </button>
       </div>
@@ -105,8 +110,8 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
 }
 .pd-input:focus { border-color: var(--accent); }
 .pd-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; }
-.pd-confirm { background: var(--accent); color: #fff; }
+.pd-confirm { background: var(--accent); color: var(--on-accent); }
 .pd-confirm:hover { background: var(--accent); filter: brightness(1.06); }
-.pd-confirm.danger { background: var(--danger); }
-.pd-confirm.danger:hover { background: var(--danger); filter: brightness(1.06); }
+.pd-confirm.danger { background: var(--danger); color: var(--on-accent); border-color: var(--danger); }
+.pd-confirm.danger:hover { background: var(--danger); color: var(--on-accent); filter: brightness(1.06); }
 </style>

@@ -5,7 +5,7 @@ Tauri 2(Rust 壳)+ Vue 3(codex UI,fork 自官方 kimi-web)+ 本地 daemon(REST +
 
 **前置条件**:先安装 [Kimi Code CLI](https://github.com/MoonshotAI/kimi-code) 并 `kimi login`——本应用是它的桌面前端,daemon 由 CLI 提供,不内置。应用可在「设置 → Kimi Engine」检查 CLI/daemon 版本、更新 CLI，并用新版 CLI 重启本机 daemon。
 
-当前版本:**1.0.13**
+当前版本:**1.0.14**
 
 ## 主要能力
 
@@ -65,7 +65,7 @@ pnpm build            # web build → postbuild → Rust release → .app + DMG
 - **单一版本源**:`src-tauri/tauri.conf.json` 的 `version`(DMG 文件名、.app 版本、关于页展示都由它驱动;发版时同步根 `package.json` / `web/package.json` / `Cargo.toml`——脚本/手动都行,但必须一致)
 - 语义化小步:功能合入后递增 patch 版本;每次发版同步 `CHANGELOG.md` 和 `HANDOFF.md`
 - 推送 `v*` tag 后,GitHub Actions 先跑类型检查、测试、样式检查、前端构建和 Rust 校验,再构建 macOS/Windows 产物与自动更新清单
-- 当前版本:**1.0.13**
+- 当前版本:**1.0.14**
 
 **签名现状**:adhoc 自签名。分享给别人(M 系列 Mac):
 1. 对方先装 Kimi Code CLI 并 `kimi login`

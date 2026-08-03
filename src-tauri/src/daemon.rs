@@ -19,6 +19,10 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const MAX_HEARTBEAT_AGE_SECS: f64 = 30.0;
 const CONNECT_TIMEOUT: Duration = Duration::from_millis(180);
+// `kimi web` opens the system browser by default. The desktop shell only needs
+// its daemon, so every modern-CLI cold start must opt out explicitly. This is
+// especially visible on Windows, where no daemon usually exists on first run.
+const DAEMON_LAUNCH_ATTEMPTS: &[&[&str]] = &[&["web", "--no-open"], &["server", "run"]];
 
 /// 已发现的 daemon 连接信息。
 #[derive(Debug, Clone, Serialize)]
@@ -327,9 +331,9 @@ pub fn connect_daemon() -> Result<Launch, String> {
         // ⚠️ 阻塞式 .output() 会永久挂起(macOS 上因常驻实例从未走到这条路径,
         // Windows 首启必踩)。Windows 上加 CREATE_NO_WINDOW 避免弹控制台黑窗。
         let mut ok = false;
-        for args in [["web"].as_slice(), ["server", "run"].as_slice()] {
+        for args in DAEMON_LAUNCH_ATTEMPTS {
             let mut cmd = Command::new(&kimi);
-            cmd.args(args);
+            cmd.args(*args);
             // GUI exposes a secondary-model picker for subagents. The feature
             // remains opt-in in the CLI, so enable only this documented
             // experiment for daemon processes started by Kimi GUI.
@@ -386,7 +390,13 @@ pub fn connect_daemon() -> Result<Launch, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{heartbeat_is_fresh, local_endpoint_from_base};
+    use super::{heartbeat_is_fresh, local_endpoint_from_base, DAEMON_LAUNCH_ATTEMPTS};
+
+    #[test]
+    fn desktop_daemon_start_never_opens_the_web_ui() {
+        assert_eq!(DAEMON_LAUNCH_ATTEMPTS[0], ["web", "--no-open"]);
+        assert_eq!(DAEMON_LAUNCH_ATTEMPTS[1], ["server", "run"]);
+    }
 
     #[test]
     fn accepts_recent_seconds_and_milliseconds() {

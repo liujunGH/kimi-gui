@@ -2,7 +2,7 @@
 /**
  * 模块级审批卡注册表:多张审批卡并存时,y/a/n/p 单键只作用于
  * 用户最近聚焦/点击的卡，不再隐式命中最后挂载的不可见卡。
- * 本阶段卡不会被标记「已处理」(动作轮次 3 走 client),栈顶即最近挂载。
+ * 审批提交走注入的 client；模块级栈只负责把快捷键交给最近操作的卡。
  */
 type ApprovalActKey = 'approve' | 'session' | 'reject' | 'feedback';
 
@@ -32,12 +32,10 @@ function topApprovalCard(): ApprovalCardEntry | undefined {
  * - body:shell→.body-shell($ 提示符 + cwd)/ diff→.body-diff(复用 DiffLines)
  *   / plan→.body-plan 有序列表 / 其余有 title 时退化为 .body-note
  * - actions:批准 Y(primary)/ 本会话 A / 拒绝 N / 反馈 P(ghost 右置);
- *   approve/session/reject 动作轮次 3 走 inject client(见 ApprovalCardEmits 注释),
- *   本阶段按钮是纯展示 + 按压动效(.pressed 120ms)
+ *   approve/session/reject 走 inject client，并展示防重复提交与失败反馈
  * - y/a/n/p 单键:useHotkeys 注册,只作用于模块级栈顶卡;p → 展开反馈并
  *   emit('toggle-feedback');feedback 按钮同
- * - emit('minimize'):本阶段无内部触发源(最小化发生在动作处理后,等轮次 3
- *   动作接线时由卡片发出),签名按契约保留
+ * - emit('minimize') 签名按契约保留
  */
 import { computed, inject, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import type { ApprovalCardEmits, ApprovalRequestSummary } from '../../../types/codex';
@@ -116,7 +114,7 @@ const planItems = computed(() =>
 );
 
 // ---------------------------------------------------------------------------
-// 动作(纯展示 + 按压动效;approve/session/reject 轮次 3 接 client)
+// 动作状态 + 防重复提交
 // ---------------------------------------------------------------------------
 const pressed = ref<ApprovalActKey | null>(null);
 let pressTimer: ReturnType<typeof setTimeout> | undefined;
@@ -135,10 +133,14 @@ function toggleFeedback() {
 
 /** 已响应标记:防连点/连按 y 对同一 approvalId 重复 respond(daemon 清除前卡仍在) */
 const responded = ref(false);
+const actionError = ref('');
+const responding = computed(() => Boolean(client?.pendingApprovalActions[props.approvalId]));
+const activeAction = ref<Exclude<ApprovalActKey, 'feedback'> | 'feedback-submit' | null>(null);
 
 function act(key: ApprovalActKey) {
-  if (responded.value) return;
+  if (responded.value || responding.value) return;
   pressed.value = key;
+  actionError.value = '';
   clearTimeout(pressTimer);
   pressTimer = setTimeout(() => (pressed.value = null), 120);
   if (key === 'feedback') {
@@ -146,11 +148,15 @@ function act(key: ApprovalActKey) {
     return;
   }
   if (client && props.approvalId) {
+    activeAction.value = key;
     void client.respondApproval(props.approvalId, {
       decision: key === 'reject' ? 'rejected' : 'approved',
       scope: key === 'session' ? 'session' : undefined,
     }).then((ok) => {
       if (ok) responded.value = true;
+      else actionError.value = '审批未提交，请重试。';
+    }).finally(() => {
+      activeAction.value = null;
     });
   }
 }
@@ -158,9 +164,22 @@ function act(key: ApprovalActKey) {
 /** 反馈提交:拒绝 + 附言(⌘+Enter 或点提交) */
 function submitFeedback() {
   const text = feedbackText.value.trim();
-  if (!text) return;
+  if (!text || responding.value) return;
+  actionError.value = '';
   if (client && props.approvalId) {
-    void client.respondApproval(props.approvalId, { decision: 'rejected', feedback: text });
+    activeAction.value = 'feedback-submit';
+    void client.respondApproval(props.approvalId, { decision: 'rejected', feedback: text }).then((ok) => {
+      if (ok) {
+        responded.value = true;
+        feedbackOpen.value = false;
+        feedbackText.value = '';
+      } else {
+        actionError.value = '反馈未提交，请重试。';
+      }
+    }).finally(() => {
+      activeAction.value = null;
+    });
+    return;
   }
   feedbackOpen.value = false;
   feedbackText.value = '';
@@ -212,6 +231,7 @@ useHotkeys([
     class="approval"
     :class="{ 'feedback-open': feedbackOpen }"
     :data-codex-approval-id="props.approvalId"
+    :aria-busy="responding"
     tabindex="0"
     @focusin="activateCard"
     @pointerdown="activateCard"
@@ -245,39 +265,41 @@ useHotkeys([
         class="act-btn primary"
         :class="{ pressed: pressed === 'approve' }"
         data-key="approve"
-        :disabled="responded"
+        :disabled="responded || responding"
         @click="act('approve')"
       >
-        批准 <span class="kbd">Y</span>
+        {{ responding && activeAction === 'approve' ? '提交中…' : '批准' }} <span class="kbd">Y</span>
       </button>
       <button
         class="act-btn"
         :class="{ pressed: pressed === 'session' }"
         data-key="session"
-        :disabled="responded"
+        :disabled="responded || responding"
         @click="act('session')"
       >
-        本会话 <span class="kbd">A</span>
+        {{ responding && activeAction === 'session' ? '提交中…' : '本会话' }} <span class="kbd">A</span>
       </button>
       <button
         class="act-btn reject"
         :class="{ pressed: pressed === 'reject' }"
         data-key="reject"
-        :disabled="responded"
+        :disabled="responded || responding"
         @click="act('reject')"
       >
-        拒绝 <span class="kbd">N</span>
+        {{ responding && activeAction === 'reject' ? '提交中…' : '拒绝' }} <span class="kbd">N</span>
       </button>
       <button
         class="act-btn feedback"
         :class="{ pressed: pressed === 'feedback' }"
         data-key="feedback"
-        :disabled="responded"
+        :disabled="responded || responding"
         @click="act('feedback')"
       >
         反馈 <span class="kbd">P</span>
       </button>
     </div>
+
+    <div v-if="actionError" class="approval-error" role="alert">{{ actionError }}</div>
 
     <div class="approval-feedback">
       <textarea

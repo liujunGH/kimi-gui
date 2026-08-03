@@ -58,10 +58,13 @@ import OfficialServerAuthDialog from '../components/ServerAuthDialog.vue';
 import CommandPalette, { type PaletteAction, type PaletteSession } from '../components/codex/layout/CommandPalette.vue';
 import UpdateDialog from '../components/codex/layout/UpdateDialog.vue';
 import { useUpdater } from '../composables/codex/useUpdater';
+import { formatLocalDateTime } from '../lib/formatMessageTime';
 import type { UIQuestion } from '../types';
 import { toDiffHunks } from '../components/codex/diff/diffMapper';
 import CodexIcon from '../components/codex/layout/CodexIcon.vue';
 import MessageUser from '../components/codex/chat/MessageUser.vue';
+import ApprovalCard from '../components/codex/approval/ApprovalCard.vue';
+import { fromApprovalBlock } from '../components/codex/approval/approvalMapper';
 import AgentPicker from '../components/codex/composer/AgentPicker.vue';
 import { copyTextToClipboard } from '../lib/clipboard';
 import { kimiRuntime, type KimiAgentProfile } from '../composables/useKimiRuntime';
@@ -481,6 +484,21 @@ const todosByTurn = computed<Record<string, TodoView[]>>(() => {
   return lastAssistantTurnId.value && todos.length ? { [lastAssistantTurnId.value]: todos } : {};
 });
 const approvalCount = computed(() => (client.pendingApprovals.value ?? []).length);
+/**
+ * Most approvals are attached to their tool-use turn by messagesToTurns.
+ * Snapshot/event races can leave a valid approval without a loaded tool-use;
+ * keep those visible at the transcript tail instead of showing only a count.
+ */
+const standaloneApprovals = computed(() => {
+  const anchored = new Set(
+    conversationTurns.value
+      .map((turn) => turn.approvalId)
+      .filter((id): id is string => Boolean(id)),
+  );
+  return (client.pendingApprovals.value ?? [])
+    .filter((approval) => !anchored.has(approval.approvalId))
+    .map((approval) => fromApprovalBlock(approval.block, approval.approvalId));
+});
 // agent 提问(对话流内联 QuestionCard)
 const pendingQuestions = computed<UIQuestion[]>(() => client.questions.value ?? []);
 const currentQuestion = computed(() => pendingQuestions.value[0] ?? null);
@@ -1238,7 +1256,7 @@ const inspectData = computed(() => {
       recurring: turn.cron?.recurring,
       missedCount: turn.cron?.missedCount ?? turn.cron?.coalescedCount,
       stale: turn.cron?.stale,
-      time: turn.createdAt?.slice(0, 16).replace('T', ' '),
+      time: turn.createdAt ? formatLocalDateTime(turn.createdAt) : undefined,
     }));
   return {
     activity: client.activity.value,
@@ -1521,11 +1539,12 @@ async function searchFiles(q: string) {
 
     <!-- 对话流(审批卡由 MessageAssistant 按 turn.approval 内联渲染) -->
     <ConversationPane
-      v-if="conversationTurns.length || conversationRunning"
+      v-if="conversationTurns.length || conversationRunning || standaloneApprovals.length"
       :turns="conversationTurns"
       :todos-by-turn="todosByTurn"
       :running="conversationRunning"
       :turn-progress="runProgress"
+      :pending-approvals="standaloneApprovals"
       :open-file="onOpenFile"
       :has-more-messages="client.hasMoreMessages.value ?? false"
       :loading-more="client.loadingMoreMessages.value ?? false"
@@ -1533,7 +1552,11 @@ async function searchFiles(q: string) {
       @load-older="() => { const sid = client.activeSessionId.value; if (sid && client.hasMoreMessages.value) void client.loadOlderMessages(sid); }"
       @view-compaction="onViewCompaction"
       @edit-message="onEditMessage"
-    />
+    >
+      <template #approval="{ approval }">
+        <ApprovalCard v-bind="approval" />
+      </template>
+    </ConversationPane>
     <!-- 空态:无会话/空会话占位 -->
     <div v-else class="empty-state">
       <CodexIcon name="sparkle" />
@@ -1552,7 +1575,7 @@ async function searchFiles(q: string) {
       :tab="ui.detailPaneTab.value"
       :thread-info="{
         workspace: sidebarCurrentWs,
-        createdAt: (activeSession?.updatedAt ?? '').slice(0, 16).replace('T', ' '),
+        createdAt: activeSession?.updatedAt ? formatLocalDateTime(activeSession.updatedAt) : '',
         model: client.status.value?.model ?? composerCurrentModel,
         permission: composerPermission,
         context: ctxInfo,
@@ -1745,9 +1768,9 @@ async function searchFiles(q: string) {
       @close="showSearch = false"
     />
 
-    <!-- 新版本提示(启动静默检查 / 设置页手动检查发现时弹出) -->
-    <UpdateDialog />
   </AppShell>
+  <!-- 必须位于设置/主页面条件分支之外：设置页手动检查发现新版本时立即弹出。 -->
+  <UpdateDialog />
   <Toast />
 
   <!-- 401 时的 token 输入弹层(浏览器 dev 流程;Tauri 由 Rust 注入凭据) -->

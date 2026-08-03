@@ -5,7 +5,7 @@
  * - 按 turns 有序渲染 MessageUser / MessageAssistant
  * - 窗口化渲染(轮次 4d):默认只挂最后 PAGE 条 turn,滚动到顶自动加载更早
  *   (长会话几百轮时避免全量 Markdown + ThinkingBlock + ToolCallCard 挂载卡顿)
- * - 末尾:pendingApproval → ApprovalCard;turnProgress → TurnProgress
+ * - 末尾:无法锚定到历史 tool-use 的 pendingApprovals → ApprovalCard;turnProgress → TurnProgress
  * - 滚锚(Q4 归 kimi3):用户贴底时新内容自动跟随;上翻后不抢滚动;
  *   前插加载时保持视口位置(scrollTop 按新增高度补偿)
  */
@@ -247,8 +247,12 @@ void emit;
           />
         </template>
 
-        <div v-if="props.pendingApproval" class="msg-assistant">
-          <slot name="approval" :approval="props.pendingApproval" />
+        <div
+          v-for="approval in props.pendingApprovals ?? []"
+          :key="approval.approvalId"
+          class="msg-assistant"
+        >
+          <slot name="approval" :approval="approval" />
         </div>
 
         <TurnProgress v-if="props.turnProgress" v-bind="props.turnProgress" />

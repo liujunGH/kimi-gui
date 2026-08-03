@@ -122,6 +122,13 @@
 .act-btn.reject:hover { background: var(--danger-soft); border-color: var(--danger-bd); }
 .act-btn.feedback { margin-left: auto; border-color: transparent; color: var(--text-2); }
 .act-btn.feedback:hover { color: var(--text); }
+.act-btn:disabled { opacity: 0.58; cursor: wait; }
+.approval-error {
+  padding: 0 14px 10px;
+  background: var(--bg-subtle);
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
 
 /* 最小化态(处理完折叠为细条) */
 .approval.minimized .approval-body,

@@ -112,7 +112,8 @@ export interface ThreadRowEmits {
  */
 export interface ConversationPaneProps {
   turns: ChatTurn[];
-  pendingApproval?: ApprovalRequestSummary;
+  /** Pending approvals that could not be anchored to a loaded tool-use turn. */
+  pendingApprovals?: ApprovalRequestSummary[];
   pendingQuestion?: QuestionRequestSummary;
   todosByTurn: Record<string /* turnId */, TodoView[]>;
   turnProgress?: TurnProgressProps;

@@ -8,7 +8,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { formatMessageTime } from '../../lib/formatMessageTime';
+import { formatLocalDateTime, formatMessageTime } from '../../lib/formatMessageTime';
 
 const props = defineProps<{ time: string }>();
 
@@ -16,10 +16,7 @@ const { t } = useI18n();
 const expanded = ref(false);
 
 const full = computed(() => {
-  const d = new Date(props.time);
-  if (Number.isNaN(d.getTime())) return props.time;
-  const pad2 = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  return formatLocalDateTime(props.time);
 });
 
 const display = computed(() =>

@@ -1138,3 +1138,11 @@ ROADMAP 给 kimi3 的 5 项全部完成，vue-tsc 全绿，`verify5.mjs` 10 断�
 - **窗口拖动最终修复**:Tauri capability 增加 `core:window:allow-start-dragging`;标题栏与侧栏品牌区使用 deep drag region,并预加载窗口 API 显式调用 `startDragging()`,同步 `preventDefault()` 避免 WebKit 文字选择。
 - **交互验收**:浏览器验证回到底部出现/点击/消失闭环且控制台零错误;原生应用验证顶部布局、向下弹层、菜单互斥及标题栏拖动不再产生文字选区。
 - **发版验收**:四处版本号均为 1.0.13;web 39 文件/673 tests、类型检查、样式 baseline、生产构建、`cargo fmt --check`、Rust 4 tests 与锁文件一致性全部通过。本地候选 DMG SHA-256 为 `0a8e0dd68be8318e660313ba03f62237cb9da1fed4d9bb5a111999a33392fb95`;GitHub Actions 全绿后线上深度重签 DMG 已重新下载并通过镜像、挂载、版本/arm64/签名检查,最终 SHA-256 为 `7c040d574b329cef101f1bbbba0a6eca813c0662aee457aaa032d362714d7662`,Homebrew Cask 已同步。
+
+## 版本锚点 · 1.0.14 · 2026-08-03
+
+- **弹窗可读性**:定位到全局 `.btn.danger` 与确认弹窗样式冲突;危险确认按钮现在显式使用 `--on-accent`,实机确认“归档”白字红底可读,并补齐 `aria-modal`、标题关联和默认焦点。
+- **审批闭环**:待审批请求即使因事件/快照竞态没有关联到已加载的 tool-use,或会话暂时没有消息,也会在 transcript 末尾显示;提交期间防重复操作,失败保留卡片与反馈供重试。
+- **本地时区**:消息、归档、自动化活动和会话详情统一通过 `Intl.DateTimeFormat` 使用系统时区;实机确认原 UTC `01:17` 在 Asia/Shanghai 显示为 `09:17`,并覆盖跨日测试。
+- **更新与 Windows 启动**:更新弹窗移出设置/主页面条件分支,手动检查发现新版本时立即显示;桌面冷启动 daemon 改为 `kimi web --no-open`,Windows 不再额外打开 Web 页面。
+- **发行质量**:release workflow 的 Rust 门禁加入 `cargo test --locked`;发行前验收为 web 41 文件/679 tests、类型检查、样式 baseline、生产构建、`cargo fmt --check`、Rust 5 tests、锁文件一致性与浏览器控制台零错误全部通过。本地候选 DMG 已通过挂载、版本 `1.0.14`、arm64 和深度签名检查,SHA-256 为 `63ba754f89cc71055c437709fceca010d22da88b325251c82f6cf8a9bedc63eb`。
