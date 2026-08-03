@@ -1,15 +1,15 @@
 {
-  "version": "1.0.14",
-  "notes": "\n### 改进\n\n- **审批可靠性**:无法关联到已加载工具调用的待审批请求会在对话末尾独立显示;提交期间禁用重复操作并显示进行中状态,失败时保留卡片和反馈内容供重试\n- **时间显示**:消息、归档记录、任务活动和会话详情统一按用户本机时区格式化,不再直接展示 daemon 的 UTC 时间\n\n### 修复\n\n- **危险操作弹窗**:修复全局 danger 按钮样式覆盖确认文字颜色的问题;归档等红色确认按钮恢复白字红底,并补齐模态语义与默认焦点\n- **更新检查弹窗**:更新弹窗移到设置页/主页面条件分支之外,在设置页手动检查到新版本后立即显示,无需返回主页\n- **Windows 冷启动**:桌面端启动 Kimi daemon 时显式使用 `kimi web --no-open`,不再额外打开浏览器 Web 页面;旧 CLI 继续回退 `server run`\n\n",
-  "pub_date": "2026-08-03T03:04:28Z",
+  "version": "1.0.15",
+  "notes": "\n### 改进\n\n- **Provider 配置管理**：已配置项现在可查看完整非敏感配置；手动 Provider 可修改 ID、类型、Base URL、默认模型和模型列表，OAuth Provider 明确标为只读；API Key 始终不回显，编辑留空会由 daemon 保留原密钥\n- **Provider 接口兼容**：新增与编辑改用 Kimi Code 0.31.1 的完整 Provider 写入契约，保存时保留已有模型的上下文、能力与思考元数据，设置页进入模型分区后立即刷新 Provider 列表\n- **斜杠命令架构**：引入 Kimi Code 0.31.1 的 40 条完整命令/别名快照，并为每条命令声明通用、GUI 或 TUI surface 及执行方式；菜单从映射生成，新增上游命令不再静默遗漏\n- **命令分发**：菜单点击、手输别名和带参数命令统一走注册表；`/settings`、`/title` 接入 GUI 动作，`/reload-tui` 等隐藏命令会解释所属 surface\n- **上游维护**：新增发布版校验、main 分支比较和快照同步脚本，完整性测试要求每条上游命令恰好完成一次分类\n- **子智能体可见性**：列表和详情展示完整回复、执行进度与结果摘要；按主/次模型配置推导实际模型路由并明确标注推导来源，较长进度提供可展开的隐藏行计数\n- **Review 可读性**：Review 面板改为更宽的响应式布局，文件树减少占高，长行自动换行；选中文件默认展示完整 diff，不再被通用折叠策略截断\n\n### 修复\n\n- `/reload` 现在可被发现和识别；当前 daemon Web API 未开放会话重载时显示准确说明，不再作为普通消息或 Skill 发送\n- 修复 Codex 产品入口中 `/compact <参数>`、`/goal <参数>`、`/title <标题>` 等带参命令被当作普通消息发送的问题\n- **会话初始定位**：进入或切换已有长会话时默认定位到最底部，并避免顶部加载观察器在初始化阶段抢走滚动位置\n- **macOS 标题栏双击**：移除与系统行为竞争的手动最大化切换，避免放大后立即还原或还原后立即放大的振荡，同时保留原生拖动与双击行为\n- **Review 空白状态**：修复选中文件路径与父级不同步导致内容为空的问题，并补齐加载中、空 diff、二进制、未跟踪和已删除文件提示\n\n",
+  "pub_date": "2026-08-03T10:58:42Z",
   "platforms": {
     "darwin-aarch64": {
       "url": "https://raw.githubusercontent.com/liujunGH/kimi-gui/main/updates/Kimi.Code_aarch64.app.tar.gz",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxamNHZDBXamFXK3dhYUE0K0s2Y1kxZUFNaXpEL3dSUzMyMW1hc0FTVHJvTE15eTQzMnNacTl4a1phWHBuM3VScWNsQzVIV1dOM2ZYY0x0UldKTCtvT0E0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1NzI2MjY3CWZpbGU6S2ltaS5Db2RlX2FhcmNoNjQuYXBwLnRhci5negpkb00xSlY0SnZiUUI0OU5yUTY0RGRLWjNJVGxqdU03WmJIYklVQzJ5bFNCR05ueHhTVGM1WTJVRHdDN0RTTkxjZUMwOGdxdUdyUWRkcnJOVkpMeXFCUT09Cg=="
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxalRCWW1jclB6S05qbCtob2xGL0w3dzJ2MERVZ0hJZGd3SXFBcnpueUFCYlF4cE9MWEJwak9OcFNLQ01ucGRrdENpc25WcDdxSTYxMUI4YW1OV3ZEakFjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1NzU0NzIxCWZpbGU6S2ltaS5Db2RlX2FhcmNoNjQuYXBwLnRhci5negozK2ZDT1h3N3Vra2ZxRXVIdEZEcHdLUVE5QWl6TkdHVDNWZngrMkY3OGxSb0puR2RtSVNRd01JME1BSDlzRjRzeFZBYm5xbVhFNFA1VWlQVlRyTnZEdz09Cg=="
     },
     "windows-x86_64": {
       "url": "https://raw.githubusercontent.com/liujunGH/kimi-gui/main/updates/Kimi.Code_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxamYwdEhuTWI2ZmtHcFRFZGlwVGRzU2pvazNQT1dVRFZYWWROeCtXOUhDV2I1cmVGL2ZTaDFlNUZmcWxYVUtWeWNONUlka2N2TUZBdU13ZlJzMzNUMWdVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1NzI2MjY4CWZpbGU6S2ltaS5Db2RlXzEuMC4xNF94NjQtc2V0dXAuZXhlCitFZVJHQUtmR3phZFNxUktKNnZ5YzdjMGREREZicFUyajlLN040STFSNFd5V0RYTW03dFZ1aDc5azZ2amxPY1ZuNjlKUVUrVnpMTEU2TS9OenZCRUJRPT0K"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxamZzcytUaG9CVG5XVUFCQWZ5MytrVUFMNWhObjFOaDliNVlOQUVMem4zNkhvR1pZWXNYYkM4L2tBdjFWV1VGcGZRbEM0SDJNQ0N1ZEVSVVlIaXVFMUFjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1NzU0NzIyCWZpbGU6S2ltaS5Db2RlXzEuMC4xNV94NjQtc2V0dXAuZXhlCmxHaG1hMndzUE5STTBaMFJSOGQ1M2xtUGRpVndzU1FNUjNlTU1nRVN0d2VnN2xIbVppVXdsV0RSSnVHcXh2WkRIZlc4UkZNYlc5bDdrYnpyNnBmMUFBPT0K"
     }
   }
 }
