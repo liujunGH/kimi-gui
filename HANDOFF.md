@@ -1147,3 +1147,4 @@ ROADMAP 给 kimi3 的 5 项全部完成，vue-tsc 全绿，`verify5.mjs` 10 断�
 - **更新与 Windows 启动**:更新弹窗移出设置/主页面条件分支,手动检查发现新版本时立即显示;桌面冷启动 daemon 改为 `kimi web --no-open`,Windows 不再额外打开 Web 页面。
 - **发行质量**:release workflow 的 Rust 门禁加入 `cargo test --locked`;发行前验收为 web 41 文件/679 tests、类型检查、样式 baseline、生产构建、`cargo fmt --check`、Rust 5 tests、锁文件一致性与浏览器控制台零错误全部通过。本地候选 DMG 已通过挂载、版本 `1.0.14`、arm64 和深度签名检查,SHA-256 为 `63ba754f89cc71055c437709fceca010d22da88b325251c82f6cf8a9bedc63eb`。
 - **CI 平台修正**:首次 tag 运行证明 Actions 额度正常,但 Ubuntu 质量 job 在新增 Rust tests 后因缺少 GLib/WebKitGTK 系统库失败;workflow 已补齐 Tauri Linux 测试依赖,保留 Rust 门禁并通过 `workflow_dispatch` 从修正后的 `main` 重跑同一 `1.0.14` 发行。
+- **线上发行验收**:GitHub Actions `30780370017` 的 quality/prepare/macOS/Windows/manifest 全绿;Release DMG、NSIS、MSI、app.tar.gz 和 `latest.json` 齐全。线上 DMG 已通过挂载、版本/arm64/深度签名检查,SHA-256 为 `06883ab5d7f6787344b3e87d437a29ee4bcb1eb0ad5550584b00f22dd9f49815`;Release 与仓库 `latest.json` 完全一致且含 macOS/Windows 双平台,Homebrew Cask 已同步到 1.0.14。
