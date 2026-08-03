@@ -32,11 +32,8 @@ import CodexIcon from '../layout/CodexIcon.vue';
 import ComposerModes from './ComposerModes.vue';
 import PermPicker from './PermPicker.vue';
 import ModePicker from './ModePicker.vue';
-import WorkspacePicker from '../layout/WorkspacePicker.vue';
 import ContextMeter from './ContextMeter.vue';
 import ModelPicker from './ModelPicker.vue';
-import AgentPicker from './AgentPicker.vue';
-import type { KimiAgentProfile } from '../../../composables/useKimiRuntime';
 import SlashMenu from './SlashMenu.vue';
 import MentionMenu from './MentionMenu.vue';
 
@@ -54,14 +51,11 @@ const props = withDefaults(
       sessionId?: string;
       /** 会话累计成本(USD),透传给 ContextMeter */
       cost?: number;
-      agents?: KimiAgentProfile[];
-      currentAgent?: string;
-      agentsLoading?: boolean;
       /** 文件上传(沿用历史 prop 名);提供后 picker / paste / drop 可上传任意文件 */
       uploadImage?: (file: Blob, name?: string) => Promise<{ fileId: string; name: string; mediaType: string; size?: number } | null>;
     }
   >(),
-  { builtin: () => [], skills: () => [], files: () => [], agents: () => [], currentAgent: 'default', sessionTitle: '', placeholder: '' },
+  { builtin: () => [], skills: () => [], files: () => [], sessionTitle: '', placeholder: '' },
 );
 const emit = defineEmits<ComposerEmits>();
 
@@ -136,12 +130,6 @@ const displayModelName = computed(() => {
   return props.currentModel.includes('/')
     ? (props.currentModel.split('/').pop() ?? props.currentModel)
     : props.currentModel;
-});
-
-/** 当前工作区名(静态展示用:有会话时不可切换,草稿态才可点选) */
-const currentWsName = computed(() => {
-  if (!props.currentWorkspaceId) return '';
-  return props.workspaces?.find((w) => w.id === props.currentWorkspaceId)?.name ?? props.currentWorkspaceId;
 });
 
 const canSend = computed(() => text.value.trim().length > 0 || attachments.value.some((a) => a.fileId && !a.uploading && !a.error));
@@ -433,30 +421,6 @@ defineExpose({ setText, focus });
         <button v-if="props.uploadImage" class="attach-btn" title="添加文件附件" @click="pickFile">
           <CodexIcon name="paperclip" />
         </button>
-        <WorkspacePicker
-          v-if="props.workspaces && props.workspaces.length && !props.sessionId"
-          trigger="pill"
-          :workspaces="props.workspaces as any"
-          :current-id="props.currentWorkspaceId ?? ''"
-          @select="(id: string) => emit('select-workspace', id)"
-          @add-workspace="(p: string) => emit('add-workspace', p)"
-        />
-        <span
-          v-else-if="props.workspaces && props.workspaces.length && props.sessionId && currentWsName"
-          class="perm-pill ws-static"
-          title="工作区在会话创建后固定,不可切换"
-        >
-          <CodexIcon name="file" />
-          <span class="ellipsis wp-pill-name">{{ currentWsName }}</span>
-        </span>
-        <AgentPicker
-          :agents="props.agents"
-          :current="props.currentAgent"
-          :loading="props.agentsLoading"
-          :locked="Boolean(props.sessionId)"
-          @select="(name) => emit('set-agent', name)"
-          @manage="emit('manage-agents')"
-        />
         <PermPicker :permission="props.permission" @set-permission="(p) => emit('set-permission', p)" />
         <ModePicker :modes="props.modes" @toggle-mode="(m) => emit('toggle-mode', m)" />
       </div>

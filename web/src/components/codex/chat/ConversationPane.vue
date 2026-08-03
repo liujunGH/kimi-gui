@@ -121,6 +121,16 @@ function onScroll() {
   });
 }
 
+function scrollToBottom() {
+  const el = scrollEl.value;
+  if (!el) return;
+  // Hide the control immediately, while preserving native smooth scrolling.
+  // Subsequent streaming updates keep following because the user explicitly
+  // chose to return to the live edge.
+  nearBottom.value = true;
+  el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+}
+
 async function loadMore() {
   const el = scrollEl.value;
   if (!el) return;
@@ -192,68 +202,127 @@ void emit;
 </script>
 
 <template>
-  <div ref="scrollEl" class="app-conversation" @scroll="onScroll">
-    <div ref="contentEl" class="conversation">
-      <!-- 更早加载哨兵/按钮 -->
-      <div v-if="canLoadMore" ref="sentinelEl" class="load-earlier">
-        <button class="load-earlier-btn" :disabled="props.loadingMore" @click="loadMore">
-          <CodexIcon v-if="props.loadingMore" name="spinner" class="le-spin" />
-          <CodexIcon v-else name="chevron-down" style="transform: rotate(180deg)" />
-          <template v-if="props.loadingMore">加载中…</template>
-          <template v-else-if="hiddenCount > 0">加载更早的 {{ Math.min(hiddenCount, PAGE) }} 条(共 {{ total }} 轮)</template>
-          <template v-else>加载更早的消息</template>
-        </button>
+  <div class="conversation-pane">
+    <div ref="scrollEl" class="app-conversation" @scroll="onScroll">
+      <div ref="contentEl" class="conversation">
+        <!-- 更早加载哨兵/按钮 -->
+        <div v-if="canLoadMore" ref="sentinelEl" class="load-earlier">
+          <button class="load-earlier-btn" :disabled="props.loadingMore" @click="loadMore">
+            <CodexIcon v-if="props.loadingMore" name="spinner" class="le-spin" />
+            <CodexIcon v-else name="chevron-down" style="transform: rotate(180deg)" />
+            <template v-if="props.loadingMore">加载中…</template>
+            <template v-else-if="hiddenCount > 0">加载更早的 {{ Math.min(hiddenCount, PAGE) }} 条(共 {{ total }} 轮)</template>
+            <template v-else>加载更早的消息</template>
+          </button>
+        </div>
+
+        <template v-for="t in shownTurns" :key="t.id">
+          <div v-if="t.role === 'user'" :data-turn-id="t.id">
+            <MessageUser :turn="t" @edit="(turn) => emit('edit-message', turn)" />
+          </div>
+          <!-- 压缩分隔线(transcript 持久 divider,点击在右栏查看摘要) -->
+          <button
+            v-else-if="t.role === 'compaction'"
+            type="button"
+            class="compaction-divider"
+            title="查看压缩摘要"
+            @click="emit('view-compaction', t)"
+          >
+            <span class="cd-line"></span>
+            <span class="cd-text">上下文已压缩 · 查看摘要</span>
+            <span class="cd-line"></span>
+          </button>
+          <!-- cron 定时触发 notice(简单行,官方 CronNotice 的极简版) -->
+          <div v-else-if="t.role === 'cron'" class="cron-notice">
+            <CodexIcon name="clock" size="sm" />
+            <span>{{ t.text || '定时任务触发' }}</span>
+          </div>
+          <MessageAssistant
+            v-else-if="t.role === 'assistant'"
+            :turn="t"
+            :todos="props.todosByTurn[t.id] ?? []"
+            :running="props.running && t.id === lastTurnId"
+            :open-file="props.openFile"
+            @inspect="(tab) => emit('inspect', tab)"
+          />
+        </template>
+
+        <div v-if="props.pendingApproval" class="msg-assistant">
+          <slot name="approval" :approval="props.pendingApproval" />
+        </div>
+
+        <TurnProgress v-if="props.turnProgress" v-bind="props.turnProgress" />
       </div>
 
-      <template v-for="t in shownTurns" :key="t.id">
-        <div v-if="t.role === 'user'" :data-turn-id="t.id">
-          <MessageUser :turn="t" @edit="(turn) => emit('edit-message', turn)" />
-        </div>
-        <!-- 压缩分隔线(transcript 持久 divider,点击在右栏查看摘要) -->
-        <button
-          v-else-if="t.role === 'compaction'"
-          type="button"
-          class="compaction-divider"
-          title="查看压缩摘要"
-          @click="emit('view-compaction', t)"
-        >
-          <span class="cd-line"></span>
-          <span class="cd-text">上下文已压缩 · 查看摘要</span>
-          <span class="cd-line"></span>
-        </button>
-        <!-- cron 定时触发 notice(简单行,官方 CronNotice 的极简版) -->
-        <div v-else-if="t.role === 'cron'" class="cron-notice">
-          <CodexIcon name="clock" size="sm" />
-          <span>{{ t.text || '定时任务触发' }}</span>
-        </div>
-        <MessageAssistant
-          v-else-if="t.role === 'assistant'"
-          :turn="t"
-          :todos="props.todosByTurn[t.id] ?? []"
-          :running="props.running && t.id === lastTurnId"
-          :open-file="props.openFile"
-          @inspect="(tab) => emit('inspect', tab)"
-        />
-      </template>
-
-      <div v-if="props.pendingApproval" class="msg-assistant">
-        <slot name="approval" :approval="props.pendingApproval" />
-      </div>
-
-      <TurnProgress v-if="props.turnProgress" v-bind="props.turnProgress" />
+      <!-- 对话目录竖条(右侧,hover 展开 label) -->
+      <ConversationToc
+        v-if="tocItems.length > 1"
+        :items="tocItems"
+        :active-turn-id="activeTurnId"
+        @select="onTocSelect"
+      />
     </div>
 
-    <!-- 对话目录竖条(右侧,hover 展开 label) -->
-    <ConversationToc
-      v-if="tocItems.length > 1"
-      :items="tocItems"
-      :active-turn-id="activeTurnId"
-      @select="onTocSelect"
-    />
+    <Transition name="jump-bottom">
+      <button
+        v-if="!nearBottom"
+        type="button"
+        class="jump-to-bottom"
+        title="回到底部"
+        aria-label="回到底部"
+        @click="scrollToBottom"
+      >
+        <CodexIcon name="chevron-down" />
+      </button>
+    </Transition>
   </div>
 </template>
 
 <style scoped>
+.conversation-pane {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.conversation-pane > .app-conversation {
+  height: 100%;
+}
+.jump-to-bottom {
+  position: absolute;
+  z-index: var(--z-sticky);
+  left: 50%;
+  bottom: 16px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  transform: translateX(-50%);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--bg);
+  color: var(--text-2);
+  box-shadow: var(--shadow-md);
+  transition:
+    background var(--dur-1),
+    color var(--dur-1),
+    border-color var(--dur-1),
+    opacity var(--dur-1),
+    transform var(--dur-1);
+}
+.jump-to-bottom:hover {
+  background: var(--hover);
+  color: var(--text);
+  border-color: var(--text-3);
+}
+.jump-to-bottom .ic {
+  width: 16px;
+  height: 16px;
+}
+.jump-bottom-enter-from,
+.jump-bottom-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 6px);
+}
 .load-earlier {
   display: flex;
   justify-content: center;

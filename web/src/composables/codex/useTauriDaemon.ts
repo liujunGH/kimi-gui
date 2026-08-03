@@ -13,6 +13,7 @@
  * - 调用方拿到后立即注入到 useKimiWebClient(不持久化)
  */
 import { ref } from 'vue';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
 export interface DaemonInfo {
   /** `http://127.0.0.1:58627`(不含 query) */
@@ -98,6 +99,38 @@ async function toggleWindowZoom(): Promise<void> {
   }
 }
 
+const WINDOW_DRAG_BLOCKERS = [
+  'button',
+  'a',
+  'input',
+  'textarea',
+  'select',
+  '[role="button"]',
+  '[contenteditable="true"]',
+  '[data-tauri-drag-region="false"]',
+].join(',');
+
+/**
+ * Start a native window drag from titlebar whitespace.
+ *
+ * Tauri's injected `data-tauri-drag-region` listener remains the primary path;
+ * this explicit call is a defensive fallback for macOS WebView hit-testing.
+ * Interactive descendants are excluded so titlebar controls keep normal input.
+ */
+async function startWindowDragging(event: MouseEvent): Promise<void> {
+  if (!isTauriEnv() || event.button !== 0 || event.detail > 1) return;
+  const target = event.target as HTMLElement | null;
+  if (!target || target.closest(WINDOW_DRAG_BLOCKERS)) return;
+  // Prevent WebKit from turning the gesture into a text selection while the
+  // native window begins tracking the pointer.
+  event.preventDefault();
+  try {
+    await getCurrentWindow().startDragging();
+  } catch {
+    /* Attribute-based dragging may still have handled the gesture. */
+  }
+}
+
 export function useTauriDaemon() {
   return {
     /** 当前 daemon 信息(成功后非 null) */
@@ -114,5 +147,7 @@ export function useTauriDaemon() {
     fetchPlanUsage,
     /** 双击标题栏放大/还原窗口 */
     toggleWindowZoom,
+    /** 标题栏空白处按下时显式开始原生窗口拖动 */
+    startWindowDragging,
   };
 }

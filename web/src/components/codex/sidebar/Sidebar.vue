@@ -17,7 +17,7 @@ import AccountRow from './AccountRow.vue';
 import { sessionToThreadStatus } from './threadStatus';
 import { useTauriDaemon } from '../../../composables/codex/useTauriDaemon';
 
-const { toggleWindowZoom } = useTauriDaemon();
+const { startWindowDragging, toggleWindowZoom } = useTauriDaemon();
 /** 品牌区双击放大/还原窗口(折叠按钮不算) */
 function onBrandDblclick(e: MouseEvent) {
   if ((e.target as HTMLElement | null)?.closest('button')) return;
@@ -107,7 +107,12 @@ function sessionsOf(wsName: string): Session[] {
 
 <template>
   <aside class="app-sidebar">
-    <div class="sidebar-brand" @dblclick="onBrandDblclick">
+    <div
+      class="sidebar-brand"
+      data-tauri-drag-region="deep"
+      @mousedown="startWindowDragging"
+      @dblclick="onBrandDblclick"
+    >
       <span class="brand-logo" data-tauri-drag-region>K</span>
       <span class="brand-name" data-tauri-drag-region>Kimi Code</span>
       <button class="icon-btn brand-collapse" title="折叠侧栏" @click="emit('collapse')">

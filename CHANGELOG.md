@@ -4,6 +4,18 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.13] - 2026-08-03
+
+### 改进
+
+- **顶部任务上下文**:工作区与 Agent 从输入框底部迁移到顶部任务栏;新任务可直接切换,已有任务显示固定上下文,下拉菜单向下展开并保持互斥
+- **长对话导航**:离开对话底部后显示浮动“回到底部”按钮;点击平滑返回实时内容,用户主动上翻时新消息不会抢夺滚动位置
+
+### 修复
+
+- **macOS 窗口拖动**:补齐 Tauri 2 原生拖动权限和深层标题栏命中区域,并在标题栏空白处显式调用 `startDragging()`;同步阻止 WebView 把拖动误判成文字选择
+- **输入区密度**:移除底部重复的工作区与 Agent 控件,保留附件、权限、模式、额度、模型和发送等当前输入相关操作
+
 ## [1.0.12] - 2026-08-03
 
 ### 新增
@@ -196,6 +208,7 @@
 - 项目骨架:官方 kimi-web fork(vite 多页面)+ Tauri 2 壳(daemon 拉起/token 注入/托盘)
 - 静态交互原型 `prototype/`(视觉契约:SVG 图标体系、token 配色、双主题)
 
+[1.0.13]: https://github.com/liujunGH/kimi-gui/releases/tag/v1.0.13
 [1.0.12]: https://github.com/liujunGH/kimi-gui/releases/tag/v1.0.12
 [1.0.0]: https://github.com/liujunGH/kimi-gui/releases/tag/v1.0.0
 [0.2.1]: https://github.com/liujunGH/kimi-gui/releases/tag/v0.2.1

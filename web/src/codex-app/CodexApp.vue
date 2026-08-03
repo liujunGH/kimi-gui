@@ -46,6 +46,7 @@ import QueuePanel from '../components/codex/composer/QueuePanel.vue';
 import DetailPane from '../components/codex/detail/DetailPane.vue';
 import SideTask from '../components/codex/layout/SideTask.vue';
 import ThreadMenu from '../components/codex/layout/ThreadMenu.vue';
+import WorkspacePicker from '../components/codex/layout/WorkspacePicker.vue';
 import Toast, { useToast } from '../components/codex/layout/Toast.vue';
 import PromptDialog from '../components/codex/layout/PromptDialog.vue';
 import AgentPanel from '../components/codex/agents/AgentPanel.vue';
@@ -61,6 +62,7 @@ import type { UIQuestion } from '../types';
 import { toDiffHunks } from '../components/codex/diff/diffMapper';
 import CodexIcon from '../components/codex/layout/CodexIcon.vue';
 import MessageUser from '../components/codex/chat/MessageUser.vue';
+import AgentPicker from '../components/codex/composer/AgentPicker.vue';
 import { copyTextToClipboard } from '../lib/clipboard';
 import { kimiRuntime, type KimiAgentProfile } from '../composables/useKimiRuntime';
 import type { AppAgentConfigInput } from '../api/types';
@@ -1371,7 +1373,12 @@ async function searchFiles(q: string) {
           @copy-session-id="onCopySessionId"
         />
       </template>
-      <header class="app-toolbar" data-tauri-drag-region @dblclick="onTitlebarDblClick">
+      <header
+        class="app-toolbar"
+        data-tauri-drag-region="deep"
+        @mousedown="tauriDaemon.startWindowDragging"
+        @dblclick="onTitlebarDblClick"
+      >
         <button class="btn" data-tauri-drag-region="false" @click="settingsOpen = false">
           <CodexIcon name="chevron-right" style="transform: rotate(180deg)" />
           返回
@@ -1424,7 +1431,12 @@ async function searchFiles(q: string) {
     </template>
 
     <!-- toolbar -->
-    <header class="app-toolbar" @dblclick="onTitlebarDblClick">
+    <header
+      class="app-toolbar"
+      data-tauri-drag-region="deep"
+      @mousedown="tauriDaemon.startWindowDragging"
+      @dblclick="onTitlebarDblClick"
+    >
       <!-- toolbar -->
       <span class="toolbar-title" data-tauri-drag-region>{{ activeSession?.title || sidebarCurrentWs || 'Kimi Code' }}</span>
       <ThreadMenu
@@ -1437,6 +1449,34 @@ async function searchFiles(q: string) {
         @export="void client.exportSession()"
         @export-markdown="exportConversationMarkdown"
       />
+      <div class="toolbar-context" data-tauri-drag-region="false">
+        <WorkspacePicker
+          v-if="client.workspacesView.value.length && !client.activeSessionId.value"
+          trigger="pill"
+          placement="bottom"
+          :workspaces="client.workspacesView.value"
+          :current-id="client.activeWorkspaceId.value ?? ''"
+          @select="(id: string) => client.openWorkspace(id)"
+          @add-workspace="(path: string) => void client.addWorkspaceByPath(path)"
+        />
+        <span
+          v-else-if="client.activeSessionId.value && sidebarCurrentWs"
+          class="perm-pill ws-static"
+          title="工作区在会话创建后固定,不可切换"
+        >
+          <CodexIcon name="file" />
+          <span class="ellipsis wp-pill-name">{{ sidebarCurrentWs }}</span>
+        </span>
+        <AgentPicker
+          :agents="agentProfiles"
+          :current="composerAgentName"
+          :loading="agentsLoading"
+          :locked="Boolean(client.activeSessionId.value)"
+          placement="bottom"
+          @select="(name: string) => draftAgentName = name"
+          @manage="openAgentSettings"
+        />
+      </div>
       <span class="toolbar-spacer" data-tauri-drag-region />
       <span v-if="approvalCount" class="pill pill-warning">
         <span class="dot dot-waiting" />等待批准 · {{ approvalCount }} 项
@@ -1501,8 +1541,8 @@ async function searchFiles(q: string) {
         {{ client.activeSessionId.value ? '开始你的第一句话' : '选择左侧会话,或在下方输入开始新对话' }}
       </p>
       <p class="es-sub">
-        <template v-if="sidebarCurrentWs">当前工作区「{{ sidebarCurrentWs }}」 · 输入框左下角可切换 · </template>
-        <template v-else>先在输入框左下角选择工作区 · </template>⌘K 命令面板 · / 斜杠命令 · @ 引用文件
+        <template v-if="sidebarCurrentWs">当前工作区「{{ sidebarCurrentWs }}」 · 新任务可在顶部切换 · </template>
+        <template v-else>先在顶部选择工作区 · </template>⌘K 命令面板 · / 斜杠命令 · @ 引用文件
       </p>
     </div>
 
@@ -1598,11 +1638,6 @@ async function searchFiles(q: string) {
           :upload-image="(file: Blob, name?: string) => client.uploadImage(file, name)"
           :session-title="activeSession?.title ?? sidebarCurrentWs"
           :session-id="client.activeSessionId.value ?? ''"
-          :workspaces="client.workspacesView.value ?? []"
-          :current-workspace-id="client.activeWorkspaceId.value ?? ''"
-          :agents="agentProfiles"
-          :current-agent="composerAgentName"
-          :agents-loading="agentsLoading"
           @open-context-detail="pollPlanUsage"
           @send="onSend"
           @set-mode="onComposerMode"
@@ -1617,10 +1652,6 @@ async function searchFiles(q: string) {
           @set-effort="onSetEffort"
           @pick-model="openModelPicker"
           @command="handleCommand"
-          @select-workspace="(id: string) => client.openWorkspace(id)"
-          @add-workspace="(path: string) => void client.addWorkspaceByPath(path)"
-          @set-agent="(name: string) => draftAgentName = name"
-          @manage-agents="openAgentSettings"
         />
       </div>
     </div>

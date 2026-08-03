@@ -217,9 +217,6 @@ export interface ComposerProps {
   effort: EffortLevel | null; // M0 验证(spec 6.7.4)
   context: ContextInfo;
   quota: QuotaInfo;
-  /** 工作区 pill(可空则不渲染;draft 上下文在输入框随手可及处) */
-  workspaces?: { id: string; name: string; shortPath?: string }[];
-  currentWorkspaceId?: string;
 }
 
 export interface ComposerEmits {
@@ -233,10 +230,6 @@ export interface ComposerEmits {
   (e: 'pick-model'): void;
   (e: 'open-context-detail'): void;
   (e: 'command', cmd: string): void; // 斜杠命令执行(如 /compact /goal /fork)
-  (e: 'select-workspace', id: string): void; // 工作区 pill 切换
-  (e: 'add-workspace', path: string): void; // 原生文件夹选择后添加
-  (e: 'set-agent', name: string): void;
-  (e: 'manage-agents'): void;
 }
 
 /** 模型元信息:daemon 返回(不同账号能用的模型不同,不写死)。 */

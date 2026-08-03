@@ -67,6 +67,29 @@ a { color: inherit; text-decoration: none; }
   text-overflow: ellipsis;
 }
 .toolbar-spacer { flex: 1; }
+.toolbar-context {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  min-width: 0;
+}
+.toolbar-context .perm-pill { height: 28px; }
+.toolbar-context .wp-pill-name { max-width: 112px; }
+.toolbar-context .agent-picker-label { max-width: 104px; }
+.toolbar-context .agent-picker-anchor { position: relative; }
+.toolbar-context .agent-pop.agent-pop-down {
+  top: calc(100% + 7px);
+  bottom: auto;
+  left: 0;
+  right: auto;
+}
+
+@media (max-width: 1180px) {
+  .toolbar-context .wp-pill-name,
+  .toolbar-context .agent-picker-label { max-width: 72px; }
+  .toolbar-context .agent-lock { display: none; }
+}
 
 .app-conversation { flex: 1; min-height: 0; overflow-y: auto; }
 .conversation {

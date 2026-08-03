@@ -1130,3 +1130,11 @@ ROADMAP 给 kimi3 的 5 项全部完成，vue-tsc 全绿，`verify5.mjs` 10 断�
 - **体验与性能**:修复连接正常时的“找不到 kimi CLI”误报；侧栏渐进渲染、daemon 搜索防抖、长会话窗口化、Markdown/KaTeX/Mermaid 延迟加载/worker 化。
 - **发行质量**:release workflow 在创建 Release 前增加全量前端质量门禁和 Rust 锁文件/格式校验，同一 tag 禁止并发互相覆盖。
 - **发版验收**:`pnpm web:typecheck`;web 36 文件/666 tests;样式 baseline 检查;生产构建;`cargo fmt --check`;Rust 4 tests;锁文件一致性全部通过。1.0.12 DMG 已完成挂载、版本/arm64/深度签名检查,SHA-256 为 `c47dd4bea87a36df585f58f2dda127d48bf9688ba20e2fbb9797339e5ebba797`。
+
+## 版本锚点 · 1.0.13 · 2026-08-03
+
+- **顶部任务上下文**:工作区与 Agent 从 Composer 底部迁至产品标题栏;草稿态可切换、已有会话固定,两个向下弹层互斥,输入区只保留本次输入相关操作。
+- **长对话导航**:`ConversationPane` 增加按需出现的“回到底部”浮动按钮;保留既有滚锚策略,用户上翻时不抢滚动,主动返回后继续跟随流式内容。
+- **窗口拖动最终修复**:Tauri capability 增加 `core:window:allow-start-dragging`;标题栏与侧栏品牌区使用 deep drag region,并预加载窗口 API 显式调用 `startDragging()`,同步 `preventDefault()` 避免 WebKit 文字选择。
+- **交互验收**:浏览器验证回到底部出现/点击/消失闭环且控制台零错误;原生应用验证顶部布局、向下弹层、菜单互斥及标题栏拖动不再产生文字选区。
+- **发版验收**:四处版本号均为 1.0.13;web 39 文件/673 tests、类型检查、样式 baseline、生产构建、`cargo fmt --check`、Rust 4 tests 与锁文件一致性全部通过。1.0.13 DMG 已完成镜像校验、挂载、版本/arm64/深度签名检查,SHA-256 为 `0a8e0dd68be8318e660313ba03f62237cb9da1fed4d9bb5a111999a33392fb95`。

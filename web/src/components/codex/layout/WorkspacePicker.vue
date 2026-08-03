@@ -11,8 +11,14 @@ import CodexIcon from './CodexIcon.vue';
 import PromptDialog from './PromptDialog.vue';
 import { useTauriDaemon } from '../../../composables/codex/useTauriDaemon';
 
-const props = withDefaults(defineProps<{ workspaces: WorkspaceView[]; currentId: string; trigger?: 'full' | 'caret' | 'text' | 'pill' }>(), {
+const props = withDefaults(defineProps<{
+  workspaces: WorkspaceView[];
+  currentId: string;
+  trigger?: 'full' | 'caret' | 'text' | 'pill';
+  placement?: 'top' | 'bottom';
+}>(), {
   trigger: 'full',
+  placement: undefined,
 });
 const emit = defineEmits<{
   (e: 'select', id: string): void;
@@ -63,24 +69,28 @@ onUnmounted(() => {
 
 <template>
   <div class="workspace-picker">
-    <button v-if="props.trigger === 'full'" class="new-task" @click.stop="open = !open">
+    <button v-if="props.trigger === 'full'" class="new-task" @click="open = !open">
       <CodexIcon name="plus" />
       新建任务
       <CodexIcon name="chevron-down" size="sm" class="wp-caret" />
     </button>
-    <button v-else-if="props.trigger === 'pill'" class="perm-pill" title="当前工作区,点击切换" @click.stop="open = !open">
+    <button v-else-if="props.trigger === 'pill'" class="perm-pill" title="当前工作区,点击切换" @click="open = !open">
       <CodexIcon name="file" />
       <span class="ellipsis wp-pill-name">{{ currentName }}</span>
       <CodexIcon name="chevron-down" size="sm" />
     </button>
-    <button v-else-if="props.trigger === 'text'" class="wp-text-btn" title="切换工作区" @click.stop="open = !open">
+    <button v-else-if="props.trigger === 'text'" class="wp-text-btn" title="切换工作区" @click="open = !open">
       <span class="wp-text-name ellipsis">{{ currentName }}</span>
       <CodexIcon name="chevron-down" size="sm" />
     </button>
-    <button v-else class="wp-caret-btn" title="选择工作区" @click.stop="open = !open">
+    <button v-else class="wp-caret-btn" title="选择工作区" @click="open = !open">
       <CodexIcon name="chevron-down" size="sm" />
     </button>
-    <div v-if="open" class="wp-pop" :class="{ 'wp-pop-up': props.trigger === 'pill' }">
+    <div
+      v-if="open"
+      class="wp-pop"
+      :class="{ 'wp-pop-up': props.placement === 'top' || (!props.placement && props.trigger === 'pill') }"
+    >
       <button class="mp-item" @click="onAddWorkspace">
         <span class="mi-ic"><CodexIcon name="plus" /></span>
         <span class="mp-name">添加工作区…</span>

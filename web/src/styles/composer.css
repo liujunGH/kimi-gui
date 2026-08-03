@@ -348,9 +348,11 @@
 .perm-pill.ws-static:hover { background: transparent; color: var(--text-2); }
 .perm-pill.agent-picker.locked { cursor: default; }
 .perm-pill.agent-picker.locked:hover { background: transparent; color: var(--text-2); }
+.agent-picker-anchor { position: relative; }
 .agent-picker-label { max-width: 112px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent-lock { padding: 1px 5px; border-radius: var(--r-full); background: var(--bg-soft); color: var(--text-3); font-size: 10px; }
 .agent-pop { width: min(330px, calc(100vw - 24px)) !important; max-height: 360px; overflow-y: auto; }
+.agent-pop.agent-pop-down { top: calc(100% + 8px); bottom: auto; }
 .agent-pop .mp-name small { margin-left: 4px; color: var(--text-3); font-weight: 500; }
 .agent-picker-state { padding: 10px; color: var(--text-3); font-size: 12px; }
 .agent-manage { border: 0; border-top: 1px solid var(--border); background: transparent; color: var(--accent); padding: 9px 10px; text-align: left; cursor: pointer; }
