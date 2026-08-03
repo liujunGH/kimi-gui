@@ -1164,4 +1164,5 @@ ROADMAP 给 kimi3 的 5 项全部完成，vue-tsc 全绿，`verify5.mjs` 10 断�
 - **长会话与窗口交互**：进入或切换已有会话默认定位到底部；macOS 标题栏移除与系统双击行为竞争的手动最大化逻辑，消除放大/还原振荡。
 - **子智能体透明度**：任务列表与详情保留完整回复、执行进度和结果摘要，并按主/次模型配置展示明确标注为“配置推导”的模型路由；长进度可展开查看隐藏行。
 - **Review 可读性**：面板加宽、文件树压缩、长行换行，选中文件展示完整 diff；同步修复选中路径失配及加载、空内容、二进制、未跟踪和删除状态不可辨的问题。
-- **发行验收**：Kimi 0.31.1 的 40 个命令快照一致；类型检查、44 files / 694 tests、样式 baseline、生产构建、`cargo fmt --check`、Rust 5 tests 与锁文件一致性全部通过。本地 `1.0.15` DMG 已通过挂载、arm64、深度签名和版本检查，SHA-256 为 `689eb567889cd756161a5e7789328e9a63dff0169f7e584fcc48e6d2fa9f91d4`；GitHub 双平台发行结果待回填。
+- **发行验收**：Kimi 0.31.1 的 40 个命令快照一致；类型检查、44 files / 694 tests、样式 baseline、生产构建、`cargo fmt --check`、Rust 5 tests 与锁文件一致性全部通过。本地 `1.0.15` DMG 已通过挂载、arm64、深度签名和版本检查，SHA-256 为 `689eb567889cd756161a5e7789328e9a63dff0169f7e584fcc48e6d2fa9f91d4`。
+- **线上发行验收**：GitHub Actions `30806987848` 的 quality、prepare、macOS、Windows 与 manifest 全绿；Release 的 DMG、NSIS、MSI、app.tar.gz 和 `latest.json` 齐全。线上 DMG 已通过挂载、版本 `1.0.15`、arm64 与深度签名检查，SHA-256 为 `44a6c5126dd915d8f22609f3e884c530309a4b98a5ecfcf431201dae167f8d68`；Release 与仓库更新包逐字节一致，`latest.json` 含 macOS/Windows 双平台；Homebrew Cask 已同步到 1.0.15。
