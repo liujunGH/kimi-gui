@@ -1,15 +1,15 @@
 {
-  "version": "1.0.12",
-  "notes": "\n### 新增\n\n- **Kimi Engine 管理**:设置页同时显示已安装 CLI 与当前 daemon 版本;可调用官方更新命令升级 CLI,确认后用指定新版 CLI 原位重启 loopback daemon,并在重连后刷新旧 WebSocket 状态\n- **额度与运行诊断**:接入 daemon 0.29+ 的 OAuth usage REST 数据,展示 5 小时/周额度与重置时间;旧 daemon 保留 PTY 回退;上下文额度为 0% 时也能正确显示\n- **Agent 与扩展配置**:GUI 增加 Agent 选择与管理、主/次模型、Provider、Skills/插件、MCP、Hooks、权限和附加工作目录等入口\n- **数据维护**:归档搜索与恢复、历史导入、配置检查、备份/恢复及旧 Kimi 数据迁移能力集中到设置页\n- **会话检查**:Inspect 面板补充会话、思考、工具与变更信息,并增强命令面板、Agent 面板和 Review 工作流\n\n### 性能\n\n- 工作区/会话侧栏渐进渲染,搜索改为 daemon 全文检索并防抖,减少大型历史库的首屏与输入开销\n- 长会话采用消息窗口化与稳定滚动锚点;Markdown、KaTeX、Mermaid 按需加载,较重解析可转入 worker\n- 收敛任务轮询、工作区状态加载和重复计算,降低后台 daemon/API 压力与界面抖动\n\n### 修复\n\n- 修复 CLI 已安装且 daemon 已连接时仍反复提示“找不到 kimi CLI”的错误启动 toast\n- 修复升级 CLI 后旧 daemon/旧 WebSocket 仍让设置页显示旧版本的问题;重启过程避免误杀远程实例与版本降级\n- 修复审批失败后无法重试、队列/草稿/工作区状态边界、多 Agent 取消与前后台任务状态等交互问题\n- 修复归档/导入/迁移失败反馈不足及部分设置写入错误目标的问题,强化备份与恢复前校验\n- 发布流水线增加质量门禁、同 tag 并发保护,并保留更新产物 rebase 冲突的自动处理\n\n",
-  "pub_date": "2026-08-02T23:56:33Z",
+  "version": "1.0.13",
+  "notes": "\n### 改进\n\n- **顶部任务上下文**:工作区与 Agent 从输入框底部迁移到顶部任务栏;新任务可直接切换,已有任务显示固定上下文,下拉菜单向下展开并保持互斥\n- **长对话导航**:离开对话底部后显示浮动“回到底部”按钮;点击平滑返回实时内容,用户主动上翻时新消息不会抢夺滚动位置\n\n### 修复\n\n- **macOS 窗口拖动**:补齐 Tauri 2 原生拖动权限和深层标题栏命中区域,并在标题栏空白处显式调用 `startDragging()`;同步阻止 WebView 把拖动误判成文字选择\n- **输入区密度**:移除底部重复的工作区与 Agent 控件,保留附件、权限、模式、额度、模型和发送等当前输入相关操作\n\n",
+  "pub_date": "2026-08-03T01:51:39Z",
   "platforms": {
     "darwin-aarch64": {
       "url": "https://raw.githubusercontent.com/liujunGH/kimi-gui/main/updates/Kimi.Code_aarch64.app.tar.gz",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxamNHOXc0TEQvbU5oandpcU5ETks5OW03TkJXa1hEbGRqSFlka1dWYkZZWmRVWUdLNCthRmtJQ0c5TTdCTWFyKzAzWWJqMHRGb1BHYXhSeUo2blEyK0F3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1NzE0OTkzCWZpbGU6S2ltaS5Db2RlX2FhcmNoNjQuYXBwLnRhci5negozNURIeW9lcVdBMWpPSHM0bzZsM2o1cG1RcXc1ZVBJOEh2djNLK0U4bHVkZWdBREIxQWhybm9iNHZNcnFQRXJ1YUNteE5kNVo0RkdSV00wR1dhN0dBUT09Cg=="
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxamNCZUF4TXZNYW9SeDl2eDU3bDI3NUJOdStXTTRlUWw1UWlsODZkeFNXZEJGd3F4S2Y4VlU0TDlPT1gyVFBNbXRpa1pya09DUlhtOGg5Nm5nOG04V0FFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1NzIxODk4CWZpbGU6S2ltaS5Db2RlX2FhcmNoNjQuYXBwLnRhci5negpZd0hDcGtnMW4vZkRWdGpIb2JkdE02YVFLMXBHOG9pYkVnOXpGT3JZSFJmZU54dTc3MWRkNHJUY3MvN0hmVUN4cmhzNThCbDhMU0pIRUJWcmFteGlCUT09Cg=="
     },
     "windows-x86_64": {
       "url": "https://raw.githubusercontent.com/liujunGH/kimi-gui/main/updates/Kimi.Code_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxalVUYkh5dzYwbmE0SGFpcGpQaXI2b2p6ZzZ6ZHVheldVRjV4b0lpcGoxVFV3eFZOWDN4bEpBVjFSUmRtU2lhQngxT3NzcFRUa1c2cWpwNDc4dHNhUmdZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1NzE0OTkzCWZpbGU6S2ltaS5Db2RlXzEuMC4xMl94NjQtc2V0dXAuZXhlCmlRenZiOERSNVJWWFdlMDNuN3g0UnFHVG00VFlKZlNhMGpxVEFlOVBVWDZnM05LZFhiYTU2MjZ6WXdsczBXTUYxWENLaEVwMmtKNVFUMTl0WmRwZEJBPT0K"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxamJ0SkwzWHBRaXhwMlhPYXhLR2VOM3MwdDBFVm5scVZScXFRakxQbjBRczIzdFM1dVFESlRHVUVsenRTS2VZMnRmRU9rZXJJalg3YzNUbG1MNVdtRXdvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1NzIxODk5CWZpbGU6S2ltaS5Db2RlXzEuMC4xM194NjQtc2V0dXAuZXhlCmJkRTJFN05GWmEyWndtY0o2OTEwU2d3OCtOazM1OVJMc0E4bGZadUtSSHJ6ckVNNkc3WllIenJna2Ura2pmczI1MHlpdjJrbWdTenIyaGZRbXZndENBPT0K"
     }
   }
 }
