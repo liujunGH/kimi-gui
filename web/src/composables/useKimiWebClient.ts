@@ -286,6 +286,8 @@ export interface ExtendedState extends KimiClientState {
   /** Feature flags reported by GET /meta. Unknown keys must remain unknown so
    *  newer and older daemon builds can be handled without optimistic 404s. */
   serverCapabilities: Record<string, boolean>;
+  /** Effective experiment state reported by GET /meta (0.33+). */
+  experimentalFlags: Record<string, boolean>;
   /**
    * True when the connected server reports `dangerous_bypass_auth` in `/meta`,
    * meaning its bearer-token gate is disabled. The UI skips the server-token
@@ -299,6 +301,8 @@ export interface ExtendedState extends KimiClientState {
    * backend badge in the Sidebar.
    */
   backend: 'v1' | 'v2';
+  /** Running daemon is below the only supported 0.33+/v2 contract. */
+  unsupportedDaemonVersion: string | null;
   workspaceName: string;
   connection: ConnectionState;
   permission: PermissionMode;
@@ -387,8 +391,10 @@ const rawState: ExtendedState = reactive({
   connected: false,
   serverVersion: '',
   serverCapabilities: {},
+  experimentalFlags: {},
   dangerousBypassAuth: false,
   backend: 'v1',
+  unsupportedDaemonVersion: null,
   workspaceName: 'kimi-web',
   connection: 'disconnected' as ConnectionState,
   permission: loadPermissionFromStorage(),
@@ -1034,6 +1040,12 @@ function connectEventsIfNeeded(): void {
 
   eventConn = api.connectEvents({
     onEvent(appEvent, meta) {
+      if (appEvent.type === 'externalUrlRequested') {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('kimi-gui:external-url', { detail: appEvent }));
+        }
+        return;
+      }
       // Workspace lifecycle events are global (not session-scoped) and update
       // rawState.workspaces directly — they bypass the reducer, which has no
       // workspace state.
@@ -1913,6 +1925,12 @@ function toUiTask(task: AppTask): TaskItem {
     subagentPhase: task.subagentPhase,
     suspendedReason: task.suspendedReason,
     swarmIndex: task.swarmIndex,
+    model: task.model,
+    modelSource: task.modelSource,
+    createdAt: task.createdAt,
+    startedAt: task.startedAt,
+    completedAt: task.completedAt,
+    backgroundTaskId: task.backgroundTaskId,
   };
 }
 
@@ -2068,7 +2086,9 @@ const loadMoreMessagesError = computed<boolean>(() => {
 });
 const serverVersion = computed<string>(() => rawState.serverVersion);
 const serverCapabilities = computed<Readonly<Record<string, boolean>>>(() => rawState.serverCapabilities);
+const experimentalFlags = computed<Readonly<Record<string, boolean>>>(() => rawState.experimentalFlags);
 const backend = computed<'v1' | 'v2'>(() => rawState.backend);
+const unsupportedDaemonVersion = computed<string | null>(() => rawState.unsupportedDaemonVersion);
 const dangerousBypassAuth = computed<boolean>(() => rawState.dangerousBypassAuth);
 
 /**
@@ -2826,7 +2846,9 @@ export function useKimiWebClient() {
     loadMoreMessagesError,
     serverVersion,
     serverCapabilities,
+    experimentalFlags,
     backend,
+    unsupportedDaemonVersion,
     dangerousBypassAuth,
     clearDangerousBypassAuth,
     initialized,
@@ -2938,6 +2960,7 @@ export function useKimiWebClient() {
     reorderWorkspaces,
     setWorkspaceSortMode,
     archiveSession: workspaceState.archiveSession,
+    cleanupOrphanSession: workspaceState.cleanupOrphanSession,
     exportSession: workspaceState.exportSession,
     restoreSession: workspaceState.restoreSession,
     loadArchivedSessions: workspaceState.loadArchivedSessions,

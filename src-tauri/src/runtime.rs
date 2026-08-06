@@ -6,6 +6,7 @@
 //! and maintenance actions are selected from a fixed allow-list.
 
 use std::{
+    collections::HashSet,
     fs,
     io::{Read, Write},
     path::{Path, PathBuf},
@@ -78,6 +79,44 @@ pub struct WorkspaceContextConfig {
     additional_dirs: Vec<String>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct KimiPerformanceConfig {
+    max_steps_per_turn: Option<u64>,
+    max_attempts_per_step: u64,
+    reserved_context_size: Option<u64>,
+    max_running_tasks: Option<u64>,
+    bash_auto_background_on_timeout: bool,
+    bash_task_timeout_s: u64,
+    subagent_timeout_ms: u64,
+    mcp_startup_timeout_ms: u64,
+    mcp_tool_timeout_ms: u64,
+    token_counting_strategy: String,
+    image_max_edge_px: u64,
+    image_read_byte_budget: u64,
+    cache_expiry_hint: bool,
+}
+
+impl Default for KimiPerformanceConfig {
+    fn default() -> Self {
+        Self {
+            max_steps_per_turn: None,
+            max_attempts_per_step: 10,
+            reserved_context_size: None,
+            max_running_tasks: None,
+            bash_auto_background_on_timeout: true,
+            bash_task_timeout_s: 600,
+            subagent_timeout_ms: 7_200_000,
+            mcp_startup_timeout_ms: 30_000,
+            mcp_tool_timeout_ms: 60_000,
+            token_counting_strategy: "measured+estimated".to_string(),
+            image_max_edge_px: 2_000,
+            image_read_byte_budget: 262_144,
+            cache_expiry_hint: true,
+        }
+    }
+}
+
 const BACKUP_MAX_FILES: usize = 5_000;
 const BACKUP_MAX_BYTES: u64 = 100 * 1024 * 1024;
 const BACKUP_MAX_FILE_BYTES: u64 = 16 * 1024 * 1024;
@@ -90,6 +129,412 @@ pub struct KimiBackupInfo {
     bytes: u64,
     entries: Vec<String>,
     safety_snapshot_path: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Kimi033MigrationResult {
+    changed: bool,
+    backup_path: Option<String>,
+    renamed_keys: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrphanSessionCleanupResult {
+    session_id: String,
+    backup_path: Option<String>,
+    already_cleaned: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArchivedSessionDeleteResult {
+    session_id: String,
+    already_deleted: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrphanSessionInfo {
+    session_id: String,
+    title: String,
+    work_dir: String,
+    bytes: u64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrphanSessionScanResult {
+    items: Vec<OrphanSessionInfo>,
+    total_bytes: u64,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionIndexEntry {
+    session_id: String,
+    session_dir: String,
+    work_dir: String,
+}
+
+fn directory_size(path: &Path) -> u64 {
+    let Ok(entries) = fs::read_dir(path) else {
+        return 0;
+    };
+    entries
+        .filter_map(Result::ok)
+        .map(|entry| {
+            let Ok(metadata) = entry.path().symlink_metadata() else {
+                return 0;
+            };
+            if metadata.is_file() {
+                metadata.len()
+            } else if metadata.is_dir() {
+                directory_size(&entry.path())
+            } else {
+                0
+            }
+        })
+        .sum()
+}
+
+fn session_title(session_dir: &Path, session_id: &str) -> String {
+    fs::read_to_string(session_dir.join("state.json"))
+        .ok()
+        .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+        .and_then(|state| state.get("title")?.as_str().map(str::to_string))
+        .filter(|title| !title.trim().is_empty())
+        .unwrap_or_else(|| session_id.to_string())
+}
+
+fn detect_orphan_sessions_in_home(home: &Path) -> Result<OrphanSessionScanResult, String> {
+    let index_path = home.join("session_index.jsonl");
+    let index = fs::read_to_string(&index_path)
+        .map_err(|error| format!("读取 Kimi 会话索引失败: {error}"))?;
+    let sessions_root = home.join("sessions");
+    let canonical_root = sessions_root
+        .canonicalize()
+        .map_err(|error| format!("读取 Kimi 会话目录失败: {error}"))?;
+    let mut seen = HashSet::new();
+    let mut items = Vec::new();
+
+    for entry in index
+        .lines()
+        .filter_map(|line| serde_json::from_str::<SessionIndexEntry>(line).ok())
+    {
+        if !valid_session_id(&entry.session_id)
+            || !seen.insert(entry.session_id.clone())
+            || Path::new(&entry.work_dir).exists()
+        {
+            continue;
+        }
+        let session_dir = PathBuf::from(&entry.session_dir);
+        let Ok(canonical_session) = session_dir.canonicalize() else {
+            continue;
+        };
+        if !canonical_session.is_dir()
+            || !canonical_session.starts_with(&canonical_root)
+            || canonical_session.file_name().and_then(|name| name.to_str())
+                != Some(entry.session_id.as_str())
+        {
+            continue;
+        }
+        items.push(OrphanSessionInfo {
+            title: session_title(&canonical_session, &entry.session_id),
+            bytes: directory_size(&canonical_session),
+            session_id: entry.session_id,
+            work_dir: entry.work_dir,
+        });
+    }
+    items.sort_by(|left, right| left.title.cmp(&right.title));
+    let total_bytes = items.iter().map(|item| item.bytes).sum();
+    Ok(OrphanSessionScanResult { items, total_bytes })
+}
+
+#[tauri::command]
+pub async fn detect_orphan_kimi_sessions() -> Result<OrphanSessionScanResult, String> {
+    tauri::async_runtime::spawn_blocking(|| detect_orphan_sessions_in_home(&kimi_home()))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+fn valid_session_id(session_id: &str) -> bool {
+    session_id.starts_with("session_")
+        && (9..=96).contains(&session_id.len())
+        && session_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+}
+
+fn valid_provider_id(value: &str) -> bool {
+    (1..=96).contains(&value.len())
+        && value
+            .bytes()
+            .next()
+            .is_some_and(|byte| byte.is_ascii_alphanumeric())
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+}
+
+fn valid_http_url(value: &str) -> bool {
+    (value.starts_with("https://") || value.starts_with("http://"))
+        && value.len() <= 2_048
+        && !value.bytes().any(|byte| byte.is_ascii_whitespace())
+}
+
+fn cleanup_orphan_session_in_home(
+    home: &Path,
+    session_id: &str,
+    backup: bool,
+) -> Result<OrphanSessionCleanupResult, String> {
+    if !valid_session_id(session_id) {
+        return Err("无效的会话 ID".to_string());
+    }
+
+    let index_path = home.join("session_index.jsonl");
+    let index = fs::read_to_string(&index_path)
+        .map_err(|error| format!("读取 Kimi 会话索引失败: {error}"))?;
+    let entry = index
+        .lines()
+        .filter_map(|line| serde_json::from_str::<SessionIndexEntry>(line).ok())
+        .find(|entry| entry.session_id == session_id)
+        .ok_or_else(|| "Kimi 会话索引中找不到这个任务".to_string())?;
+
+    let work_dir = PathBuf::from(&entry.work_dir);
+    if work_dir.exists() {
+        return Err("任务工作区仍然存在，请使用普通归档".to_string());
+    }
+
+    let session_dir = PathBuf::from(&entry.session_dir);
+    if !session_dir.exists() {
+        return Ok(OrphanSessionCleanupResult {
+            session_id: session_id.to_string(),
+            backup_path: None,
+            already_cleaned: true,
+        });
+    }
+
+    let sessions_root = home.join("sessions");
+    let canonical_root = sessions_root
+        .canonicalize()
+        .map_err(|error| format!("读取 Kimi 会话目录失败: {error}"))?;
+    let canonical_session = session_dir
+        .canonicalize()
+        .map_err(|error| format!("读取任务目录失败: {error}"))?;
+    if !canonical_session.is_dir()
+        || !canonical_session.starts_with(&canonical_root)
+        || canonical_session.file_name().and_then(|name| name.to_str()) != Some(session_id)
+    {
+        return Err("会话目录不在 Kimi 数据目录内，已拒绝清理".to_string());
+    }
+
+    // Kimi Visualizer 的删除也是按 sessionDir 处理。GUI 使用同一边界，
+    // 但把是否保留可恢复副本交给用户明确选择。
+    let backup_path = if backup {
+        let backup_root = home.join("orphaned-sessions");
+        fs::create_dir_all(&backup_root)
+            .map_err(|error| format!("创建失效任务备份目录失败: {error}"))?;
+        let backup_dir = backup_root.join(format!(
+            "{}-{}-{}",
+            timestamp(),
+            std::process::id(),
+            session_id
+        ));
+        fs::rename(&canonical_session, &backup_dir)
+            .map_err(|error| format!("移动失效任务到备份目录失败: {error}"))?;
+        Some(backup_dir.display().to_string())
+    } else {
+        fs::remove_dir_all(&canonical_session)
+            .map_err(|error| format!("删除失效任务记录失败: {error}"))?;
+        None
+    };
+
+    Ok(OrphanSessionCleanupResult {
+        session_id: session_id.to_string(),
+        backup_path,
+        already_cleaned: false,
+    })
+}
+
+/// 清理由 Kimi 索引保留、但工作区已经不存在的失效任务。
+///
+/// 该命令不接受任意路径，也不会删除正常任务。用户可选择直接删除，
+/// 或移动到 ~/.kimi-code/orphaned-sessions 后再从列表清理。
+#[tauri::command]
+pub fn cleanup_orphan_kimi_session(
+    session_id: String,
+    backup: bool,
+) -> Result<OrphanSessionCleanupResult, String> {
+    cleanup_orphan_session_in_home(&kimi_home(), &session_id, backup)
+}
+
+fn delete_archived_session_in_home(
+    home: &Path,
+    session_id: &str,
+) -> Result<ArchivedSessionDeleteResult, String> {
+    if !valid_session_id(session_id) {
+        return Err("无效的会话 ID".to_string());
+    }
+
+    let index_path = home.join("session_index.jsonl");
+    let index = fs::read_to_string(&index_path)
+        .map_err(|error| format!("读取 Kimi 会话索引失败: {error}"))?;
+    let entry = index
+        .lines()
+        .filter_map(|line| serde_json::from_str::<SessionIndexEntry>(line).ok())
+        .find(|entry| entry.session_id == session_id)
+        .ok_or_else(|| "Kimi 会话索引中找不到这个任务".to_string())?;
+    let session_dir = PathBuf::from(&entry.session_dir);
+    if !session_dir.exists() {
+        return Ok(ArchivedSessionDeleteResult {
+            session_id: session_id.to_string(),
+            already_deleted: true,
+        });
+    }
+
+    let sessions_root = home.join("sessions");
+    let canonical_root = sessions_root
+        .canonicalize()
+        .map_err(|error| format!("读取 Kimi 会话目录失败: {error}"))?;
+    let canonical_session = session_dir
+        .canonicalize()
+        .map_err(|error| format!("读取任务目录失败: {error}"))?;
+    if !canonical_session.is_dir()
+        || !canonical_session.starts_with(&canonical_root)
+        || canonical_session.file_name().and_then(|name| name.to_str()) != Some(session_id)
+    {
+        return Err("会话目录不在 Kimi 数据目录内，已拒绝删除".to_string());
+    }
+    let state = fs::read_to_string(canonical_session.join("state.json"))
+        .map_err(|error| format!("读取归档状态失败: {error}"))?;
+    let archived = serde_json::from_str::<Value>(&state)
+        .ok()
+        .and_then(|value| value.get("archived").and_then(Value::as_bool))
+        .unwrap_or(false);
+    if !archived {
+        return Err("这个任务尚未归档，已拒绝永久删除".to_string());
+    }
+
+    // Kimi daemon 0.33 的 REST 契约只有 archive/restore，没有永久删除。
+    // 官方 Visualizer 也是在校验索引后删除精确的 sessionDir；这里再额外
+    // 要求 state.json 明确标记 archived，避免 GUI 误删活动会话。
+    fs::remove_dir_all(&canonical_session)
+        .map_err(|error| format!("永久删除归档任务失败: {error}"))?;
+    Ok(ArchivedSessionDeleteResult {
+        session_id: session_id.to_string(),
+        already_deleted: false,
+    })
+}
+
+#[tauri::command]
+pub fn delete_archived_kimi_session(
+    session_id: String,
+) -> Result<ArchivedSessionDeleteResult, String> {
+    delete_archived_session_in_home(&kimi_home(), &session_id)
+}
+
+#[tauri::command]
+pub async fn run_kimi_provider_command(
+    action: String,
+    provider_id: Option<String>,
+    url: Option<String>,
+    api_key: Option<String>,
+    default_model: Option<String>,
+    base_url: Option<String>,
+    filter: Option<String>,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let kimi = find_kimi().ok_or("找不到 kimi CLI")?;
+        let mut command = Command::new(kimi);
+        let json_output = action == "catalog-list";
+        command.arg("provider");
+        match action.as_str() {
+            "catalog-list" => {
+                command.args(["catalog", "list"]);
+                if let Some(id) = provider_id
+                    .as_deref()
+                    .filter(|value| !value.trim().is_empty())
+                {
+                    if !valid_provider_id(id.trim()) {
+                        return Err("无效的 Provider ID".to_string());
+                    }
+                    command.arg(id.trim());
+                }
+                if let Some(value) = filter.as_deref().filter(|value| !value.trim().is_empty()) {
+                    if value.trim().len() > 120 {
+                        return Err("搜索词过长".to_string());
+                    }
+                    command.args(["--filter", value.trim()]);
+                }
+                if let Some(value) = url.as_deref().filter(|value| !value.trim().is_empty()) {
+                    if !valid_http_url(value.trim()) {
+                        return Err("目录 URL 必须是有效的 http(s) 地址".to_string());
+                    }
+                    command.args(["--url", value.trim()]);
+                }
+                command.arg("--json");
+            }
+            "catalog-add" => {
+                let id = provider_id
+                    .as_deref()
+                    .filter(|value| !value.trim().is_empty())
+                    .ok_or("缺少 Provider ID")?;
+                if !valid_provider_id(id.trim()) {
+                    return Err("无效的 Provider ID".to_string());
+                }
+                let key = api_key
+                    .as_deref()
+                    .filter(|value| !value.trim().is_empty())
+                    .ok_or("缺少 API Key")?;
+                command.args(["catalog", "add", id.trim()]);
+                command.env("KIMI_REGISTRY_API_KEY", key);
+                if let Some(value) = default_model
+                    .as_deref()
+                    .filter(|value| !value.trim().is_empty())
+                {
+                    command.args(["--default-model", value.trim()]);
+                }
+                if let Some(value) = base_url.as_deref().filter(|value| !value.trim().is_empty()) {
+                    if !valid_http_url(value.trim()) {
+                        return Err("Base URL 必须是有效的 http(s) 地址".to_string());
+                    }
+                    command.args(["--base-url", value.trim()]);
+                }
+                if let Some(value) = url.as_deref().filter(|value| !value.trim().is_empty()) {
+                    if !valid_http_url(value.trim()) {
+                        return Err("目录 URL 必须是有效的 http(s) 地址".to_string());
+                    }
+                    command.args(["--url", value.trim()]);
+                }
+            }
+            "registry-add" => {
+                let registry_url = url
+                    .as_deref()
+                    .filter(|value| !value.trim().is_empty())
+                    .ok_or("缺少 Registry URL")?;
+                if !valid_http_url(registry_url.trim()) {
+                    return Err("Registry URL 必须是有效的 http(s) 地址".to_string());
+                }
+                let key = api_key
+                    .as_deref()
+                    .filter(|value| !value.trim().is_empty())
+                    .ok_or("缺少 Registry API Key")?;
+                command.args(["add", registry_url.trim()]);
+                command.env("KIMI_REGISTRY_API_KEY", key);
+            }
+            _ => return Err("不支持的 Provider 操作".to_string()),
+        }
+        command.current_dir(kimi_home());
+        if json_output {
+            command_json(command)
+        } else {
+            command_text(command)
+        }
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 fn command_text(mut command: Command) -> Result<String, String> {
@@ -114,6 +559,35 @@ fn command_text(mut command: Command) -> Result<String, String> {
     }
 }
 
+fn command_json(mut command: Command) -> Result<String, String> {
+    let output = command
+        .output()
+        .map_err(|error| format!("启动失败: {error}"))?;
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    if !output.status.success() {
+        return Err(if stderr.is_empty() { stdout } else { stderr });
+    }
+    for candidate in [&stdout, &stderr] {
+        if let Ok(value) = serde_json::from_str::<Value>(candidate) {
+            return serde_json::to_string(&value).map_err(|error| error.to_string());
+        }
+        if let (Some(start), Some(end)) = (candidate.find('{'), candidate.rfind('}')) {
+            if start <= end {
+                let slice = &candidate[start..=end];
+                if let Ok(value) = serde_json::from_str::<Value>(slice) {
+                    return serde_json::to_string(&value).map_err(|error| error.to_string());
+                }
+            }
+        }
+    }
+    Err(if stdout.is_empty() && stderr.is_empty() {
+        "模型目录没有返回 JSON 数据".to_string()
+    } else {
+        "模型目录返回了无法识别的数据".to_string()
+    })
+}
+
 #[tauri::command]
 pub fn kimi_engine_status() -> KimiEngineStatus {
     let home = kimi_home();
@@ -131,6 +605,130 @@ pub fn kimi_engine_status() -> KimiEngineStatus {
         system_prompt_path: home.join("SYSTEM.md").display().to_string(),
         home: home.display().to_string(),
     }
+}
+
+fn rename_loop_control_key(line: &str, old: &str, new: &str) -> Option<String> {
+    let indent_len = line.len() - line.trim_start().len();
+    let trimmed = &line[indent_len..];
+    let suffix = trimmed.strip_prefix(old)?;
+    if !suffix.trim_start().starts_with('=') {
+        return None;
+    }
+    Some(format!("{}{}{}", &line[..indent_len], new, suffix))
+}
+
+fn loop_control_has_key(content: &str, key: &str) -> bool {
+    let mut in_loop_control = false;
+    for line in content.lines() {
+        let section = line.trim();
+        if section.starts_with('[') && section.ends_with(']') {
+            in_loop_control = section == "[loop_control]";
+            continue;
+        }
+        if in_loop_control && rename_loop_control_key(line, key, key).is_some() {
+            return true;
+        }
+    }
+    false
+}
+
+fn migrate_loop_control_config(content: &str) -> (String, Vec<String>) {
+    let has_attempts = loop_control_has_key(content, "max_attempts_per_step");
+    let has_turn_steps = loop_control_has_key(content, "max_steps_per_turn");
+    let mut in_loop_control = false;
+    let mut renamed_keys = Vec::new();
+    let mut output = String::with_capacity(content.len());
+    for chunk in content.split_inclusive('\n') {
+        let (line, newline) = chunk
+            .strip_suffix('\n')
+            .map(|line| (line, "\n"))
+            .unwrap_or((chunk, ""));
+        let section = line.trim();
+        if section.starts_with('[') && section.ends_with(']') {
+            in_loop_control = section == "[loop_control]";
+        }
+        let migrated = if in_loop_control {
+            if let Some(next) =
+                rename_loop_control_key(line, "max_retries_per_step", "max_attempts_per_step")
+            {
+                if has_attempts {
+                    renamed_keys.push(
+                        "移除重复 max_retries_per_step（保留 max_attempts_per_step）".to_string(),
+                    );
+                    format!("# deprecated by Kimi Code 0.33: {line}")
+                } else {
+                    renamed_keys.push("max_retries_per_step → max_attempts_per_step".to_string());
+                    next
+                }
+            } else if let Some(next) =
+                rename_loop_control_key(line, "max_steps_per_run", "max_steps_per_turn")
+            {
+                if has_turn_steps {
+                    renamed_keys
+                        .push("移除重复 max_steps_per_run（保留 max_steps_per_turn）".to_string());
+                    format!("# deprecated by Kimi Code 0.33: {line}")
+                } else {
+                    renamed_keys.push("max_steps_per_run → max_steps_per_turn".to_string());
+                    next
+                }
+            } else {
+                line.to_string()
+            }
+        } else {
+            line.to_string()
+        };
+        output.push_str(&migrated);
+        output.push_str(newline);
+    }
+    (output, renamed_keys)
+}
+
+#[tauri::command]
+pub fn migrate_kimi_033_config() -> Result<Kimi033MigrationResult, String> {
+    let path = kimi_home().join("config.toml");
+    if !path.exists() {
+        return Ok(Kimi033MigrationResult {
+            changed: false,
+            backup_path: None,
+            renamed_keys: Vec::new(),
+        });
+    }
+    let content = fs::read_to_string(&path).map_err(|e| format!("读取 config.toml 失败: {e}"))?;
+    if content.len() > 4 * 1024 * 1024 {
+        return Err("config.toml 超过 4 MiB，拒绝自动迁移".to_string());
+    }
+
+    let (output, renamed_keys) = migrate_loop_control_config(&content);
+
+    if renamed_keys.is_empty() {
+        return Ok(Kimi033MigrationResult {
+            changed: false,
+            backup_path: None,
+            renamed_keys,
+        });
+    }
+
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_secs();
+    let backup = path.with_file_name(format!("config.toml.pre-0.33-{stamp}.bak"));
+    fs::copy(&path, &backup).map_err(|e| format!("创建 config 备份失败: {e}"))?;
+    let temporary = path.with_file_name(format!(".config.toml.migrate-{}", std::process::id()));
+    fs::write(&temporary, output).map_err(|e| format!("写入迁移文件失败: {e}"))?;
+    // std::fs::rename does not replace an existing file on Windows. The backup
+    // above is the rollback source for the short remove/rename window.
+    fs::remove_file(&path).map_err(|e| format!("准备替换 config.toml 失败: {e}"))?;
+    if let Err(error) = fs::rename(&temporary, &path) {
+        let _ = fs::remove_file(&temporary);
+        let _ = fs::copy(&backup, &path);
+        return Err(format!("替换 config.toml 失败: {error}"));
+    }
+    Ok(Kimi033MigrationResult {
+        changed: true,
+        backup_path: Some(backup.display().to_string()),
+        renamed_keys,
+    })
 }
 
 fn parse_list(value: &str) -> Vec<String> {
@@ -308,6 +906,264 @@ fn atomic_write(path: &Path, content: &str) -> Result<(), String> {
     ));
     fs::write(&temp, content).map_err(|e| e.to_string())?;
     fs::rename(&temp, path).map_err(|e| e.to_string())
+}
+
+fn read_toml_or_empty(path: &Path) -> Result<toml::Value, String> {
+    if !path.exists() {
+        return Ok(toml::Value::Table(toml::map::Map::new()));
+    }
+    fs::read_to_string(path)
+        .map_err(|e| e.to_string())?
+        .parse::<toml::Value>()
+        .map_err(|e| format!("{} 不是有效 TOML: {e}", path.display()))
+}
+
+fn nested_toml<'a>(root: &'a toml::Value, table: &str, key: &str) -> Option<&'a toml::Value> {
+    root.get(table).and_then(|value| value.get(key))
+}
+
+fn toml_u64(value: Option<&toml::Value>) -> Option<u64> {
+    value
+        .and_then(toml::Value::as_integer)
+        .and_then(|value| u64::try_from(value).ok())
+}
+
+fn ensure_toml_table<'a>(
+    root: &'a mut toml::Value,
+    name: &str,
+) -> Result<&'a mut toml::map::Map<String, toml::Value>, String> {
+    let root = root.as_table_mut().ok_or("config.toml 顶层必须是表")?;
+    root.entry(name.to_string())
+        .or_insert_with(|| toml::Value::Table(toml::map::Map::new()))
+        .as_table_mut()
+        .ok_or_else(|| format!("[{name}] 必须是表"))
+}
+
+fn set_optional_integer(
+    table: &mut toml::map::Map<String, toml::Value>,
+    key: &str,
+    value: Option<u64>,
+) -> Result<(), String> {
+    match value {
+        Some(value) => {
+            let value = i64::try_from(value).map_err(|_| format!("{key} 超出支持范围"))?;
+            table.insert(key.to_string(), toml::Value::Integer(value));
+        }
+        None => {
+            table.remove(key);
+        }
+    }
+    Ok(())
+}
+
+fn read_performance_config_from(home: &Path) -> Result<KimiPerformanceConfig, String> {
+    let config = read_toml_or_empty(&home.join("config.toml"))?;
+    let tui = read_toml_or_empty(&home.join("tui.toml"))?;
+    let defaults = KimiPerformanceConfig::default();
+    Ok(KimiPerformanceConfig {
+        max_steps_per_turn: toml_u64(nested_toml(&config, "loop_control", "max_steps_per_turn")),
+        max_attempts_per_step: toml_u64(nested_toml(
+            &config,
+            "loop_control",
+            "max_attempts_per_step",
+        ))
+        .unwrap_or(defaults.max_attempts_per_step),
+        reserved_context_size: toml_u64(nested_toml(
+            &config,
+            "loop_control",
+            "reserved_context_size",
+        )),
+        max_running_tasks: toml_u64(nested_toml(&config, "background", "max_running_tasks")),
+        bash_auto_background_on_timeout: nested_toml(
+            &config,
+            "background",
+            "bash_auto_background_on_timeout",
+        )
+        .and_then(toml::Value::as_bool)
+        .unwrap_or(defaults.bash_auto_background_on_timeout),
+        bash_task_timeout_s: toml_u64(nested_toml(&config, "background", "bash_task_timeout_s"))
+            .unwrap_or(defaults.bash_task_timeout_s),
+        subagent_timeout_ms: toml_u64(nested_toml(&config, "subagent", "timeout_ms"))
+            .unwrap_or(defaults.subagent_timeout_ms),
+        mcp_startup_timeout_ms: toml_u64(nested_toml(&config, "mcp", "startup_timeout_ms"))
+            .unwrap_or(defaults.mcp_startup_timeout_ms),
+        mcp_tool_timeout_ms: toml_u64(nested_toml(&config, "mcp", "tool_timeout_ms"))
+            .unwrap_or(defaults.mcp_tool_timeout_ms),
+        token_counting_strategy: nested_toml(&config, "token_counting", "strategy")
+            .and_then(toml::Value::as_str)
+            .unwrap_or(&defaults.token_counting_strategy)
+            .to_string(),
+        image_max_edge_px: toml_u64(nested_toml(&config, "image", "max_edge_px"))
+            .unwrap_or(defaults.image_max_edge_px),
+        image_read_byte_budget: toml_u64(nested_toml(&config, "image", "read_byte_budget"))
+            .unwrap_or(defaults.image_read_byte_budget),
+        cache_expiry_hint: tui
+            .get("cache_expiry_hint")
+            .and_then(toml::Value::as_bool)
+            .unwrap_or(defaults.cache_expiry_hint),
+    })
+}
+
+fn validate_performance_config(value: &KimiPerformanceConfig) -> Result<(), String> {
+    let optional_range =
+        |name: &str, value: Option<u64>, min: u64, max: u64| -> Result<(), String> {
+            if value.is_some_and(|value| value < min || value > max) {
+                return Err(format!("{name} 必须在 {min} 到 {max} 之间"));
+            }
+            Ok(())
+        };
+    let range = |name: &str, value: u64, min: u64, max: u64| -> Result<(), String> {
+        if value < min || value > max {
+            return Err(format!("{name} 必须在 {min} 到 {max} 之间"));
+        }
+        Ok(())
+    };
+    optional_range("max_steps_per_turn", value.max_steps_per_turn, 1, 10_000)?;
+    range("max_attempts_per_step", value.max_attempts_per_step, 1, 100)?;
+    optional_range(
+        "reserved_context_size",
+        value.reserved_context_size,
+        1,
+        2_000_000,
+    )?;
+    optional_range("max_running_tasks", value.max_running_tasks, 1, 64)?;
+    range("bash_task_timeout_s", value.bash_task_timeout_s, 10, 86_400)?;
+    range(
+        "subagent_timeout_ms",
+        value.subagent_timeout_ms,
+        10_000,
+        86_400_000,
+    )?;
+    range(
+        "mcp_startup_timeout_ms",
+        value.mcp_startup_timeout_ms,
+        1_000,
+        600_000,
+    )?;
+    range(
+        "mcp_tool_timeout_ms",
+        value.mcp_tool_timeout_ms,
+        1_000,
+        3_600_000,
+    )?;
+    range("image_max_edge_px", value.image_max_edge_px, 256, 8_192)?;
+    range(
+        "image_read_byte_budget",
+        value.image_read_byte_budget,
+        65_536,
+        16_777_216,
+    )?;
+    if !matches!(
+        value.token_counting_strategy.as_str(),
+        "measured+estimated" | "measured" | "estimated"
+    ) {
+        return Err(
+            "token_counting_strategy 只支持 measured+estimated、measured 或 estimated".to_string(),
+        );
+    }
+    Ok(())
+}
+
+fn save_performance_config_to(home: &Path, value: &KimiPerformanceConfig) -> Result<(), String> {
+    validate_performance_config(value)?;
+    let config_path = home.join("config.toml");
+    let tui_path = home.join("tui.toml");
+    let mut config = read_toml_or_empty(&config_path)?;
+    {
+        let table = ensure_toml_table(&mut config, "loop_control")?;
+        set_optional_integer(table, "max_steps_per_turn", value.max_steps_per_turn)?;
+        set_optional_integer(table, "reserved_context_size", value.reserved_context_size)?;
+        table.insert(
+            "max_attempts_per_step".into(),
+            toml::Value::Integer(value.max_attempts_per_step as i64),
+        );
+    }
+    {
+        let table = ensure_toml_table(&mut config, "background")?;
+        set_optional_integer(table, "max_running_tasks", value.max_running_tasks)?;
+        table.insert(
+            "bash_auto_background_on_timeout".into(),
+            toml::Value::Boolean(value.bash_auto_background_on_timeout),
+        );
+        table.insert(
+            "bash_task_timeout_s".into(),
+            toml::Value::Integer(value.bash_task_timeout_s as i64),
+        );
+    }
+    for (table_name, pairs) in [
+        (
+            "subagent",
+            vec![(
+                "timeout_ms",
+                toml::Value::Integer(value.subagent_timeout_ms as i64),
+            )],
+        ),
+        (
+            "mcp",
+            vec![
+                (
+                    "startup_timeout_ms",
+                    toml::Value::Integer(value.mcp_startup_timeout_ms as i64),
+                ),
+                (
+                    "tool_timeout_ms",
+                    toml::Value::Integer(value.mcp_tool_timeout_ms as i64),
+                ),
+            ],
+        ),
+        (
+            "token_counting",
+            vec![(
+                "strategy",
+                toml::Value::String(value.token_counting_strategy.clone()),
+            )],
+        ),
+        (
+            "image",
+            vec![
+                (
+                    "max_edge_px",
+                    toml::Value::Integer(value.image_max_edge_px as i64),
+                ),
+                (
+                    "read_byte_budget",
+                    toml::Value::Integer(value.image_read_byte_budget as i64),
+                ),
+            ],
+        ),
+    ] {
+        let table = ensure_toml_table(&mut config, table_name)?;
+        for (key, item) in pairs {
+            table.insert(key.to_string(), item);
+        }
+    }
+    atomic_write(
+        &config_path,
+        &toml::to_string_pretty(&config).map_err(|e| e.to_string())?,
+    )?;
+    let mut tui = read_toml_or_empty(&tui_path)?;
+    tui.as_table_mut().ok_or("tui.toml 顶层必须是表")?.insert(
+        "cache_expiry_hint".into(),
+        toml::Value::Boolean(value.cache_expiry_hint),
+    );
+    atomic_write(
+        &tui_path,
+        &toml::to_string_pretty(&tui).map_err(|e| e.to_string())?,
+    )
+}
+
+#[tauri::command]
+pub fn read_kimi_performance_config() -> Result<KimiPerformanceConfig, String> {
+    read_performance_config_from(&kimi_home())
+}
+
+#[tauri::command]
+pub fn save_kimi_performance_config(
+    value: KimiPerformanceConfig,
+) -> Result<KimiPerformanceConfig, String> {
+    let home = kimi_home();
+    save_performance_config_to(&home, &value)?;
+    read_performance_config_from(&home)
 }
 
 #[tauri::command]
@@ -1020,8 +1876,21 @@ pub async fn run_kimi_maintenance(
 
 #[cfg(test)]
 mod tests {
-    use super::backup_entry_allowed;
-    use std::path::Path;
+    use super::{
+        backup_entry_allowed, cleanup_orphan_session_in_home, delete_archived_session_in_home,
+        detect_orphan_sessions_in_home, migrate_loop_control_config, read_performance_config_from,
+        rename_loop_control_key, save_performance_config_to, valid_http_url, valid_provider_id,
+        validate_performance_config, KimiPerformanceConfig,
+    };
+    use std::{fs, path::Path, time::SystemTime};
+
+    fn temp_kimi_home(label: &str) -> std::path::PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        std::env::temp_dir().join(format!("kimi-gui-{label}-{}-{nonce}", std::process::id()))
+    }
 
     #[test]
     fn backup_allowlist_rejects_credentials_and_traversal() {
@@ -1033,5 +1902,239 @@ mod tests {
         assert!(!backup_entry_allowed(Path::new("sessions/session.json")));
         assert!(!backup_entry_allowed(Path::new("../config.toml")));
         assert!(!backup_entry_allowed(Path::new("plugins/cache/token.json")));
+    }
+
+    #[test]
+    fn provider_command_inputs_reject_option_injection() {
+        assert!(valid_provider_id("google-vertex-anthropic"));
+        assert!(!valid_provider_id("--help"));
+        assert!(valid_http_url("https://models.dev/api.json"));
+        assert!(!valid_http_url("file:///tmp/api.json"));
+        assert!(!valid_http_url("https://example.test/api.json\n--help"));
+    }
+
+    #[test]
+    fn loop_control_migration_only_renames_exact_keys() {
+        assert_eq!(
+            rename_loop_control_key(
+                "  max_retries_per_step = 3 # keep",
+                "max_retries_per_step",
+                "max_attempts_per_step"
+            ),
+            Some("  max_attempts_per_step = 3 # keep".to_string())
+        );
+        assert_eq!(
+            rename_loop_control_key(
+                "max_retries_per_step_extra = 3",
+                "max_retries_per_step",
+                "max_attempts_per_step"
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn loop_control_migration_keeps_new_value_when_both_keys_exist() {
+        let input = "[loop_control]\nmax_retries_per_step = 3\nmax_attempts_per_step = 8\nmax_steps_per_run = 12\n";
+        let (output, changes) = migrate_loop_control_config(input);
+
+        assert!(output.contains("# deprecated by Kimi Code 0.33: max_retries_per_step = 3"));
+        assert!(output.contains("max_attempts_per_step = 8"));
+        assert!(output.contains("max_steps_per_turn = 12"));
+        assert_eq!(changes.len(), 2);
+    }
+
+    #[test]
+    fn orphan_cleanup_moves_history_to_recoverable_backup() {
+        let home = temp_kimi_home("orphan-cleanup");
+        let session_id = "session_863315c6-fe67-438e-ba49-9a8bbfa2dadf";
+        let session_dir = home.join("sessions/wd-missing").join(session_id);
+        fs::create_dir_all(&session_dir).expect("create session");
+        fs::write(session_dir.join("state.json"), "{\"title\":\"reply OK\"}").expect("write state");
+        let missing_work_dir = home.join("worktree-that-no-longer-exists");
+        let index = serde_json::json!({
+            "sessionId": session_id,
+            "sessionDir": session_dir,
+            "workDir": missing_work_dir,
+        });
+        fs::write(home.join("session_index.jsonl"), format!("{index}\n")).expect("write index");
+
+        let result =
+            cleanup_orphan_session_in_home(&home, session_id, true).expect("cleanup orphan");
+        let backup = result.backup_path.expect("backup path");
+        assert!(!session_dir.exists());
+        assert!(Path::new(&backup).join("state.json").exists());
+        assert!(!result.already_cleaned);
+
+        fs::remove_dir_all(&home).expect("remove isolated test home");
+    }
+
+    #[test]
+    fn orphan_cleanup_refuses_a_live_workspace() {
+        let home = temp_kimi_home("live-session");
+        let session_id = "session_live-123";
+        let session_dir = home.join("sessions/wd-live").join(session_id);
+        let work_dir = home.join("live-worktree");
+        fs::create_dir_all(&session_dir).expect("create session");
+        fs::create_dir_all(&work_dir).expect("create worktree");
+        let index = serde_json::json!({
+            "sessionId": session_id,
+            "sessionDir": session_dir,
+            "workDir": work_dir,
+        });
+        fs::write(home.join("session_index.jsonl"), format!("{index}\n")).expect("write index");
+
+        let error =
+            cleanup_orphan_session_in_home(&home, session_id, false).expect_err("must refuse");
+        assert!(error.contains("工作区仍然存在"));
+        assert!(session_dir.exists());
+
+        fs::remove_dir_all(&home).expect("remove isolated test home");
+    }
+
+    #[test]
+    fn orphan_cleanup_can_permanently_remove_without_backup() {
+        let home = temp_kimi_home("orphan-delete");
+        let session_id = "session_delete-123";
+        let session_dir = home.join("sessions/wd-missing").join(session_id);
+        fs::create_dir_all(&session_dir).expect("create session");
+        fs::write(session_dir.join("state.json"), "{}").expect("write state");
+        let index = serde_json::json!({
+            "sessionId": session_id,
+            "sessionDir": session_dir,
+            "workDir": home.join("missing-worktree"),
+        });
+        fs::write(home.join("session_index.jsonl"), format!("{index}\n")).expect("write index");
+
+        let result = cleanup_orphan_session_in_home(&home, session_id, false)
+            .expect("delete orphan without backup");
+        assert!(!session_dir.exists());
+        assert!(result.backup_path.is_none());
+        assert!(!home.join("orphaned-sessions").exists());
+
+        fs::remove_dir_all(&home).expect("remove isolated test home");
+    }
+
+    #[test]
+    fn orphan_detection_reports_only_missing_workspaces_and_totals_bytes() {
+        let home = temp_kimi_home("orphan-detect");
+        let orphan_id = "session_orphan-123";
+        let live_id = "session_live-456";
+        let orphan_dir = home.join("sessions/wd-orphan").join(orphan_id);
+        let live_dir = home.join("sessions/wd-live").join(live_id);
+        let live_worktree = home.join("live-worktree");
+        fs::create_dir_all(&orphan_dir).expect("create orphan session");
+        fs::create_dir_all(&live_dir).expect("create live session");
+        fs::create_dir_all(&live_worktree).expect("create live worktree");
+        fs::write(orphan_dir.join("state.json"), "{\"title\":\"Lost task\"}")
+            .expect("write orphan state");
+        fs::write(orphan_dir.join("wire.jsonl"), "12345").expect("write orphan history");
+        fs::write(live_dir.join("state.json"), "{}").expect("write live state");
+        let entries = [
+            serde_json::json!({
+                "sessionId": orphan_id,
+                "sessionDir": orphan_dir,
+                "workDir": home.join("missing-worktree"),
+            }),
+            serde_json::json!({
+                "sessionId": live_id,
+                "sessionDir": live_dir,
+                "workDir": live_worktree,
+            }),
+        ];
+        fs::write(
+            home.join("session_index.jsonl"),
+            entries.map(|entry| entry.to_string()).join("\n") + "\n",
+        )
+        .expect("write index");
+
+        let result = detect_orphan_sessions_in_home(&home).expect("detect orphans");
+        assert_eq!(result.items.len(), 1);
+        assert_eq!(result.items[0].session_id, orphan_id);
+        assert_eq!(result.items[0].title, "Lost task");
+        assert!(result.total_bytes >= 5);
+
+        fs::remove_dir_all(&home).expect("remove isolated test home");
+    }
+
+    #[test]
+    fn permanent_delete_requires_an_archived_session() {
+        let home = temp_kimi_home("delete-archived");
+        let sessions = home.join("sessions");
+        let archived_id = "session_archived-safe";
+        let active_id = "session_active-safe";
+        let archived_dir = sessions.join(archived_id);
+        let active_dir = sessions.join(active_id);
+        fs::create_dir_all(&archived_dir).expect("create archived dir");
+        fs::create_dir_all(&active_dir).expect("create active dir");
+        fs::write(archived_dir.join("state.json"), r#"{"archived":true}"#)
+            .expect("write archived state");
+        fs::write(active_dir.join("state.json"), r#"{"archived":false}"#)
+            .expect("write active state");
+        let entries = [
+            serde_json::json!({
+                "sessionId": archived_id,
+                "sessionDir": archived_dir,
+                "workDir": home.join("project-a"),
+            }),
+            serde_json::json!({
+                "sessionId": active_id,
+                "sessionDir": active_dir,
+                "workDir": home.join("project-b"),
+            }),
+        ];
+        fs::write(
+            home.join("session_index.jsonl"),
+            entries.map(|entry| entry.to_string()).join("\n") + "\n",
+        )
+        .expect("write index");
+
+        let deleted =
+            delete_archived_session_in_home(&home, archived_id).expect("delete archived session");
+        assert!(!deleted.already_deleted);
+        assert!(!sessions.join(archived_id).exists());
+        let error = delete_archived_session_in_home(&home, active_id)
+            .expect_err("active session must be refused");
+        assert!(error.contains("尚未归档"));
+        assert!(sessions.join(active_id).exists());
+
+        fs::remove_dir_all(&home).expect("remove isolated test home");
+    }
+
+    #[test]
+    fn performance_config_round_trips_and_preserves_unrelated_fields() {
+        let home = temp_kimi_home("performance-config");
+        fs::create_dir_all(&home).expect("create home");
+        fs::write(
+            home.join("config.toml"),
+            "unrelated = \"keep\"\n[background]\ncustom = 7\n",
+        )
+        .expect("write config");
+        let value = KimiPerformanceConfig {
+            max_steps_per_turn: Some(42),
+            max_running_tasks: Some(6),
+            cache_expiry_hint: false,
+            ..KimiPerformanceConfig::default()
+        };
+        save_performance_config_to(&home, &value).expect("save performance config");
+        assert_eq!(
+            read_performance_config_from(&home).expect("read performance config"),
+            value
+        );
+        let raw = fs::read_to_string(home.join("config.toml")).expect("read raw config");
+        assert!(raw.contains("unrelated = \"keep\""));
+        assert!(raw.contains("custom = 7"));
+        fs::remove_dir_all(&home).expect("remove isolated test home");
+    }
+
+    #[test]
+    fn performance_config_rejects_unsafe_limits() {
+        let value = KimiPerformanceConfig {
+            max_running_tasks: Some(0),
+            ..KimiPerformanceConfig::default()
+        };
+        assert!(validate_performance_config(&value)
+            .expect_err("must reject")
+            .contains("max_running_tasks"));
     }
 }

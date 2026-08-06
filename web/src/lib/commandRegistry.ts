@@ -11,13 +11,17 @@ import upstreamCatalog from './upstreamSlashCommands.json';
 export type CommandSurface = 'shared' | 'gui' | 'tui';
 export type CommandAvailability = 'always' | 'idle-only' | 'contextual';
 export type GuiCommandAction =
+  | 'addDir'
   | 'auto'
   | 'btw'
   | 'compact'
   | 'copy'
   | 'exportDebugZip'
   | 'fork'
+  | 'feedback'
   | 'goal'
+  | 'help'
+  | 'init'
   | 'login'
   | 'new'
   | 'plan'
@@ -28,6 +32,7 @@ export type GuiCommandAction =
   | 'thinking'
   | 'title'
   | 'undo'
+  | 'exportMarkdown'
   | 'yolo';
 
 interface CommandMappingBase {
@@ -66,7 +71,7 @@ export type CommandMapping =
   | UnavailableCommandMapping;
 
 /**
- * Explicit classification of the complete Kimi Code 0.31.1 TUI catalog.
+ * Explicit classification of the complete Kimi Code 0.33.0 TUI catalog.
  *
  * `native-ui` means the capability already has a first-class GUI location and
  * should not duplicate the menu. `tui-only` has terminal-specific semantics.
@@ -85,30 +90,30 @@ export const GUI_COMMAND_MAPPINGS: Readonly<Record<string, CommandMapping>> = {
   effort: command('shared', 'always', 'thinking', ['thinking'], 'commands.thinking.desc'),
   provider: nativeUi('gui', 'always', 'commands.locations.provider'),
   btw: command('shared', 'always', 'btw', ['btw'], 'commands.btw.desc', true),
-  help: unavailable('gui', 'always', 'not-implemented'),
+  help: command('gui', 'always', 'help', ['help'], 'commands.help.desc'),
   new: command('shared', 'idle-only', 'new', ['new', 'clear'], 'commands.new.desc'),
   sessions: nativeUi('gui', 'idle-only', 'commands.locations.sessions'),
   tasks: nativeUi('gui', 'always', 'commands.locations.tasks'),
   mcp: nativeUi('gui', 'always', 'commands.locations.mcp'),
   plugins: nativeUi('gui', 'always', 'commands.locations.plugins'),
-  'add-dir': unavailable('shared', 'idle-only', 'daemon-api'),
+  'add-dir': command('shared', 'idle-only', 'addDir', ['add-dir'], 'commands.addDir.desc', true),
   experiments: nativeUi('gui', 'idle-only', 'commands.locations.experiments'),
   reload: command('shared', 'idle-only', 'reload', ['reload'], 'commands.reload.desc'),
   'reload-tui': tuiOnly('always'),
   compact: command('shared', 'idle-only', 'compact', ['compact'], 'commands.compact.desc', true),
   goal: command('shared', 'contextual', 'goal', ['goal'], 'commands.goal.desc', true),
-  init: unavailable('shared', 'idle-only', 'daemon-api'),
+  init: command('shared', 'idle-only', 'init', ['init'], 'commands.init.desc'),
   fork: command('shared', 'idle-only', 'fork', ['fork'], 'commands.fork.desc'),
   title: command('shared', 'always', 'title', ['title'], 'commands.title.desc', true),
   usage: nativeUi('gui', 'always', 'commands.locations.usage'),
   status: command('shared', 'always', 'status', ['status'], 'commands.status.desc'),
-  feedback: unavailable('gui', 'always', 'not-implemented'),
+  feedback: command('gui', 'always', 'feedback', ['feedback'], 'commands.feedback.desc'),
   undo: command('shared', 'idle-only', 'undo', ['undo'], 'commands.undo.desc'),
   editor: tuiOnly('always'),
   theme: nativeUi('gui', 'always', 'commands.locations.theme'),
   logout: nativeUi('gui', 'idle-only', 'commands.locations.account'),
   login: command('shared', 'idle-only', 'login', ['login'], 'commands.login.desc'),
-  'export-md': unavailable('shared', 'idle-only', 'daemon-api'),
+  'export-md': command('shared', 'idle-only', 'exportMarkdown', ['export-md'], 'commands.exportMarkdown.desc'),
   // `/export` was already public in kimi-gui as the debug ZIP action before
   // upstream added the `/export` alias for export-md. Keep the installed GUI's
   // behavior stable and make the divergence explicit here.
@@ -146,14 +151,6 @@ function nativeUi(
 
 function tuiOnly(availability: CommandAvailability): TuiOnlyCommandMapping {
   return { kind: 'tui-only', surface: 'tui', availability };
-}
-
-function unavailable(
-  surface: CommandSurface,
-  availability: CommandAvailability,
-  reason: UnavailableCommandMapping['reason'],
-): UnavailableCommandMapping {
-  return { kind: 'unavailable', surface, availability, reason };
 }
 
 export interface UpstreamCommandDescriptor {

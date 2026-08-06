@@ -358,7 +358,7 @@ export interface WireFsEntry {
 }
 
 // ---------------------------------------------------------------------------
-// Model catalog + Provider wire DTOs (Kimi Code 0.31.1 daemon contract).
+// Model catalog + Provider wire DTOs (Kimi Code 0.33 daemon contract).
 // ---------------------------------------------------------------------------
 
 export interface WireModel {
@@ -807,8 +807,12 @@ type WireEventTaskCompleted = WireEventBase<'event.task.completed', {
 }>;
 
 type WireEventConfigChanged = WireEventBase<'event.config.changed', {
-  changed_fields: string[];
+  changedFields: string[];
   config: WireConfig;
+}>;
+
+type WireEventConfigWarning = WireEventBase<'event.config.warning', {
+  warnings: Array<{ domain?: string; message: string }>;
 }>;
 
 type WireEventModelCatalogChanged = WireEventBase<'event.model_catalog.changed', {
@@ -871,6 +875,7 @@ export type WireEvent =
   | WireEventTaskCompleted
   // Config
   | WireEventConfigChanged
+  | WireEventConfigWarning
   | WireEventModelCatalogChanged
   // Unknown / future events
   | WireEventUnknown;

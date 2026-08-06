@@ -1166,3 +1166,11 @@ ROADMAP 给 kimi3 的 5 项全部完成，vue-tsc 全绿，`verify5.mjs` 10 断�
 - **Review 可读性**：面板加宽、文件树压缩、长行换行，选中文件展示完整 diff；同步修复选中路径失配及加载、空内容、二进制、未跟踪和删除状态不可辨的问题。
 - **发行验收**：Kimi 0.31.1 的 40 个命令快照一致；类型检查、44 files / 694 tests、样式 baseline、生产构建、`cargo fmt --check`、Rust 5 tests 与锁文件一致性全部通过。本地 `1.0.15` DMG 已通过挂载、arm64、深度签名和版本检查，SHA-256 为 `689eb567889cd756161a5e7789328e9a63dff0169f7e584fcc48e6d2fa9f91d4`。
 - **线上发行验收**：GitHub Actions `30806987848` 的 quality、prepare、macOS、Windows 与 manifest 全绿；Release 的 DMG、NSIS、MSI、app.tar.gz 和 `latest.json` 齐全。线上 DMG 已通过挂载、版本 `1.0.15`、arm64 与深度签名检查，SHA-256 为 `44a6c5126dd915d8f22609f3e884c530309a4b98a5ecfcf431201dae167f8d68`；Release 与仓库更新包逐字节一致，`latest.json` 含 macOS/Windows 双平台；Homebrew Cask 已同步到 1.0.15。
+
+## 版本锚点 · 1.0.16 · 2026-08-06
+
+- **0.33 能力整合**：新增任务中心、cache-expiry 长闲置提示、全局后台任务面板、Capabilities 应用内入口，以及运行与性能配置。
+- **子智能体工作台**：主任务根节点、主/次模型与后台筛选、父调用/Swarm 关系、完整输出和当前主任务产物集中展示；文件变更明确不冒充 agent 级归因。
+- **性能与安全**：后台任务面板关闭即停止轮询；性能 TOML 写入原子保留无关字段并做范围校验，可实时应用的 loop-control/background 同步到 daemon。
+- **收口修复**：归档恢复增加 Engine 重连引导；全局任务面板按 daemon 权威快照刷新；Capabilities 与官方插件管理读取当前 daemon 版本；内嵌 `/plugins` 增加焦点状态、显式聚焦和 Tab/方向键/Enter/Esc 指引，并修复浅色主题透明叠层。
+- **阶段验收**：每阶段均通过 Web 类型检查；最终为 51 文件/737 tests，Rust 16 tests 全绿。1.0.16 已在真实桌面应用中验收任务中心、性能配置、Capabilities、全局任务面板、插件 TUI 键盘交互和标题栏双击缩放；最终候选 DMG 已通过镜像、挂载、版本 `1.0.16`、arm64 与深度签名校验，SHA-256 为 `f05ac286ccb3c9d664dfcde8d4ee5b00058f259ef77e9e9dc2c589b377b8b5a2`。

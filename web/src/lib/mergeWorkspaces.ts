@@ -59,7 +59,14 @@ export function mergeWorkspaces(input: MergeWorkspacesInput): AppWorkspace[] {
   for (const w of workspaces) {
     const key = workspaceRootKey(w.root);
     if (hidden.has(key)) continue;
-    if (!byRoot.has(key)) byRoot.set(key, { ...w });
+    if (!byRoot.has(key)) {
+      byRoot.set(key, {
+        ...w,
+        // Older/invalid registry records can have an empty display name. Keep
+        // the group actionable instead of rendering a zero-width blank row.
+        name: w.name.trim() || basename(w.root) || w.id || '未命名工作区',
+      });
+    }
   }
   // Derive from sessions for any cwd without a real workspace.
   for (const s of sessions) {

@@ -1,7 +1,7 @@
 import type { ToolCall } from '../types';
 
 export type SubagentModelRoute = 'primary' | 'secondary';
-export type SubagentModelBasis = 'tool' | 'profile' | 'default' | 'fallback';
+export type SubagentModelBasis = 'runtime' | 'tool' | 'profile' | 'default' | 'fallback';
 
 export interface SubagentModelProfile {
   name: string;
@@ -14,7 +14,7 @@ export interface SubagentModelResolution {
   basis: SubagentModelBasis;
   /** The daemon's subagent lifecycle events do not currently carry a model.
    *  This value is reconstructed from the spawn argument/profile/config. */
-  inferred: true;
+  inferred: boolean;
 }
 
 interface ResolveSubagentModelInput {

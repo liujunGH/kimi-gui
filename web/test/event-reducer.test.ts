@@ -82,6 +82,32 @@ describe('reduceAppEvent turnActiveChanged', () => {
   });
 });
 
+describe('reduceAppEvent configWarningsChanged', () => {
+  it('replaces only daemon config warnings and clears them with an empty list', () => {
+    const state = {
+      ...createInitialState(),
+      warnings: ['keep me'],
+    };
+    const warned = reduceAppEvent(
+      state,
+      {
+        type: 'configWarningsChanged',
+        warnings: [{ domain: 'loopControl', message: 'rename max_retries_per_step' }],
+      },
+      { sessionId: '__global__', seq: 1 },
+    );
+    expect(warned.warnings).toHaveLength(2);
+    expect(warned.warnings[1]).toMatchObject({ source: 'config', message: 'rename max_retries_per_step' });
+
+    const cleared = reduceAppEvent(
+      warned,
+      { type: 'configWarningsChanged', warnings: [] },
+      { sessionId: '__global__', seq: 2 },
+    );
+    expect(cleared.warnings).toEqual(['keep me']);
+  });
+});
+
 describe('reduceAppEvent sessionWorkChanged', () => {
   it('updates list-level main-turn liveness for an unopened session', () => {
     const state = {
@@ -674,5 +700,13 @@ describe('reduceAppEvent unknown agent error', () => {
   it('still renders agent warnings as plain strings', () => {
     const next = reduceRaw({ _agentWarning: true, message: 'heads up' });
     expect(next.warnings[0]).toBe(`${i18n.global.t('warnings.noteLabel')}: heads up`);
+  });
+
+  it('uses the 0.33 error domain for MCP failures', () => {
+    const next = reduceRaw({ _agentError: true, code: 'mcp.oauth_failed', message: 'OAuth failed' });
+    const notice = next.warnings[0];
+    expect(typeof notice).not.toBe('string');
+    if (typeof notice === 'string' || notice === undefined) return;
+    expect(notice.title).toBe(i18n.global.t('warnings.agentError.mcp'));
   });
 });

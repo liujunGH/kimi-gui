@@ -32,6 +32,60 @@ describe('subagentProgressText', () => {
     expect(subagentProgressText('tool.progress', { update: { text: 'working…' } })).toBe('working…');
   });
 
+  it('surfaces the 0.33 MCP OAuth URL as a safe external navigation request', () => {
+    const authorizationUrl = 'https://github.com/login/oauth/authorize?client_id=kimi';
+    const text = subagentProgressText('tool.progress', {
+      update: {
+        kind: 'custom',
+        customKind: 'mcp.oauth.authorization_url',
+        customData: { serverName: 'github', authorizationUrl, expiresAt: Date.now() + 60_000 },
+      },
+    });
+    // Child-agent progress deliberately stays concise; main-agent projection
+    // verifies the structured update through its emitted tool output below.
+    expect(text).toBeNull();
+
+    const projector = createAgentProjector();
+    projector.project('turn.started', { turnId: 1, agentId: 'main' }, 's1');
+    projector.project('turn.step.started', { turnId: 1, step: 1, agentId: 'main' }, 's1');
+    projector.project('tool.call.started', { turnId: 1, toolCallId: 'tc1', name: 'mcp__github__authenticate', agentId: 'main' }, 's1');
+    const events = projector.project('tool.progress', {
+      agentId: 'main',
+      toolCallId: 'tc1',
+      update: {
+        kind: 'custom',
+        customKind: 'mcp.oauth.authorization_url',
+        customData: { serverName: 'github', authorizationUrl, expiresAt: Date.now() + 60_000 },
+      },
+    }, 's1');
+    expect(events).toContainEqual({
+      type: 'externalUrlRequested',
+      sessionId: 's1',
+      url: authorizationUrl,
+      label: 'github 授权',
+      source: 'mcp-oauth',
+    });
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'toolOutput',
+      toolCallId: 'tc1',
+      outputChunk: expect.stringContaining('MCP OAuth authorization for github expires at'),
+    }));
+  });
+
+  it('rejects non-http MCP OAuth navigation URLs', () => {
+    const projector = createAgentProjector();
+    const events = projector.project('tool.progress', {
+      agentId: 'main',
+      toolCallId: 'tc1',
+      update: {
+        kind: 'custom',
+        customKind: 'mcp.oauth.authorization_url',
+        customData: { serverName: 'unsafe', authorizationUrl: 'javascript:alert(1)' },
+      },
+    }, 's1');
+    expect(events.some((event) => event.type === 'externalUrlRequested')).toBe(false);
+  });
+
   it('caps a long tool.progress text', () => {
     const long = 'x'.repeat(3000);
     const text = subagentProgressText('tool.progress', { update: { text: long } });
@@ -63,6 +117,31 @@ describe('subagent streaming text', () => {
     const projector = createAgentProjector();
     const events = projector.project('assistant.delta', { agentId: 'sub-1', delta: '' }, 's1');
     expect(events).toEqual([]);
+  });
+});
+
+describe('subagent runtime model', () => {
+  it('patches the child task from its agent.status.updated frame', () => {
+    const projector = createAgentProjector();
+    projector.project('subagent.spawned', { subagentId: 'sub-1', description: 'Review' }, 's1');
+
+    const events = projector.project(
+      'agent.status.updated',
+      { agentId: 'sub-1', model: 'moonshot/kimi-k2-fast' },
+      's1',
+    );
+
+    expect(events).toEqual([
+      {
+        type: 'taskCreated',
+        sessionId: 's1',
+        task: expect.objectContaining({
+          id: 'sub-1',
+          model: 'moonshot/kimi-k2-fast',
+          modelSource: 'runtime',
+        }),
+      },
+    ]);
   });
 });
 

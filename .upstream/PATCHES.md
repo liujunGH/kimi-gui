@@ -10,6 +10,15 @@
 
 详见 `.upstream/UPSTREAM_BASELINE.txt`。
 
+## 0.33 后的维护方式
+
+Kimi Code 0.33.0 已从公开仓库移除 `apps/kimi-web` 源码，官方脚本说明 Web UI 改由独立 `code-app` 仓库构建，只把预编译 `dist-web` 同步回来。因此：
+
+- `.upstream/kimi-code-src` 继续作为历史 Web 源码与本地 patch 的参考镜像，不再假设能机械合并新版官方 Web 源码。
+- daemon/REST/Wire/配置契约基线从本项目代码和测试中固定为 `@moonshot-ai/kimi-code@0.33.0`。
+- Slash 命令通过 `web/src/lib/upstreamSlashCommands.json` 跟踪发布版；交互行为按发布说明和公开 daemon 源码逐项移植。
+- `main` 上未发布的 `/api/v2` 等契约不得提前作为稳定能力接入。
+
 ## 改动清单
 
 ### `web/vite.config.ts`(2026-07-19 · ZCode · 轮次 1)
@@ -79,9 +88,27 @@
 
 **改动**：移除独立硬编码的 16 条 GUI 白名单，改为从 `commandRegistry.ts` 生成菜单；增加完整上游 built-in 识别，使隐藏命令手输时也进入分类分发而不是普通消息。
 
-**原因**：官方 TUI 0.31.1 有 40 个主命令，官方 kimi-web 仍只维护精简列表，导致 `/reload` 等命令静默缺失。GUI 需要额外的 surface/执行器适配层，而上游暂未提供该元数据。
+**原因**：官方 TUI 0.33.0 有 40 个主命令，官方 Web 没有公开可合并的分类元数据，GUI 需要额外的 surface/执行器适配层。0.33.0 同步加入 `/bug` 别名，并采用“不自动切换”的 `/fork` 行为。
 
 **冲突风险**：中。上游若新增 daemon command manifest/capabilities，应优先改为消费官方元数据；在此之前保留本地映射与同步脚本。
+
+### Provider 目录与 Registry 导入
+
+**上游能力**：Kimi Code 0.33 的 `kimi provider catalog list/add` 与 `kimi provider add` 负责 models.dev 协议推断、完整模型元数据和自定义 Registry 来源同步。
+
+**GUI 适配**：Provider 管理页通过窄化的 Tauri allow-list 调用这些官方子命令，API Key 仅作为子进程环境变量传入；成功后重启当前 GUI Engine，使 daemon 立即加载新配置。手工 Provider 编辑仍走公开 REST 契约。
+
+**原因**：手工表单无法可靠复刻 catalog 的 wire 推断、每模型协议/端点覆盖、上下文边界和能力过滤；复用官方 CLI 可避免 GUI 与 TUI 再次漂移。
+
+**冲突风险**：中。0.33+ Provider CLI 参数变化时要同步窄化命令；daemon 将来开放等价 REST 导入端点后应优先改走 REST。
+
+### GUI 命令闭环与子智能体详情
+
+**改动**：完整命令分类增加可搜索帮助页；GUI 类命令直接导航到对应设置或任务面板；补齐 `/init`、`/add-dir`、`/export-md`、MCP OAuth、Undo 选择器、可持久化实验开关和反馈入口。子智能体面板增加状态筛选、搜索、运行时模型来源、时间线、活动统计以及 20,000 字符以上按需展开。
+
+**边界**：0.33 daemon REST 未暴露插件管理、session reload 和 Goal 后续队列 RPC。GUI 只展示 daemon 实际加载的插件能力；管理入口以内嵌 PTY 承载固定的官方 `/plugins` 流程，不扫描或直接改写插件状态。PTY 仅允许已安装 Kimi CLI 和已登记工作区，目录信任仍交给官方界面确认，关闭弹窗即终止子进程。
+
+**冲突风险**：中。daemon 若公开 capability manifest、插件或 Goal 队列 REST，应删除相应本地适配与限制提示，改为消费官方契约。
 
 ### `web/src/components/chat/Markdown.vue`(2026-07-20 · kimi3 · 轮次 7+)
 

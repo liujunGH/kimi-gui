@@ -50,13 +50,17 @@ import ThreadMenu from '../components/codex/layout/ThreadMenu.vue';
 import WorkspacePicker from '../components/codex/layout/WorkspacePicker.vue';
 import Toast, { useToast } from '../components/codex/layout/Toast.vue';
 import PromptDialog from '../components/codex/layout/PromptDialog.vue';
+import CacheExpiryDialog from '../components/codex/layout/CacheExpiryDialog.vue';
 import AgentPanel from '../components/codex/agents/AgentPanel.vue';
+import GlobalTaskPanel from '../components/codex/tasks/GlobalTaskPanel.vue';
 import ReviewPane from '../components/codex/diff/ReviewPane.vue';
 import OfficialModelPicker from '../components/settings/ModelPicker.vue';
 import Onboarding from '../components/settings/Onboarding.vue';
 import OfficialGoalStrip from '../components/chat/GoalStrip.vue';
 import OfficialServerAuthDialog from '../components/ServerAuthDialog.vue';
 import CommandPalette, { type PaletteAction, type PaletteSession } from '../components/codex/layout/CommandPalette.vue';
+import CommandHelpDialog from '../components/codex/layout/CommandHelpDialog.vue';
+import UndoDialog from '../components/codex/layout/UndoDialog.vue';
 import UpdateDialog from '../components/codex/layout/UpdateDialog.vue';
 import { useUpdater } from '../composables/codex/useUpdater';
 import { formatLocalDateTime } from '../lib/formatMessageTime';
@@ -72,9 +76,14 @@ import { kimiRuntime, type KimiAgentProfile } from '../composables/useKimiRuntim
 import type { AppAgentConfigInput, AppConfig, AppProviderFormInput } from '../api/types';
 import { quotaInfoFromOAuthUsage } from '../lib/quotaUsage';
 import { resolveSubagentModel, type SubagentModelResolution } from '../lib/subagentModel';
+import { compareKimiVersions, MINIMUM_KIMI_CODE_VERSION } from '../lib/kimiVersion';
+import { decideCacheExpiryHint, readCacheExpiryHintEnabled, writeCacheExpiryHintEnabled } from '../lib/cacheHint';
 
 const SettingsPage = defineAsyncComponent(
   () => import('../components/codex/settings/SettingsPage.vue'),
+);
+const PluginTuiDialog = defineAsyncComponent(
+  () => import('../components/codex/settings/PluginTuiDialog.vue'),
 );
 const MessageAssistant = defineAsyncComponent(
   () => import('../components/codex/chat/MessageAssistant.vue'),
@@ -84,6 +93,9 @@ const OfficialQuestionCard = defineAsyncComponent(
 );
 const ProviderManager = defineAsyncComponent(
   () => import('../components/settings/ProviderManager.vue'),
+);
+const Terminal = defineAsyncComponent(
+  () => import('../components/Terminal.vue'),
 );
 
 // 1. 顶层 client 装配 + provide(整个 codex UI 的数据源)
@@ -95,6 +107,8 @@ provide('resolveImage', client.resolveImageUrl);
 // shell 先挂载；Tauri 下凭证通过 IPC 取回后再拉首轮数据，避免未授权请求和冷启动白屏。
 const tauriDaemon = useTauriDaemon();
 const booting = ref(true);
+const workspaceDropActive = ref(false);
+let unlistenWorkspaceDrop: (() => void) | null = null;
 async function bootClient(): Promise<void> {
   try {
     if (tauriDaemon.isTauri() && !getCredential()) {
@@ -107,6 +121,74 @@ async function bootClient(): Promise<void> {
   }
 }
 onMounted(() => void bootClient());
+onMounted(() => {
+  if (!tauriDaemon.isTauri()) return;
+  void import('@tauri-apps/api/window').then(async ({ getCurrentWindow }) => {
+    unlistenWorkspaceDrop = await getCurrentWindow().onDragDropEvent(async (event) => {
+      if (event.payload.type === 'enter' || event.payload.type === 'over') {
+        workspaceDropActive.value = true;
+        return;
+      }
+      if (event.payload.type === 'leave') {
+        workspaceDropActive.value = false;
+        return;
+      }
+      workspaceDropActive.value = false;
+      const { invoke } = await import('@tauri-apps/api/core');
+      let added = 0;
+      for (const path of event.payload.paths) {
+        if (!await invoke<boolean>('path_is_directory', { path })) continue;
+        await client.addWorkspaceByPath(path);
+        added += 1;
+      }
+      if (added) toast(`已从拖放添加 ${added} 个工作区`);
+    });
+  }).catch(() => undefined);
+});
+onUnmounted(() => {
+  unlistenWorkspaceDrop?.();
+  unlistenWorkspaceDrop = null;
+});
+
+const contractUpgradeBusy = ref(false);
+const contractUpgradeStatus = ref('');
+async function upgradeContractRuntime(): Promise<void> {
+  if (!tauriDaemon.isTauri()) {
+    contractUpgradeStatus.value = `请在本机运行 kimi update，并使用 Kimi Code ${MINIMUM_KIMI_CODE_VERSION}+ 的 v2 daemon 重新连接。`;
+    return;
+  }
+  contractUpgradeBusy.value = true;
+  contractUpgradeStatus.value = '正在检查本机 Kimi CLI…';
+  try {
+    let engine = await kimiRuntime.engineStatus();
+    const relation = engine.version
+      ? compareKimiVersions(engine.version, MINIMUM_KIMI_CODE_VERSION)
+      : null;
+    if (relation === null || relation < 0) {
+      contractUpgradeStatus.value = '正在更新 Kimi CLI…';
+      await kimiRuntime.runMaintenance('update');
+      engine = await kimiRuntime.engineStatus();
+    }
+    const updated = engine.version
+      ? compareKimiVersions(engine.version, MINIMUM_KIMI_CODE_VERSION)
+      : null;
+    if (updated === null || updated < 0) {
+      throw new Error(`CLI 更新后仍低于 ${MINIMUM_KIMI_CODE_VERSION}（当前 ${engine.version ?? '未知'}）`);
+    }
+    contractUpgradeStatus.value = '正在迁移 0.33 配置键…';
+    await kimiRuntime.migrate033Config();
+    contractUpgradeStatus.value = `正在使用 CLI ${engine.version} 重启 daemon…`;
+    const info = await kimiRuntime.restartDaemon();
+    setEphemeralCredential(info.token);
+    localStorage.setItem('kimi-gui.daemon-base', info.base);
+    contractUpgradeStatus.value = '新版 daemon 已启动，正在重新连接…';
+    window.setTimeout(() => window.location.reload(), 400);
+  } catch (error) {
+    contractUpgradeStatus.value = error instanceof Error ? error.message : String(error);
+  } finally {
+    contractUpgradeBusy.value = false;
+  }
+}
 
 // 2. UI 状态
 const ui = useUIState();
@@ -122,6 +204,15 @@ onMounted(() => {
     client.clearDangerousBypassAuth();
   });
 });
+
+function onExternalUrlEvent(event: Event): void {
+  const detail = (event as CustomEvent<{ url?: unknown; label?: unknown }>).detail;
+  if (typeof detail?.url !== 'string') return;
+  toast(`正在打开${typeof detail.label === 'string' ? detail.label : '授权页面'}`);
+  void openExternalUrl(detail.url);
+}
+onMounted(() => window.addEventListener('kimi-gui:external-url', onExternalUrlEvent));
+onUnmounted(() => window.removeEventListener('kimi-gui:external-url', onExternalUrlEvent));
 onUnmounted(() => offAuthRequired?.());
 const showServerAuth = computed(
   () => !client.dangerousBypassAuth.value && authRequired.value,
@@ -165,6 +256,8 @@ const pinnedIds = ref<string[]>((() => {
     return [];
   }
 })());
+const workspaceTrust = ref<Record<string, boolean | null | undefined>>({});
+const workspaceTrustBusy = ref<string[]>([]);
 watch(pinnedIds, (v) => {
   try {
     localStorage.setItem(PIN_KEY, JSON.stringify(v));
@@ -174,6 +267,8 @@ watch(pinnedIds, (v) => {
 }, { deep: true });
 const composerMode = ref<ComposerMode>('queue');
 const settingsOpen = ref(false);
+const commandHelpOpen = ref(false);
+const undoDialogOpen = ref(false);
 const showOnboarding = ref(!client.onboarded.value);
 const agentsLoading = ref(false);
 const agentProfiles = ref<KimiAgentProfile[]>([]);
@@ -346,7 +441,7 @@ useHotkeys([
     shift: true,
     handler: () => {
       // ⇧⌘A 归档(ThreadMenu 里已标注该快捷键)
-      if (client.activeSessionId.value) void client.archiveSession(client.activeSessionId.value);
+      if (client.activeSessionId.value) onArchiveSessionById(client.activeSessionId.value);
       return true;
     },
   },
@@ -366,12 +461,30 @@ useHotkeys([
 
 // ---------------------------------------------------------------- 侧栏数据
 
-const sidebarWorkspaces = computed(() => client.workspacesView.value ?? []);
+const WORKSPACE_DECORATIONS_KEY = 'kimi-ui.workspace-decorations.v1';
+type WorkspaceDecoration = { emoji?: string; pinned?: boolean };
+const workspaceDecorations = ref<Record<string, WorkspaceDecoration>>((() => {
+  try {
+    return JSON.parse(localStorage.getItem(WORKSPACE_DECORATIONS_KEY) || '{}') as Record<string, WorkspaceDecoration>;
+  } catch {
+    return {};
+  }
+})());
+function saveWorkspaceDecorations(): void {
+  localStorage.setItem(WORKSPACE_DECORATIONS_KEY, JSON.stringify(workspaceDecorations.value));
+}
+const sidebarWorkspaces = computed(() => (client.workspacesView.value ?? [])
+  .map((workspace) => ({ ...workspace, ...workspaceDecorations.value[workspace.id] }))
+  .toSorted((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned))));
 const sidebarSessions = computed(() => client.sessionsForView.value ?? []);
 const sidebarCurrentWsId = computed(() => client.activeWorkspaceId.value ?? '');
 const sidebarCurrentWs = computed(() => {
   const id = client.activeWorkspaceId.value ?? '';
   return (client.workspacesView.value ?? []).find((w) => w.id === id)?.name ?? id;
+});
+const sidebarCurrentWsRoot = computed(() => {
+  const id = client.activeWorkspaceId.value ?? '';
+  return (client.workspacesView.value ?? []).find((workspace) => workspace.id === id)?.root ?? '';
 });
 const sidebarCurrentSession = computed(() => client.activeSessionId.value ?? '');
 const activeSession = computed(
@@ -382,6 +495,7 @@ const activeSession = computed(
 
 const conversationTurns = computed<ChatTurn[]>(() => client.turns.value ?? []);
 const conversationRunning = computed(() => client.working.value || client.turnActive.value);
+const terminalOpen = ref(false);
 async function copyLatestAssistantResponse(): Promise<void> {
   for (let i = conversationTurns.value.length - 1; i >= 0; i--) {
     const turn = conversationTurns.value[i];
@@ -436,11 +550,11 @@ function markdownTurn(turn: ChatTurn): string {
   return `${sections.join('\n\n')}\n`;
 }
 
-function exportConversationMarkdown(): void {
+function conversationMarkdown(): string | null {
   const session = activeSession.value;
   if (!session) {
     toast('请先打开一个会话');
-    return;
+    return null;
   }
   const workspace = client.workspacesView.value.find((item) => item.id === session.workspaceId);
   const metadata = [
@@ -452,7 +566,19 @@ function exportConversationMarkdown(): void {
     `- 导出时间：${new Date().toLocaleString()}`,
     '',
   ];
-  const markdown = `${metadata.join('\n')}\n${conversationTurns.value.map(markdownTurn).join('\n')}`;
+  return `${metadata.join('\n')}\n${conversationTurns.value.map(markdownTurn).join('\n')}`;
+}
+
+async function copyConversationMarkdown(): Promise<void> {
+  const markdown = conversationMarkdown();
+  if (!markdown) return;
+  toast((await copyTextToClipboard(markdown)) ? '已复制全部对话为 Markdown' : '复制失败');
+}
+
+function exportConversationMarkdown(): void {
+  const session = activeSession.value;
+  const markdown = conversationMarkdown();
+  if (!session || !markdown) return;
   const url = URL.createObjectURL(new Blob([markdown], { type: 'text/markdown;charset=utf-8' }));
   const anchor = document.createElement('a');
   anchor.href = url;
@@ -670,6 +796,21 @@ const parentAgentToolsById = computed<Map<string, ToolCall>>(() => {
 
 function subagentModelResolution(task: TaskItem): SubagentModelResolution {
   const config = client.config.value as AppConfig | null;
+  if (task.model && task.modelSource === 'runtime') {
+    const secondaryId = config?.secondaryModel?.model;
+    return {
+      route: secondaryId && (
+        task.model === secondaryId ||
+        task.model.endsWith(`/${secondaryId}`) ||
+        secondaryId.endsWith(`/${task.model}`)
+      )
+        ? 'secondary'
+        : 'primary',
+      modelId: task.model,
+      basis: 'runtime',
+      inferred: false,
+    };
+  }
   return resolveSubagentModel({
     parentTool: task.parentToolCallId ? parentAgentToolsById.value.get(task.parentToolCallId) : undefined,
     swarmIndex: task.swarmIndex,
@@ -687,7 +828,9 @@ function subagentModelName(modelId: string | undefined): string {
 }
 
 function subagentModelHint(resolution: SubagentModelResolution): string {
+  if (!resolution.inferred) return 'Kimi daemon 在子智能体运行时上报的实际模型。';
   const basis = {
+    runtime: '运行时上报',
     tool: '启动参数',
     profile: 'Agent 配置',
     default: '默认路由规则',
@@ -727,6 +870,16 @@ const subagents = computed<Subagent[]>(() =>
         model: subagentModelName(model.modelId),
         modelRoute: model.route,
         modelHint: subagentModelHint(model),
+        modelSource: model.inferred ? 'inferred' : 'runtime',
+        createdAt: t.createdAt,
+        startedAt: t.startedAt,
+        completedAt: t.completedAt,
+        subagentType: t.subagentType,
+        background: t.runInBackground === true,
+        activityCount: t.output?.length ?? 0,
+        outputChars: (t.text?.length ?? 0) + (t.output ?? []).reduce((sum, line) => sum + line.length, 0),
+        parentToolCallId: t.parentToolCallId,
+        swarmIndex: t.swarmIndex,
       };
     }),
 );
@@ -741,6 +894,39 @@ const sideSubTask = computed(() => {
   const id = ui.sideTaskSubagentId.value;
   return id ? (client.tasks.value ?? []).find((t) => t.id === id) ?? null : null;
 });
+const sideSubagentTab = ref<'reply' | 'activity' | 'summary' | 'relations'>('reply');
+const sideSubagentExpanded = ref(false);
+const SUBAGENT_PREVIEW_CHARS = 20_000;
+watch(() => sideSubTask.value?.id, () => {
+  sideSubagentTab.value = 'reply';
+  sideSubagentExpanded.value = false;
+});
+const sideSubagentText = computed(() => sideSubTask.value?.text?.trimEnd() ?? '');
+const sideSubagentActivity = computed(() => (sideSubTask.value?.output ?? []).join('\n'));
+function previewSubagentText(value: string): string {
+  return sideSubagentExpanded.value || value.length <= SUBAGENT_PREVIEW_CHARS
+    ? value
+    : `${value.slice(0, SUBAGENT_PREVIEW_CHARS)}\n\n… 已折叠 ${value.length - SUBAGENT_PREVIEW_CHARS} 个字符`;
+}
+const sideSubagentVisibleText = computed(() => previewSubagentText(sideSubagentText.value));
+const sideSubagentVisibleActivity = computed(() => previewSubagentText(sideSubagentActivity.value));
+const sideSubagentTimeline = computed(() => {
+  const task = sideSubTask.value;
+  if (!task) return [];
+  return [
+    task.createdAt ? `创建 ${formatLocalDateTime(task.createdAt)}` : '',
+    task.startedAt ? `开始 ${formatLocalDateTime(task.startedAt)}` : '',
+    task.completedAt ? `完成 ${formatLocalDateTime(task.completedAt)}` : '',
+  ].filter(Boolean);
+});
+async function copySideSubagentOutput(): Promise<void> {
+  const task = sideSubTask.value;
+  if (!task) return;
+  const value = [task.text?.trimEnd(), (task.output ?? []).join('\n'), task.summary]
+    .filter(Boolean)
+    .join('\n\n');
+  toast(value && await copyTextToClipboard(value) ? '已复制子智能体输出' : '没有可复制的输出');
+}
 const sideSubTaskModel = computed(() => {
   const task = sideSubTask.value;
   if (!task) return null;
@@ -749,6 +935,7 @@ const sideSubTaskModel = computed(() => {
     name: subagentModelName(resolution.modelId),
     route: resolution.route,
     hint: subagentModelHint(resolution),
+    source: resolution.inferred ? 'inferred' : 'runtime',
   };
 });
 // 侧边对话(/btw)真数据
@@ -823,7 +1010,26 @@ function onEditMessage(turn: ChatTurn) {
   };
 }
 
+/** 消息右键「引用到输入框」:Markdown 引用每一行，并把光标留在末尾。 */
+function onQuoteMessage(text: string): void {
+  const quoted = text
+    .trim()
+    .split('\n')
+    .map((line) => `> ${line}`)
+    .join('\n');
+  if (!quoted) return;
+  composerRef.value?.setText(`${quoted}\n\n`);
+  composerRef.value?.focus();
+}
+
 // ---------------------------------------------------------------- 事件处理
+
+const pendingCacheSend = ref<{ text: string; attachments?: PromptAttachment[]; idleMinutes: number; tokens: number; workspaceId: string; sessionId: string } | null>(null);
+const cacheHintDismissals = new Set<string>();
+
+function sendCurrentPrompt(text: string, attachments?: PromptAttachment[]): void {
+  void client.sendPrompt(text, attachments as any);
+}
 
 function onSend(text: string, mode: ComposerMode, attachments?: PromptAttachment[]) {
   if (!text.trim() && !attachments?.length) return;
@@ -856,7 +1062,50 @@ function onSend(text: string, mode: ComposerMode, attachments?: PromptAttachment
     else toast('请先在左侧选择工作区');
     return;
   }
-  void client.sendPrompt(text, attachments as any);
+  const session = activeSession.value;
+  const dismissalKey = session ? `${session.id}:${session.updatedAt}` : '';
+  const hint = decideCacheExpiryHint({
+    enabled: readCacheExpiryHintEnabled() && !cacheHintDismissals.has(dismissalKey),
+    modelId: composerCurrentModel.value,
+    lastActiveAt: session?.updatedAt,
+    totalTokens: client.status.value?.ctxUsed,
+  });
+  if (hint.shouldHint && session) {
+    pendingCacheSend.value = {
+      text,
+      attachments,
+      idleMinutes: Math.max(1, Math.round((hint.idleSeconds ?? 0) / 60)),
+      tokens: client.status.value?.ctxUsed ?? 0,
+      workspaceId: session.workspaceId ?? client.activeWorkspaceId.value ?? '',
+      sessionId: session.id,
+    };
+    cacheHintDismissals.add(dismissalKey);
+    return;
+  }
+  sendCurrentPrompt(text, attachments);
+}
+
+async function resolveCacheExpiry(action: 'compact' | 'new' | 'continue' | 'never'): Promise<void> {
+  const pending = pendingCacheSend.value;
+  pendingCacheSend.value = null;
+  if (!pending) return;
+  if (action === 'never') writeCacheExpiryHintEnabled(false);
+  if (action === 'compact') {
+    try {
+      await getKimiWebApi().compactSession(pending.sessionId);
+      sendCurrentPrompt(pending.text, pending.attachments);
+    } catch (error) {
+      pendingCacheSend.value = pending;
+      toast(error instanceof Error ? `压缩失败：${error.message}` : '压缩失败，请重试或选择继续');
+    }
+    return;
+  }
+  if (action === 'new' && pending.workspaceId) {
+    client.clearActiveSession();
+    await client.startSessionAndSendPrompt(pending.workspaceId, pending.text, pending.attachments as any, selectedAgentConfig());
+    return;
+  }
+  sendCurrentPrompt(pending.text, pending.attachments);
 }
 function onSelectSession(id: string) {
   void client.selectSession(id);
@@ -880,12 +1129,72 @@ function onNewTask() {
 function onSelectWorkspace(id: string) {
   client.openWorkspace(id);
 }
+function toggleWorkspacePin(id: string): void {
+  const current = workspaceDecorations.value[id] ?? {};
+  workspaceDecorations.value = {
+    ...workspaceDecorations.value,
+    [id]: { ...current, pinned: !current.pinned },
+  };
+  saveWorkspaceDecorations();
+}
+function editWorkspaceEmoji(id: string): void {
+  const current = workspaceDecorations.value[id] ?? {};
+  promptDialog.value = {
+    title: '设置工作区图标',
+    description: '输入一个 emoji；留空可移除。图标只保存在本机界面设置中。',
+    initial: current.emoji ?? '',
+    placeholder: '例如 🚀',
+    confirmLabel: '保存',
+    input: true,
+    onConfirm: (value) => {
+      const emoji = Array.from(value.trim()).slice(0, 4).join('');
+      workspaceDecorations.value = {
+        ...workspaceDecorations.value,
+        [id]: { ...current, emoji: emoji || undefined },
+      };
+      saveWorkspaceDecorations();
+    },
+  };
+}
 async function onCopyWorkspacePath(root: string) {
   try {
     await navigator.clipboard.writeText(root);
     toast('已复制工作区路径');
   } catch {
     toast('复制失败');
+  }
+}
+async function inspectWorkspaceTrust(id: string): Promise<void> {
+  if (workspaceTrustBusy.value.includes(id)) return;
+  const workspace = client.workspacesView.value.find((item) => item.id === id);
+  if (!workspace || workspace.id === workspace.root) {
+    workspaceTrust.value = { ...workspaceTrust.value, [id]: null };
+    return;
+  }
+  workspaceTrustBusy.value = [...workspaceTrustBusy.value, id];
+  try {
+    const result = await getKimiWebApi().getWorkspaceTrust(id);
+    workspaceTrust.value = { ...workspaceTrust.value, [id]: result.trusted };
+  } catch (error) {
+    workspaceTrust.value = { ...workspaceTrust.value, [id]: null };
+    toast(error instanceof Error ? error.message : '无法读取工作区信任状态');
+  } finally {
+    workspaceTrustBusy.value = workspaceTrustBusy.value.filter((item) => item !== id);
+  }
+}
+async function setWorkspaceTrust(id: string, trusted: boolean): Promise<void> {
+  if (workspaceTrustBusy.value.includes(id)) return;
+  workspaceTrustBusy.value = [...workspaceTrustBusy.value, id];
+  try {
+    const result = trusted
+      ? await getKimiWebApi().trustWorkspace(id)
+      : await getKimiWebApi().untrustWorkspace(id);
+    workspaceTrust.value = { ...workspaceTrust.value, [id]: result.trusted };
+    toast(result.trusted ? '已信任工作区，项目级 MCP 配置将生效' : '已取消信任工作区，项目级 MCP 配置已停用');
+  } catch (error) {
+    toast(error instanceof Error ? error.message : '无法更新工作区信任状态');
+  } finally {
+    workspaceTrustBusy.value = workspaceTrustBusy.value.filter((item) => item !== id);
   }
 }
 /** 「工作区」标题行 + → 原生文件夹选择 → 添加 */
@@ -916,6 +1225,136 @@ function explainNonExecutableCommand(command: string, mapping: Exclude<CommandMa
   else toast(`${command} 已完成分类，但 GUI 交互尚未实现`);
 }
 
+function openNativeUiCommand(canonicalName: string, command: string, mapping: Extract<CommandMapping, { kind: 'native-ui' }>): void {
+  if (canonicalName === 'plugins' && tauriDaemon.isTauri()) {
+    openPluginManager();
+    return;
+  }
+  const sectionByCommand: Partial<Record<string, typeof settingsSection.value>> = {
+    permission: 'permissions',
+    model: 'models-providers',
+    secondary_model: 'models-providers',
+    provider: 'models-providers',
+    mcp: 'mcp',
+    plugins: 'plugins-skills',
+    experiments: 'engine',
+    usage: 'engine',
+    theme: 'appearance',
+    logout: 'general',
+    version: 'about',
+  };
+  const section = sectionByCommand[canonicalName];
+  if (section) {
+    settingsSection.value = section;
+    settingsOpen.value = true;
+    return;
+  }
+  if (canonicalName === 'sessions') {
+    showSearch.value = true;
+    return;
+  }
+  if (canonicalName === 'tasks') {
+    ui.openDetail('tasks');
+    return;
+  }
+  explainNonExecutableCommand(command, mapping);
+}
+
+async function openExternalUrl(url: string): Promise<void> {
+  try {
+    if (tauriDaemon.isTauri()) {
+      const { openUrl } = await import('@tauri-apps/plugin-opener');
+      await openUrl(url);
+    } else {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  } catch (error) {
+    toast(error instanceof Error ? error.message : '无法打开链接');
+  }
+}
+
+function addProjectDirectory(path: string): void {
+  const root = client.workspacesView.value.find((workspace) => workspace.id === client.activeWorkspaceId.value)?.root;
+  if (!root) {
+    toast('请先选择一个工作区');
+    return;
+  }
+  if (!tauriDaemon.isTauri()) {
+    settingsSection.value = 'directories';
+    settingsOpen.value = true;
+    toast('浏览器模式不能修改本机 .kimi-code/local.toml');
+    return;
+  }
+  void (async () => {
+    try {
+      const current = await kimiRuntime.readWorkspaceContext(root);
+      const next = [...new Set([...current.additionalDirs, path.trim()])];
+      await kimiRuntime.saveWorkspaceContext(root, next);
+      toast('附加目录已保存；新会话会自动纳入该目录');
+    } catch (error) {
+      toast(error instanceof Error ? error.message : '附加目录保存失败');
+    }
+  })();
+}
+
+function requestProjectInit(): void {
+  if (!client.activeSessionId.value) {
+    toast('请先打开一个会话');
+    return;
+  }
+  promptDialog.value = {
+    title: '生成项目 AGENTS.md？',
+    description: 'Kimi 将分析当前代码库，生成或完善面向编码 Agent 的 AGENTS.md。这个操作会作为正常任务显示在聊天记录中。',
+    confirmLabel: '开始分析',
+    input: false,
+    onConfirm: () => void client.sendPrompt('分析当前代码库并生成或完善根目录 AGENTS.md。请先检查已有项目约定，保留有效内容，并写入简洁、可执行的开发与验证说明。'),
+  };
+}
+
+function runUndo(count: number, refill?: string): void {
+  undoDialogOpen.value = false;
+  void client.undo(count).then((undone) => {
+    const text = refill || undone;
+    if (text) {
+      composerRef.value?.setText(text);
+      composerRef.value?.focus?.();
+    }
+  });
+}
+
+function showGoalStatus(): void {
+  const goal = client.goal.value;
+  if (!goal) {
+    toast('当前没有活动目标；使用 /goal <目标> 创建');
+    return;
+  }
+  toast(`${goal.status} · ${goal.turnsUsed} 轮 · ${goal.objective}`);
+}
+
+function replaceGoal(objective: string): void {
+  const sid = client.activeSessionId.value;
+  if (!sid) {
+    toast('请先打开一个会话');
+    return;
+  }
+  promptDialog.value = {
+    title: '替换当前目标？',
+    description: `当前目标会被取消，并立即改为：${objective}`,
+    confirmLabel: '替换目标',
+    danger: true,
+    input: false,
+    onConfirm: () => void (async () => {
+      try {
+        await getKimiWebApi().updateSession(sid, { goalControl: 'cancel' });
+        await getKimiWebApi().updateSession(sid, { goalObjective: objective });
+        await client.sendPrompt(objective);
+      } catch (error) {
+        toast(error instanceof Error ? error.message : '目标替换失败');
+      }
+    })(),
+  };
+}
+
 /** Registry-backed slash-command dispatcher for the actual desktop entry. */
 function handleCommand(cmd: string): void {
   const space = cmd.indexOf(' ');
@@ -928,9 +1367,10 @@ function handleCommand(cmd: string): void {
     return;
   }
 
-  const { mapping } = resolved;
+  const { canonicalName, mapping } = resolved;
   if (mapping.kind !== 'command') {
-    explainNonExecutableCommand(token, mapping);
+    if (mapping.kind === 'native-ui') openNativeUiCommand(canonicalName, token, mapping);
+    else explainNonExecutableCommand(token, mapping);
     return;
   }
   if (mapping.availability === 'idle-only' && conversationRunning.value) {
@@ -939,6 +1379,40 @@ function handleCommand(cmd: string): void {
   }
 
   switch (mapping.action) {
+    case 'help':
+      commandHelpOpen.value = true;
+      break;
+    case 'addDir':
+      if (!arg || arg.toLowerCase() === 'list') {
+        settingsSection.value = 'directories';
+        settingsOpen.value = true;
+      } else {
+        promptDialog.value = {
+          title: '添加附加工作目录？',
+          description: `将 ${arg} 写入当前项目的 .kimi-code/local.toml；目录不会被移动或复制。`,
+          confirmLabel: '添加并记住',
+          input: false,
+          onConfirm: () => addProjectDirectory(arg),
+        };
+      }
+      break;
+    case 'init':
+      requestProjectInit();
+      break;
+    case 'feedback':
+      promptDialog.value = {
+        title: '向 Kimi Code 反馈问题',
+        description: '可以直接打开官方 Issue；若问题与当前会话或 daemon 有关，建议先导出诊断包再附到反馈中。诊断包不会包含 GUI 中未提交的 API Key。',
+        confirmLabel: '打开官方 Issue',
+        alternateLabel: client.activeSessionId.value ? '先导出诊断包' : undefined,
+        input: false,
+        onConfirm: () => void openExternalUrl('https://github.com/MoonshotAI/kimi-code/issues/new'),
+        onAlternate: client.activeSessionId.value ? () => void client.exportSession() : undefined,
+      };
+      break;
+    case 'exportMarkdown':
+      exportConversationMarkdown();
+      break;
     case 'compact':
       void client.compact(arg || undefined);
       break;
@@ -949,9 +1423,12 @@ function handleCommand(cmd: string): void {
       else void client.toggleSwarmMode();
       break;
     case 'goal':
-      if (arg === 'pause' || arg === 'resume' || arg === 'cancel') client.controlGoal(arg);
-      else if (arg) void client.createGoal(arg);
-      else client.toggleGoalMode();
+      if (!arg || arg === 'status') showGoalStatus();
+      else if (arg === 'pause' || arg === 'resume' || arg === 'cancel') client.controlGoal(arg);
+      else if (arg.startsWith('replace ')) replaceGoal(arg.slice('replace '.length).trim());
+      else if (arg === 'next' || arg.startsWith('next ')) {
+        toast('即将目标队列仍只存在于 TUI 会话 RPC，0.33 daemon REST 尚未开放；当前目标管理已可在顶部目标卡完成');
+      } else void client.createGoal(arg.replace(/^--\s+/, ''));
       break;
     case 'btw':
       if (arg) void client.openSideChat(arg);
@@ -971,7 +1448,13 @@ function handleCommand(cmd: string): void {
       void client.exportSession();
       break;
     case 'undo':
-      void client.undo();
+      if (arg) {
+        const count = Number.parseInt(arg, 10);
+        if (!Number.isSafeInteger(count) || count < 1) toast('用法：/undo [轮数]');
+        else runUndo(count);
+      } else {
+        undoDialogOpen.value = true;
+      }
       break;
     case 'plan':
       client.togglePlanMode();
@@ -1003,7 +1486,7 @@ function handleCommand(cmd: string): void {
     case 'reload':
       // SDK has reloadSession(), but the daemon's public REST API does not.
       // Restarting the whole daemon is intentionally not treated as equivalent.
-      toast('/reload 已识别，但 Kimi 0.31.1 的 daemon Web API 尚未开放会话重载接口');
+      toast('/reload 已识别，但 Kimi 0.33 的 daemon REST API 尚未开放会话重载接口；可新建会话应用最新配置');
       break;
   }
 }
@@ -1015,9 +1498,11 @@ interface PromptDialogState {
   placeholder?: string;
   initial?: string;
   confirmLabel?: string;
+  alternateLabel?: string;
   danger?: boolean;
   input: boolean;
   onConfirm: (v: string) => void;
+  onAlternate?: () => void;
 }
 const promptDialog = ref<PromptDialogState | null>(null);
 
@@ -1046,12 +1531,13 @@ function onRenameWorkspace(id?: string) {
   };
 }
 function onDeleteWorkspace(id?: string) {
-  const workspaceId = id || client.activeWorkspaceId.value;
-  if (!workspaceId) return;
-  const name = client.workspacesView.value.find((w) => w.id === workspaceId)?.name ?? workspaceId;
+  const workspaceId = id ?? client.activeWorkspaceId.value ?? undefined;
+  if (workspaceId === undefined) return;
+  const workspace = client.workspacesView.value.find((w) => w.id === workspaceId);
+  const name = workspace?.name.trim() || workspace?.root || workspaceId || '未命名工作区';
   promptDialog.value = {
     title: `移除工作区「${name}」?`,
-    description: '会话数据保留,可重新添加。',
+    description: '只从侧栏和工作区注册表移除；不会删除目录或会话数据，可重新添加。',
     confirmLabel: '移除',
     danger: true,
     input: false,
@@ -1088,8 +1574,34 @@ function onArchiveSessionById(id: string) {
     confirmLabel: '归档',
     danger: true,
     input: false,
-    onConfirm: () => void client.archiveSession(id),
+    onConfirm: () => void archiveSessionWithOrphanFallback(id),
   };
+}
+async function archiveSessionWithOrphanFallback(id: string): Promise<void> {
+  const outcome = await client.archiveSession(id);
+  if (outcome !== 'orphaned') return;
+  promptDialog.value = {
+    title: '清理失效任务?',
+    description:
+      '这个任务的临时工作区已经被删除，Kimi 无法正常归档。你可以永久删除本地残留记录，或先移动到本机备份目录再清理。',
+    confirmLabel: '直接清理',
+    alternateLabel: '备份后清理',
+    danger: true,
+    input: false,
+    onConfirm: () => void cleanupOrphanSessionById(id, false),
+    onAlternate: () => void cleanupOrphanSessionById(id, true),
+  };
+}
+async function cleanupOrphanSessionById(id: string, backup: boolean): Promise<void> {
+  const result = await client.cleanupOrphanSession(id, backup);
+  if (!result) return;
+  toast(
+    result.alreadyCleaned
+      ? '失效任务已从列表移除'
+      : backup
+        ? '失效任务已清理，聊天记录已备份'
+        : '失效任务已永久清理',
+  );
 }
 function onExportSessionById(id: string) {
   void client.exportSession(id);
@@ -1180,7 +1692,7 @@ const paletteSessions = computed(() => {
   const live = (client.sessionsForView.value ?? []).map((session) => ({
     id: session.id,
     title: session.title || session.id,
-    meta: session.workspaceName ?? session.time,
+    meta: [session.workspaceName, session.time].filter(Boolean).join(' · '),
     workspaceName: session.workspaceName,
     lastPrompt: session.lastPrompt,
   }));
@@ -1220,7 +1732,7 @@ function onPaletteAction(id: string) {
       onRenameSession();
       break;
     case 'archive':
-      if (client.activeSessionId.value) void client.archiveSession(client.activeSessionId.value);
+      if (client.activeSessionId.value) onArchiveSessionById(client.activeSessionId.value);
       break;
     case 'export':
       void client.exportSession();
@@ -1273,9 +1785,17 @@ async function updateProvider(id: string, input: AppProviderFormInput) {
 }
 async function refreshProvider(id: string) {
   providerBusyIds.value = [...new Set([...providerBusyIds.value, id])];
-  try { await client.refreshProvider(id); } finally {
+  try {
+    if (await client.refreshProvider(id)) {
+      toast(`Provider「${id}」连接测试与模型刷新已完成`);
+    }
+  } finally {
     providerBusyIds.value = providerBusyIds.value.filter((item) => item !== id);
   }
+}
+async function onProviderImported(message: string) {
+  await Promise.all([client.loadProviders(), client.loadModels()]);
+  toast(message);
 }
 
 function qSteerAll() {
@@ -1389,7 +1909,38 @@ const runProgress = computed(() => {
 });
 
 /** SettingsPage 初始分区(/permissions 命令直达权限页;其余入口回 general) */
-const settingsSection = ref<'general' | 'permissions' | 'models-providers' | 'agents'>('general');
+const settingsSection = ref<
+  | 'general'
+  | 'appearance'
+  | 'permissions'
+  | 'models-providers'
+  | 'agents'
+  | 'plugins-skills'
+  | 'capabilities'
+  | 'mcp'
+  | 'directories'
+  | 'tasks'
+  | 'performance'
+  | 'engine'
+  | 'about'
+>('general');
+const pluginManagerOpen = ref(false);
+const globalTaskOpen = ref(false);
+
+async function openSessionFromGlobal(id: string): Promise<void> {
+  try { await client.selectSessionFromSearch(id); }
+  catch (error) { toast(error instanceof Error ? error.message : '无法打开后台任务所属会话'); }
+}
+
+function openPluginManager(): void {
+  if (!sidebarCurrentWsRoot.value) {
+    settingsSection.value = 'plugins-skills';
+    settingsOpen.value = true;
+    toast('请先选择一个工作区');
+    return;
+  }
+  pluginManagerOpen.value = true;
+}
 
 function launchSettingsCommand(command: string): void {
   settingsOpen.value = false;
@@ -1439,8 +1990,25 @@ async function searchFiles(q: string) {
 </script>
 
 <template>
+  <main v-if="client.unsupportedDaemonVersion.value" class="contract-gate">
+    <header class="contract-gate-titlebar" data-tauri-drag-region="deep" @mousedown="tauriDaemon.startWindowDragging">
+      <strong>Kimi Code</strong>
+    </header>
+    <section class="contract-gate-card">
+      <span class="contract-gate-version">需要 Kimi Code {{ MINIMUM_KIMI_CODE_VERSION }}+</span>
+      <h1>当前 daemon 不再受支持</h1>
+      <p>
+        当前运行的是 {{ client.serverVersion.value || client.unsupportedDaemonVersion.value }} · backend {{ client.backend.value }}。
+        此版本 GUI 只使用 0.33.0 以上的 agent-core-v2 契约，不会以旧契约继续运行。
+      </p>
+      <button class="btn primary" :disabled="contractUpgradeBusy" @click="upgradeContractRuntime">
+        {{ contractUpgradeBusy ? '正在更新…' : '更新 CLI 并重启 daemon' }}
+      </button>
+      <pre v-if="contractUpgradeStatus" class="contract-gate-status">{{ contractUpgradeStatus }}</pre>
+    </section>
+  </main>
   <!-- 设置覆盖层:整页替换主区内容 -->
-  <template v-if="settingsOpen">
+  <template v-else-if="settingsOpen">
     <AppShell>
       <template #sidebar="{ toggleCollapsed }">
         <Sidebar
@@ -1451,6 +2019,8 @@ async function searchFiles(q: string) {
           :filter="filter"
           :collapsed="false"
           :pinned-ids="pinnedIds"
+          :workspace-trust="workspaceTrust"
+          :workspace-trust-busy="workspaceTrustBusy"
           @collapse="toggleCollapsed"
           @select-session="onSelectSession"
           @new-task="onNewTask"
@@ -1463,10 +2033,16 @@ async function searchFiles(q: string) {
           @rename-workspace="onRenameWorkspace"
           @delete-workspace="onDeleteWorkspace"
           @copy-path="onCopyWorkspacePath"
+          @toggle-workspace-pin="toggleWorkspacePin"
+          @edit-workspace-emoji="editWorkspaceEmoji"
+          @inspect-workspace-trust="inspectWorkspaceTrust"
+          @set-workspace-trust="setWorkspaceTrust"
+          @reorder-workspaces="client.reorderWorkspaces"
           @archive-session="onArchiveSessionById"
           @rename-session="onRenameSessionById"
           @export-session="onExportSessionById"
           @copy-session-id="onCopySessionId"
+          @fork-session="(id) => void client.forkSession(id)"
         />
       </template>
       <header
@@ -1483,7 +2059,9 @@ async function searchFiles(q: string) {
       <SettingsPage
         :initial-section="settingsSection"
         @open-providers="openProviderManager"
+        @open-plugin-manager="openPluginManager"
         @launch-command="launchSettingsCommand"
+        @open-session="async (id: string) => { settingsOpen = false; await client.selectSessionFromSearch(id); }"
       />
     </AppShell>
   </template>
@@ -1498,6 +2076,8 @@ async function searchFiles(q: string) {
         :filter="filter"
         :collapsed="false"
         :pinned-ids="pinnedIds"
+        :workspace-trust="workspaceTrust"
+        :workspace-trust-busy="workspaceTrustBusy"
         @collapse="toggleCollapsed"
         @select-session="onSelectSession"
         @new-task="onNewTask"
@@ -1511,10 +2091,16 @@ async function searchFiles(q: string) {
         @rename-workspace="onRenameWorkspace"
         @delete-workspace="onDeleteWorkspace"
         @copy-path="onCopyWorkspacePath"
+        @toggle-workspace-pin="toggleWorkspacePin"
+        @edit-workspace-emoji="editWorkspaceEmoji"
+        @inspect-workspace-trust="inspectWorkspaceTrust"
+        @set-workspace-trust="setWorkspaceTrust"
+        @reorder-workspaces="client.reorderWorkspaces"
         @archive-session="onArchiveSessionById"
         @rename-session="onRenameSessionById"
         @export-session="onExportSessionById"
         @copy-session-id="onCopySessionId"
+        @fork-session="(id) => void client.forkSession(id)"
       >
         <template #new-task>
           <button class="new-task" @click="onNewTask">
@@ -1537,8 +2123,9 @@ async function searchFiles(q: string) {
         @pin="client.activeSessionId.value && togglePin(client.activeSessionId.value)"
         @open-side-task="ui.openSideTask('thread')"
         @rename="onRenameSession"
-        @archive="client.activeSessionId.value && void client.archiveSession(client.activeSessionId.value)"
-        @copy="void copyLatestAssistantResponse()"
+        @archive="client.activeSessionId.value && onArchiveSessionById(client.activeSessionId.value)"
+        @copy-all="void copyConversationMarkdown()"
+        @copy-summary="void copyLatestAssistantResponse()"
         @fork="void client.forkSession()"
         @export="void client.exportSession()"
         @export-markdown="exportConversationMarkdown"
@@ -1584,6 +2171,15 @@ async function searchFiles(q: string) {
         <CodexIcon name="bot" />
       </button>
       <button
+        class="icon-btn"
+        title="全局后台任务"
+        :aria-pressed="globalTaskOpen"
+        @click="globalTaskOpen = !globalTaskOpen"
+      >
+        <CodexIcon name="list" />
+        <span v-if="(client.tasks.value ?? []).filter((task) => task.state === 'run').length" class="toolbar-task-badge">{{ (client.tasks.value ?? []).filter((task) => task.state === 'run').length }}</span>
+      </button>
+      <button
         type="button"
         class="toolbar-thinking-toggle"
         :class="{ on: ui.globalThinking.value }"
@@ -1601,6 +2197,17 @@ async function searchFiles(q: string) {
         <span class="dot dot-running" />连接中
       </span>
       <span v-else class="pill pill-warning"><span class="dot dot-waiting" />未连接</span>
+      <button
+        class="icon-btn"
+        :class="{ active: terminalOpen }"
+        :disabled="!sidebarCurrentSession"
+        :title="!sidebarCurrentSession ? '打开会话后可使用终端' : (terminalOpen ? '收起终端' : '打开终端')"
+        :aria-pressed="terminalOpen"
+        @mousedown.stop
+        @click="terminalOpen = !terminalOpen"
+      >
+        <CodexIcon name="terminal" />
+      </button>
       <button
         v-if="changedFiles.length"
         class="btn"
@@ -1630,6 +2237,8 @@ async function searchFiles(q: string) {
       @load-older="() => { const sid = client.activeSessionId.value; if (sid && client.hasMoreMessages.value) void client.loadOlderMessages(sid); }"
       @view-compaction="onViewCompaction"
       @edit-message="onEditMessage"
+      @quote-message="onQuoteMessage"
+      @fork-session="void client.forkSession()"
     >
       <template #approval="{ approval }">
         <ApprovalCard v-bind="approval" />
@@ -1709,6 +2318,10 @@ async function searchFiles(q: string) {
       @dismiss="onDismissQuestion"
     />
 
+    <div v-if="terminalOpen && sidebarCurrentSession" class="terminal-drawer">
+      <Terminal :session-id="sidebarCurrentSession" @dismiss="terminalOpen = false" />
+    </div>
+
     <!-- Composer dock -->
     <div class="app-dock">
       <div class="dock-inner">
@@ -1769,32 +2382,61 @@ async function searchFiles(q: string) {
           <div v-if="sideSubTaskModel" class="sat-model" :title="sideSubTaskModel.hint">
             <span>{{ sideSubTaskModel.route === 'secondary' ? '次级模型' : '主模型' }}</span>
             <strong>{{ sideSubTaskModel.name }}</strong>
-            <span class="sat-inferred">配置推导</span>
+            <span class="sat-inferred">{{ sideSubTaskModel.source === 'runtime' ? '运行时上报' : '配置推导' }}</span>
+          </div>
+          <div v-if="sideSubagentTimeline.length" class="sat-timeline">
+            <span v-for="item in sideSubagentTimeline" :key="item">{{ item }}</span>
+          </div>
+          <div class="sat-toolbar">
+            <div class="sat-tabs" role="tablist">
+              <button :class="{ active: sideSubagentTab === 'reply' }" @click="sideSubagentTab = 'reply'">回复</button>
+              <button :class="{ active: sideSubagentTab === 'activity' }" @click="sideSubagentTab = 'activity'">活动 {{ sideSubTask.output?.length ?? 0 }}</button>
+              <button :class="{ active: sideSubagentTab === 'summary' }" @click="sideSubagentTab = 'summary'">摘要</button>
+              <button :class="{ active: sideSubagentTab === 'relations' }" @click="sideSubagentTab = 'relations'">关联与产物</button>
+            </div>
+            <button class="btn sat-copy" @click="copySideSubagentOutput"><CodexIcon name="copy" /> 复制</button>
           </div>
           <p v-if="sideSubTask.suspendedReason" style="color: var(--warning)">
             等待输入：{{ sideSubTask.suspendedReason }}。请在主对话中的问题卡片回复。
           </p>
           <p v-else-if="sideSubTask.meta" style="color: var(--text-2)">{{ sideSubTask.meta }}</p>
-          <section v-if="sideSubTask.text?.trim()" class="sat-section">
+          <section v-if="sideSubagentTab === 'reply' && sideSubagentText" class="sat-section">
             <span class="sat-label">回复正文</span>
-            <pre>{{ sideSubTask.text.trimEnd() }}</pre>
+            <pre>{{ sideSubagentVisibleText }}</pre>
           </section>
-          <section v-if="(sideSubTask.output ?? []).length" class="sat-section">
+          <section v-if="sideSubagentTab === 'activity' && sideSubagentActivity" class="sat-section">
             <span class="sat-label">执行记录 · {{ sideSubTask.output?.length ?? 0 }} 行</span>
-            <pre>{{ (sideSubTask.output ?? []).join('\n') }}</pre>
+            <pre>{{ sideSubagentVisibleActivity }}</pre>
           </section>
           <section
-            v-if="sideSubTask.summary && sideSubTask.summary !== sideSubTask.text?.trim()"
+            v-if="sideSubagentTab === 'summary' && sideSubTask.summary"
             class="sat-section"
           >
             <span class="sat-label">结果摘要</span>
             <div class="sat-summary">{{ sideSubTask.summary }}</div>
           </section>
+          <section v-if="sideSubagentTab === 'relations'" class="sat-section sat-relations">
+            <span class="sat-label">任务关系</span>
+            <dl>
+              <dt>主任务</dt><dd>{{ activeSession?.title || client.activeSessionId.value || '当前任务' }}</dd>
+              <dt>工作区</dt><dd>{{ sidebarCurrentWsRoot || sidebarCurrentWs || '未记录' }}</dd>
+              <dt>父工具调用</dt><dd><code>{{ sideSubTask.parentToolCallId || 'daemon 未上报' }}</code></dd>
+              <dt>执行形态</dt><dd>{{ sideSubTask.runInBackground ? '后台子智能体' : '前台子智能体' }}<template v-if="sideSubTask.swarmIndex !== undefined"> · Swarm #{{ sideSubTask.swarmIndex + 1 }}</template></dd>
+            </dl>
+            <span class="sat-label">当前主任务变更（非单个子智能体归因）</span>
+            <ul v-if="changedFiles.length" class="sat-files"><li v-for="file in changedFiles" :key="file.path"><code>{{ file.path }}</code><span>+{{ file.additions ?? 0 }} / -{{ file.deletions ?? 0 }}</span></li></ul>
+            <p v-else style="color:var(--text-3)">当前任务还没有可展示的文件变更。</p>
+          </section>
+          <button
+            v-if="Math.max(sideSubagentText.length, sideSubagentActivity.length) > SUBAGENT_PREVIEW_CHARS"
+            class="btn sat-expand"
+            @click="sideSubagentExpanded = !sideSubagentExpanded"
+          >{{ sideSubagentExpanded ? '收起长输出' : '显示完整输出' }}</button>
           <p
-            v-if="!sideSubTask.text?.trim() && !(sideSubTask.output ?? []).length && !sideSubTask.summary"
+            v-if="(sideSubagentTab === 'reply' && !sideSubagentText) || (sideSubagentTab === 'activity' && !sideSubagentActivity) || (sideSubagentTab === 'summary' && !sideSubTask.summary)"
             style="color: var(--text-3)"
           >
-            该子智能体暂无可用输出记录。
+            该视图暂无可用记录。
           </p>
         </div>
       </div>
@@ -1822,10 +2464,17 @@ async function searchFiles(q: string) {
     <AgentPanel
       :active="activeSubagents"
       :completed="completedSubagents"
+      :session-title="activeSession?.title"
+      :workspace-name="sidebarCurrentWs"
       :open="ui.agentPanelOpen.value"
       @inspect="openTranscript"
       @cancel="onCancelTask"
       @close="ui.closeAgentPanel()"
+    />
+    <GlobalTaskPanel
+      :open="globalTaskOpen"
+      @close="globalTaskOpen = false"
+      @open-session="openSessionFromGlobal"
     />
 
     <!-- Review pane(⌘B,有改动文件时出现) -->
@@ -1850,6 +2499,12 @@ async function searchFiles(q: string) {
       @toggle-star="(id: string) => client.toggleStarModel(id)"
       @manage="() => { showModelPicker = false; settingsSection = 'models-providers'; settingsOpen = true; }"
       @close="showModelPicker = false"
+    />
+    <CacheExpiryDialog
+      v-if="pendingCacheSend"
+      :idle-minutes="pendingCacheSend.idleMinutes"
+      :tokens="pendingCacheSend.tokens"
+      @choose="resolveCacheExpiry"
     />
 
     <!-- 首次引导(语言/主题/accent) -->
@@ -1892,8 +2547,29 @@ async function searchFiles(q: string) {
     @update="updateProvider"
     @refresh="refreshProvider"
     @delete="onDeleteProvider"
+    @imported="onProviderImported"
     @open-login="() => toast('请先在账户页登录 Kimi，再刷新 Provider')"
     @close="showProviderManager = false"
+  />
+
+  <CommandHelpDialog
+    v-if="commandHelpOpen"
+    @run="(command: string) => { commandHelpOpen = false; handleCommand(command); }"
+    @close="commandHelpOpen = false"
+  />
+
+  <UndoDialog
+    v-if="undoDialogOpen"
+    :turns="conversationTurns"
+    @undo="(count: number, text: string) => runUndo(count, text)"
+    @close="undoDialogOpen = false"
+  />
+
+  <PluginTuiDialog
+    v-if="pluginManagerOpen"
+    :workspace-root="sidebarCurrentWsRoot"
+    :runtime-version="client.serverVersion.value || undefined"
+    @close="pluginManagerOpen = false"
   />
 
   <!-- 应用内输入/确认弹层(重命名/移除工作区等,替代 window.prompt) -->
@@ -1904,9 +2580,14 @@ async function searchFiles(q: string) {
     :placeholder="promptDialog.placeholder"
     :initial="promptDialog.initial"
     :confirm-label="promptDialog.confirmLabel"
+    :alternate-label="promptDialog.alternateLabel"
     :danger="promptDialog.danger"
     :input="promptDialog.input"
     @confirm="(v: string) => { const cb = promptDialog!.onConfirm; promptDialog = null; cb(v); }"
+    @alternate="() => { const cb = promptDialog!.onAlternate; promptDialog = null; cb?.(); }"
     @cancel="promptDialog = null"
   />
+  <div v-if="workspaceDropActive" class="workspace-drop-overlay">
+    <div><CodexIcon name="file" /><strong>松开以添加工作区</strong><span>只会添加文件夹，不会移动或复制内容</span></div>
+  </div>
 </template>

@@ -12,8 +12,11 @@
  */
 import { computed, ref } from 'vue';
 import type { DiffHunk, ToolCallCardProps, ToolCallCardEmits } from '../../../types/codex';
+import type { ContextMenuItem } from '../../../lib/contextMenu';
 import { buildDiffLines } from '../../../lib/diffLines';
+import { copyTextToClipboard } from '../../../lib/clipboard';
 import CodexIcon from '../layout/CodexIcon.vue';
+import ContextMenu from '../layout/ContextMenu.vue';
 import DiffLines from '../diff/DiffLines.vue';
 
 const props = defineProps<ToolCallCardProps>();
@@ -103,10 +106,40 @@ function onHeadClick(): void {
   if (expandable.value) open.value = !open.value;
   else emit('inspect');
 }
+
+const contextOpen = ref(false);
+const contextPos = ref({ x: 0, y: 0 });
+const rootEl = ref<HTMLElement | null>(null);
+const selectedText = ref('');
+const contextItems = computed<ContextMenuItem[]>(() => [
+  ...(selectedText.value ? [{ id: 'copy-selection', label: '复制所选内容', icon: 'copy' }] : []),
+  { id: 'toggle', label: open.value ? '收起工具结果' : '展开工具结果', icon: 'chevron-down', disabled: !expandable.value },
+  { id: 'inspect', label: '在详情中查看', icon: 'panel-right' },
+  { id: 'copy-input', label: '复制工具输入', icon: 'copy', disabled: !hasArg.value, separatorBefore: true },
+  { id: 'copy-output', label: '复制完整输出', icon: 'copy', disabled: !hasOutput.value },
+]);
+
+function openContextMenu(event: MouseEvent): void {
+  const selection = window.getSelection();
+  selectedText.value = selection && rootEl.value?.contains(selection.anchorNode)
+    ? selection.toString().trim()
+    : '';
+  contextPos.value = { x: event.clientX, y: event.clientY };
+  contextOpen.value = true;
+}
+
+function onContextSelect(id: string): void {
+  contextOpen.value = false;
+  if (id === 'copy-selection') void copyTextToClipboard(selectedText.value);
+  else if (id === 'toggle' && expandable.value) open.value = !open.value;
+  else if (id === 'inspect') emit('inspect');
+  else if (id === 'copy-input') void copyTextToClipboard(prettyArg.value);
+  else if (id === 'copy-output') void copyTextToClipboard(outputLines.value.join('\n'));
+}
 </script>
 
 <template>
-  <div class="tool-call">
+  <div ref="rootEl" class="tool-call" @contextmenu.prevent.stop="openContextMenu">
     <button
       type="button"
       class="tool-head"
@@ -138,6 +171,15 @@ function onHeadClick(): void {
         <pre class="tool-out">{{ prettyArg }}</pre>
       </details>
     </div>
+    <ContextMenu
+      :open="contextOpen"
+      :x="contextPos.x"
+      :y="contextPos.y"
+      :items="contextItems"
+      aria-label="工具调用操作"
+      @select="onContextSelect"
+      @close="contextOpen = false"
+    />
   </div>
 </template>
 

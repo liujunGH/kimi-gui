@@ -31,6 +31,7 @@ function finish(): void {
     size="md"
     :close-on-overlay="false"
     :close-on-esc="false"
+    :close-label="t('filePreview.close')"
     @close="emit('skip')"
   >
     <template #head>

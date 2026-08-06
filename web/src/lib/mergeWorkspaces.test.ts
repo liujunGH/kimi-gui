@@ -131,6 +131,18 @@ describe('mergeWorkspaces — folded root identity', () => {
       '/home/x/ccc',
     ]);
   });
+
+  it('gives empty-name registry records an actionable display name', () => {
+    const fromRoot = mergeWorkspaces(
+      input({ workspaces: [ws('/home/x/project', { id: 'wd_project', name: '' })] }),
+    );
+    expect(fromRoot[0]!.name).toBe('project');
+
+    const fromId = mergeWorkspaces(
+      input({ workspaces: [ws('', { id: 'wd_unknown', name: '' })] }),
+    );
+    expect(fromId[0]!.name).toBe('wd_unknown');
+  });
 });
 
 describe('workspaceRootKey', () => {

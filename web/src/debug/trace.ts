@@ -164,6 +164,9 @@ export function clearTrace(): void {
   totalUtf8Bytes = 0;
   exportEntryJson.length = 0;
   exportTotalUtf8Bytes = 0;
+  // Re-evaluate the opt-in source after callers/tests clear diagnostics. This
+  // also lets a settings change take effect without reloading the whole app.
+  enabledCache = null;
   traceVersion.value++;
 }
 

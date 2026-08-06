@@ -17,12 +17,17 @@ const props = withDefaults(
     placeholder?: string;
     initial?: string;
     confirmLabel?: string;
+    alternateLabel?: string;
     danger?: boolean;
     input?: boolean;
   }>(),
   { description: '', placeholder: '', initial: '', confirmLabel: '确定', danger: false, input: true },
 );
-const emit = defineEmits<{ (e: 'confirm', value: string): void; (e: 'cancel'): void }>();
+const emit = defineEmits<{
+  (e: 'confirm', value: string): void;
+  (e: 'alternate'): void;
+  (e: 'cancel'): void;
+}>();
 
 const text = ref(props.initial);
 const inputEl = ref<HTMLInputElement | null>(null);
@@ -74,6 +79,9 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
       />
       <div class="pd-actions">
         <button type="button" class="btn" @click="emit('cancel')">取消</button>
+        <button v-if="props.alternateLabel" type="button" class="btn" @click="emit('alternate')">
+          {{ props.alternateLabel }}
+        </button>
         <button ref="confirmEl" type="button" class="btn pd-confirm" :class="{ danger: props.danger }" @click="confirm">
           {{ props.confirmLabel }}
         </button>

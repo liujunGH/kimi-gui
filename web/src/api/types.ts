@@ -33,6 +33,8 @@ export interface AppNotice {
   title: string;
   message?: string;
   details?: AppNoticeDetail[];
+  /** Stable producer id used when a live source replaces or clears notices. */
+  source?: 'config' | 'operation' | 'session' | 'websocket';
 }
 
 export type AppWarning = string | AppNotice;
@@ -352,6 +354,10 @@ export interface AppTask {
    *  this links the two so the REST copy can be folded into this row and so
    *  cancel can target the id REST actually knows. */
   backgroundTaskId?: string;
+  /** Actual model reported by this agent's `agent.status.updated` frame. */
+  model?: string;
+  /** Runtime means the daemon reported the value; absent falls back to inference. */
+  modelSource?: 'runtime';
 }
 
 // ---------------------------------------------------------------------------
@@ -454,6 +460,7 @@ export type AppEvent =
   | { type: 'agentDelta'; sessionId: string; agentId: string; delta: { text?: string; thinking?: string } }
   | { type: 'agentTurnEnded'; sessionId: string; agentId: string; reason?: string }
   | { type: 'toolOutput'; sessionId: string; toolCallId: string; outputChunk: string; stream: 'stdout' | 'stderr' }
+  | { type: 'externalUrlRequested'; sessionId: string; url: string; label: string; source: 'mcp-oauth' }
   | { type: 'approvalRequested'; sessionId: string; approval: AppApprovalRequest }
   | { type: 'approvalResolved'; sessionId: string; approvalId: string; decision: ApprovalDecision; resolvedAt: string }
   | { type: 'approvalExpired'; sessionId: string; approvalId: string }
@@ -491,6 +498,7 @@ export type AppEvent =
   | { type: 'turnActiveChanged'; sessionId: string; active: boolean; reason?: string }
   | { type: 'goalUpdated'; sessionId: string; goal: AppGoal | null }
   | { type: 'configChanged'; changedFields: string[]; config: AppConfig }
+  | { type: 'configWarningsChanged'; warnings: Array<{ domain?: string; message: string }> }
   | {
       type: 'modelCatalogChanged';
       changed: { providerId: string; providerName: string; added: number; removed: number }[];
@@ -698,6 +706,48 @@ export interface ProviderRefreshResult {
   failed: Array<{ provider: string; reason: string }>;
 }
 
+/** One provider from the daemon-proxied models.dev directory. The daemon owns
+ * protocol inference and import validation; the GUI only presents the result. */
+export interface AppCatalogProvider {
+  id: string;
+  name: string;
+  wireType: string | null;
+  guessed: boolean;
+  needsBaseUrl: boolean;
+  rejected: boolean;
+  rejectReason: string | null;
+  envKey: string | null;
+  models: Array<{
+    id: string;
+    name?: string;
+    maxContextSize: number;
+    capabilities?: string[];
+    reasoning: boolean;
+  }>;
+}
+
+export interface CatalogProviderImportInput {
+  catalogId: string;
+  id?: string;
+  apiKey?: string;
+  baseUrl?: string;
+}
+
+export interface CatalogProviderImportResult {
+  provider: AppProvider;
+  modelsImported: number;
+}
+
+export interface RegistryProviderImportInput {
+  url: string;
+  apiKey?: string;
+}
+
+export interface RegistryProviderImportResult {
+  providers: AppProvider[];
+  modelsImported: number;
+}
+
 export interface AppConfigProvider {
   type: string;
   baseUrl?: string;
@@ -798,7 +848,7 @@ export interface AppSessionWarning {
 
 export interface KimiWebApi {
   getHealth(): Promise<{ status: 'ok'; uptimeSec: number }>;
-  getMeta(): Promise<{ serverVersion: string; serverId: string; startedAt: string; capabilities: Record<string, boolean>; openInApps: string[]; dangerousBypassAuth: boolean; backend: 'v1' | 'v2' }>;
+  getMeta(): Promise<{ serverVersion: string; serverId: string; startedAt: string; capabilities: Record<string, boolean>; experimentalFlags: Record<string, boolean>; openInApps: string[]; dangerousBypassAuth: boolean; backend: 'v1' | 'v2' }>;
   listSessions(input?: PageRequest & { busy?: boolean; workspaceId?: string; includeArchive?: boolean; archivedOnly?: boolean; excludeEmpty?: boolean }): Promise<Page<AppSession>>;
   createSession(input: { title?: string; cwd?: string; model?: string; workspaceId?: string; agentConfig?: AppAgentConfigInput }): Promise<AppSession>;
   /** Fetch one session by id (deep links beyond the first listSessions page). */
@@ -865,6 +915,9 @@ export interface KimiWebApi {
   addWorkspace(input: { root: string; name?: string }): Promise<AppWorkspace>;
   updateWorkspace(id: string, input: { name: string }): Promise<AppWorkspace>;
   deleteWorkspace(id: string): Promise<void>;
+  getWorkspaceTrust(id: string): Promise<{ trusted: boolean }>;
+  trustWorkspace(id: string): Promise<{ trusted: true }>;
+  untrustWorkspace(id: string): Promise<{ trusted: false }>;
   browseFs(path?: string): Promise<FsBrowseResult>;
   getFsHome(): Promise<{ home: string; recentRoots: string[] }>;
 
@@ -877,6 +930,10 @@ export interface KimiWebApi {
   refreshProvider(id: string): Promise<ProviderRefreshResult>;
   refreshAllProviders(): Promise<ProviderRefreshResult>;
   refreshOAuthProviderModels(): Promise<ProviderRefreshResult>;
+  listCatalogProviders(): Promise<AppCatalogProvider[]>;
+  getCatalogProvider(catalogId: string): Promise<AppCatalogProvider>;
+  importCatalogProvider(input: CatalogProviderImportInput): Promise<CatalogProviderImportResult>;
+  importProviderRegistry(input: RegistryProviderImportInput): Promise<RegistryProviderImportResult>;
 
   listTools(sessionId?: string): Promise<AppToolDescriptor[]>;
   listMcpServers(): Promise<AppMcpServer[]>;

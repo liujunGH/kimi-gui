@@ -13,7 +13,13 @@ import CodexIcon from '../layout/CodexIcon.vue';
 import ThreadRow from './ThreadRow.vue';
 import { sessionToThreadStatus } from './threadStatus';
 
-const props = defineProps<WorkspaceGroupProps & { pinnedIds?: string[]; activeWorkspace?: boolean }>();
+const props = defineProps<WorkspaceGroupProps & {
+  pinnedIds?: string[];
+  activeWorkspace?: boolean;
+  trusted?: boolean | null;
+  trustBusy?: boolean;
+  dragging?: boolean;
+}>();
 const emit = defineEmits<{
   (e: 'select-session', id: string): void;
   (e: 'toggle-pin', id: string): void;
@@ -21,11 +27,20 @@ const emit = defineEmits<{
   (e: 'rename-session', id: string): void;
   (e: 'export-session', id: string): void;
   (e: 'copy-session-id', id: string): void;
+  (e: 'fork-session', id: string): void;
   (e: 'set-sort', mode: WorkspaceSortMode): void;
   (e: 'select-workspace', id: string): void;
   (e: 'rename-workspace', id: string): void;
   (e: 'delete-workspace', id: string): void;
   (e: 'copy-path', root: string): void;
+  (e: 'toggle-workspace-pin', id: string): void;
+  (e: 'edit-workspace-emoji', id: string): void;
+  (e: 'inspect-trust', id: string): void;
+  (e: 'set-trust', id: string, trusted: boolean): void;
+  (e: 'drag-start', event: DragEvent, id: string): void;
+  (e: 'drag-over', event: DragEvent, id: string): void;
+  (e: 'drop', event: DragEvent, id: string): void;
+  (e: 'drag-end'): void;
 }>();
 
 const SORTS: { id: WorkspaceSortMode; label: string }[] = [
@@ -36,6 +51,10 @@ const SORTS: { id: WorkspaceSortMode; label: string }[] = [
 
 const closed = ref(false);
 const menuOpen = ref(false);
+const emptyWorkspace = computed(() => props.workspace.sessionCount === 0);
+const workspaceName = computed(
+  () => props.workspace.name.trim() || props.workspace.root || props.workspace.id || '未命名工作区',
+);
 
 const sortedSessions = computed(() => {
   const list = [...props.sessions];
@@ -52,6 +71,11 @@ function pickSort(m: WorkspaceSortMode) {
   menuOpen.value = false;
 }
 
+function toggleMenu(): void {
+  menuOpen.value = !menuOpen.value;
+  if (menuOpen.value) emit('inspect-trust', props.workspace.id);
+}
+
 function onDocClick(e: MouseEvent) {
   if (!(e.target as HTMLElement | null)?.closest('.workspace-header')) menuOpen.value = false;
 }
@@ -60,7 +84,15 @@ onUnmounted(() => document.removeEventListener('click', onDocClick));
 </script>
 
 <template>
-  <section class="workspace-group" :class="{ 'ws-closed': closed }">
+  <section
+    class="workspace-group"
+    :class="{ 'ws-closed': closed, 'workspace-group--dragging': props.dragging }"
+    draggable="true"
+    @dragstart="emit('drag-start', $event, props.workspace.id)"
+    @dragover="emit('drag-over', $event, props.workspace.id)"
+    @drop="emit('drop', $event, props.workspace.id)"
+    @dragend="emit('drag-end')"
+  >
     <div class="workspace-header" :class="{ 'menu-open': menuOpen }">
       <button class="ws-toggle" :title="closed ? '展开分组' : '折叠分组'" @click="closed = !closed">
         <CodexIcon name="chevron-down" />
@@ -71,9 +103,11 @@ onUnmounted(() => document.removeEventListener('click', onDocClick));
         :title="props.activeWorkspace ? '活跃工作区' : '设为活跃工作区'"
         @click.stop="emit('select-workspace', props.workspace.id)"
       >
-        {{ props.workspace.name }}
+        <span v-if="props.workspace.emoji" class="ws-emoji">{{ props.workspace.emoji }}</span>
+        {{ workspaceName }}
+        <span v-if="props.workspace.pinned" class="ws-pinned" title="已置顶"><CodexIcon name="pin" /></span>
       </button>
-      <button class="ws-action" title="更多" @click.stop="menuOpen = !menuOpen">
+      <button class="ws-action" title="更多" @click.stop="toggleMenu">
         <CodexIcon name="more" />
       </button>
       <div class="ws-menu" :class="{ open: menuOpen }">
@@ -90,9 +124,18 @@ onUnmounted(() => document.removeEventListener('click', onDocClick));
         </button>
         <div class="menu-sep"></div>
         <button class="menu-item" @click.stop="emit('rename-workspace', props.workspace.id); menuOpen = false"><span class="mi-label">重命名工作区</span></button>
+        <button class="menu-item" @click.stop="emit('edit-workspace-emoji', props.workspace.id); menuOpen = false"><span class="mi-label">{{ props.workspace.emoji ? '更改工作区图标' : '设置工作区图标' }}</span></button>
+        <button class="menu-item" @click.stop="emit('toggle-workspace-pin', props.workspace.id); menuOpen = false"><span class="mi-label">{{ props.workspace.pinned ? '取消置顶工作区' : '置顶工作区' }}</span></button>
         <button class="menu-item" @click.stop="emit('copy-path', props.workspace.root); menuOpen = false"><span class="mi-label">复制路径</span></button>
+        <button
+          class="menu-item"
+          :disabled="props.trustBusy || props.trusted == null"
+          @click.stop="emit('set-trust', props.workspace.id, !props.trusted); menuOpen = false"
+        >
+          <span class="mi-label">{{ props.trustBusy ? '正在读取信任状态…' : (props.trusted === null ? '重新添加后可设置信任' : (props.trusted ? '取消信任工作区' : '信任工作区')) }}</span>
+        </button>
         <div class="menu-sep"></div>
-        <button class="menu-item" @click.stop="emit('delete-workspace', props.workspace.id); menuOpen = false"><span class="mi-label">移除工作区</span></button>
+        <button class="menu-item" @click.stop="emit('delete-workspace', props.workspace.id); menuOpen = false"><span class="mi-label">{{ emptyWorkspace ? '移除空工作区' : '移除工作区' }}</span></button>
       </div>
     </div>
     <div class="ws-threads">
@@ -109,6 +152,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick));
         @rename="emit('rename-session', s.id)"
         @export="emit('export-session', s.id)"
         @copy-id="emit('copy-session-id', s.id)"
+        @fork="emit('fork-session', s.id)"
       />
     </div>
   </section>
@@ -126,4 +170,10 @@ onUnmounted(() => document.removeEventListener('click', onDocClick));
 .ws-name.ws-active {
   color: var(--accent);
 }
+.workspace-group--dragging { opacity: .48; }
+.workspace-group[draggable="true"] > .workspace-header { cursor: grab; }
+.workspace-group[draggable="true"] > .workspace-header:active { cursor: grabbing; }
+.ws-emoji { margin-right: 5px; }
+.ws-pinned { display: inline-grid; margin-left: 5px; color: var(--text-3); vertical-align: -2px; }
+.ws-pinned .ic { width: 12px; height: 12px; }
 </style>

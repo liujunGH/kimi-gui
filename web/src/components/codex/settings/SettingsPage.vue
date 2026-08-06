@@ -6,12 +6,15 @@
  * 替代原型期的本地 ref 占位。
  */
 import { computed, reactive, ref, watch } from 'vue';
-import type { PermissionMode } from '../../../types';
+import type { PermissionMode, WorkspaceView } from '../../../types';
 import type { AppSession, AppConfig, AppMcpServer, AppToolDescriptor } from '../../../api/types';
 import { getKimiWebApi } from '../../../api';
 import { setEphemeralCredential } from '../../../api/daemon/serverAuth';
 import CodexIcon from '../layout/CodexIcon.vue';
 import PromptDialog from '../layout/PromptDialog.vue';
+import TaskCenter from './TaskCenter.vue';
+import PerformanceSettings from './PerformanceSettings.vue';
+import CapabilitiesSettings from './CapabilitiesSettings.vue';
 import { useTheme } from '../../../composables/codex/useTheme';
 import { useKimiClient } from '../../../composables/codex/useKimiClient';
 import { useUpdater } from '../../../composables/codex/useUpdater';
@@ -24,6 +27,7 @@ import {
   type KimiEngineStatus,
   type KimiBackupInfo,
   type KimiMcpConfigEntry,
+  type OrphanSessionScanResult,
   type KimiWorkspaceContext,
 } from '../../../composables/useKimiRuntime';
 
@@ -33,10 +37,13 @@ type SettingsSectionId =
   | 'models-providers'
   | 'agents'
   | 'plugins-skills'
+  | 'capabilities'
   | 'mcp'
   | 'permissions'
   | 'hooks'
   | 'directories'
+  | 'tasks'
+  | 'performance'
   | 'shortcuts'
   | 'archive'
   | 'engine'
@@ -47,7 +54,9 @@ const props = withDefaults(defineProps<{ initialSection?: SettingsSectionId }>()
 });
 const emit = defineEmits<{
   (e: 'open-providers'): void;
+  (e: 'open-plugin-manager'): void;
   (e: 'launch-command', command: string): void;
+  (e: 'open-session', id: string): void;
 }>();
 
 const client = useKimiClient();
@@ -62,6 +71,7 @@ const NAV: Array<{ label: string; items: Array<{ id: SettingsSectionId; label: s
     { id: 'models-providers', label: '模型与 Provider', icon: 'bot' },
     { id: 'agents', label: 'Agents', icon: 'sparkle' },
     { id: 'plugins-skills', label: '插件与 Skills', icon: 'apps' },
+    { id: 'capabilities', label: 'Capabilities', icon: 'sparkle' },
     { id: 'mcp', label: 'MCP 服务', icon: 'terminal' },
   ] },
   { label: '安全与控制', items: [
@@ -69,8 +79,10 @@ const NAV: Array<{ label: string; items: Array<{ id: SettingsSectionId; label: s
     { id: 'hooks', label: 'Hooks', icon: 'git-branch' },
   ] },
   { label: '数据与系统', items: [
+    { id: 'tasks', label: '任务中心', icon: 'check-circle' },
     { id: 'directories', label: '工作区目录', icon: 'file' },
     { id: 'archive', label: '归档与导入', icon: 'archive' },
+    { id: 'performance', label: '运行与性能', icon: 'sliders' },
     { id: 'engine', label: 'Kimi Engine', icon: 'terminal' },
     { id: 'about', label: '关于', icon: 'info' },
   ] },
@@ -98,9 +110,73 @@ const defaultModelId = computed<string>({
   get: () => (client.config.value as AppConfig | null)?.defaultModel ?? client.defaultModel.value ?? '',
   set: (v) => void client.updateConfig({ defaultModel: v }),
 });
+const defaultThinkingEnabled = computed<boolean>({
+  get: () => {
+    const thinking = (client.config.value as AppConfig | null)?.thinking;
+    return !thinking || thinking.enabled !== false;
+  },
+  set: (enabled) => {
+    const existing = (client.config.value as AppConfig | null)?.thinking ?? {};
+    void client.updateConfig({ thinking: { ...existing, enabled } });
+  },
+});
+const defaultPlanMode = computed<boolean>({
+  get: () => (client.config.value as AppConfig | null)?.defaultPlanMode === true,
+  set: (enabled) => void client.updateConfig({ defaultPlanMode: enabled }),
+});
 const secondaryEffort = ref(
   (client.config.value as AppConfig | null)?.secondaryModel?.defaultEffort ?? 'low',
 );
+const secondaryModelExperimentEnabled = computed(
+  () => client.experimentalFlags.value['secondary-model'] === true,
+);
+const enabledExperimentNames = computed(() =>
+  Object.entries(client.experimentalFlags.value)
+    .filter(([, enabled]) => enabled)
+    .map(([name]) => name)
+    .sort(),
+);
+const experimentSaving = ref('');
+const EXPERIMENT_COPY: Record<string, { label: string; description: string }> = {
+  micro_compaction: {
+    label: '微压缩',
+    description: '自动清理较旧的大型工具结果，减少上下文占用，同时保留最近对话。',
+  },
+  'tool-select': {
+    label: '按需加载工具',
+    description: '支持的模型只在需要时加载 MCP 工具 schema，可改善 prompt cache 与长会话性能。',
+  },
+  'secondary-model': {
+    label: '次级模型路由',
+    description: '允许 Agent / Swarm 把子任务路由到次级模型；GUI 启动的 Engine 会自动启用。',
+  },
+};
+const experimentRows = computed(() => {
+  const configured = (client.config.value as AppConfig | null)?.experimental ?? {};
+  const runtime = client.experimentalFlags.value;
+  const ids = new Set(['micro_compaction', 'tool-select', ...Object.keys(configured), ...Object.keys(runtime)]);
+  return [...ids].sort().map((id) => ({
+    id,
+    label: EXPERIMENT_COPY[id]?.label ?? id,
+    description: EXPERIMENT_COPY[id]?.description ?? '由当前 Kimi Engine 报告的实验能力。',
+    enabled: runtime[id] ?? configured[id] ?? false,
+    configured: configured[id],
+    locked: id !== 'micro_compaction' && id !== 'tool-select',
+  }));
+});
+async function setExperiment(id: string, enabled: boolean): Promise<void> {
+  if (id === 'secondary-model') return;
+  experimentSaving.value = id;
+  try {
+    const current = (client.config.value as AppConfig | null)?.experimental ?? {};
+    await client.updateConfig({ experimental: { ...current, [id]: enabled } });
+    toast(`${EXPERIMENT_COPY[id]?.label ?? id}已${enabled ? '启用' : '停用'}；新会话会使用该设置`);
+  } catch (error) {
+    toast(error instanceof Error ? error.message : '实验功能保存失败');
+  } finally {
+    experimentSaving.value = '';
+  }
+}
 const secondaryModelId = computed<string>({
   get: () => (client.config.value as AppConfig | null)?.secondaryModel?.model ?? '',
   set: (model) => void client.updateConfig({
@@ -189,6 +265,13 @@ const skillsBySource = computed(() => {
   }
   return [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b));
 });
+const skillCount = computed(() => client.skills.value.length);
+const toolCounts = computed(() => ({
+  builtin: tools.value.filter((tool) => tool.source === 'builtin').length,
+  skill: tools.value.filter((tool) => tool.source === 'skill').length,
+  mcp: tools.value.filter((tool) => tool.source === 'mcp').length,
+  active: tools.value.filter((tool) => tool.active !== false).length,
+}));
 
 /* ---------- MCP ---------- */
 const mcpConfig = ref<KimiMcpConfigEntry[]>([]);
@@ -285,6 +368,28 @@ async function restartMcp(id: string): Promise<void> {
 type PermissionDecision = 'allow' | 'deny' | 'ask';
 interface PermissionRule { decision: PermissionDecision; scope: string; pattern: string; reason: string }
 interface HookRule { event: string; matcher: string; command: string; timeout: number }
+const HOOK_EVENT_TYPES = [
+  'PreToolUse',
+  'PostToolUse',
+  'PostToolUseFailure',
+  'PermissionRequest',
+  'PermissionResult',
+  'UserPromptSubmit',
+  'UserPromptQueued',
+  'TurnStarted',
+  'Stop',
+  'StopFailure',
+  'Interrupt',
+  'SessionStart',
+  'SessionEnd',
+  'SessionHeartbeat',
+  'SubagentStart',
+  'SubagentStop',
+  'TaskStarted',
+  'PreCompact',
+  'PostCompact',
+  'Notification',
+] as const;
 const permissionRules = ref<PermissionRule[]>([]);
 const hooks = ref<HookRule[]>([]);
 function loadControlConfig(): void {
@@ -319,7 +424,7 @@ async function savePermissionRules(): Promise<void> {
 async function saveHooks(): Promise<void> {
   const value = hooks.value
     .filter((hook) => hook.event.trim() && hook.command.trim())
-    .map((hook) => ({ event: hook.event.trim(), ...(hook.matcher.trim() ? { matcher: hook.matcher.trim() } : {}), command: hook.command.trim(), timeout: Math.max(1, Number(hook.timeout) || 30) }));
+    .map((hook) => ({ event: hook.event.trim(), ...(hook.matcher.trim() ? { matcher: hook.matcher.trim() } : {}), command: hook.command.trim(), timeout: Math.min(600, Math.max(1, Number(hook.timeout) || 30)) }));
   await client.updateConfig({ hooks: value });
   toast('Hooks 已保存；后续事件将使用新配置');
 }
@@ -394,6 +499,7 @@ const engine = ref<KimiEngineStatus | null>(null);
 const maintenanceBusy = ref('');
 const maintenanceOutput = ref('');
 const restartConfirmOpen = ref(false);
+const restartReason = ref<'manual' | 'restore'>('manual');
 
 function versionParts(version?: string): number[] | null {
   if (!version) return null;
@@ -418,8 +524,16 @@ const restartDescription = computed(() => {
   const runningWarning = client.working.value
     ? '当前任务仍在运行，重启会中断这次执行。'
     : '重启会短暂断开连接，并中断 daemon 中尚未结束的任务。';
-  return `${runningWarning} GUI 会在新 daemon 就绪后自动重连。`;
+  const restoreReason = restartReason.value === 'restore'
+    ? '当前 Kimi Engine 恢复归档任务后，需要重新启动才能可靠地继续对话。'
+    : '';
+  return `${restoreReason}${runningWarning} GUI 会在新 daemon 就绪后自动重连。`;
 });
+
+function requestDaemonRestart(reason: 'manual' | 'restore'): void {
+  restartReason.value = reason;
+  restartConfirmOpen.value = true;
+}
 
 async function loadEngine(): Promise<void> {
   if (!nativeAvailable) return;
@@ -458,6 +572,22 @@ async function runMaintenance(action: 'doctor-config' | 'doctor-tui' | 'migrate'
   } catch (error) {
     maintenanceOutput.value = error instanceof Error ? error.message : String(error);
     toast('Kimi Engine 操作失败');
+  } finally {
+    maintenanceBusy.value = '';
+  }
+}
+async function migrate033Config(): Promise<void> {
+  maintenanceBusy.value = 'migrate-033';
+  maintenanceOutput.value = '';
+  try {
+    const result = await kimiRuntime.migrate033Config();
+    maintenanceOutput.value = result.changed
+      ? `已迁移 ${result.renamedKeys.join('、')}\n备份：${result.backupPath ?? '未生成'}`
+      : '未发现需要迁移的 0.33 配置键';
+    toast(result.changed ? 'Kimi 0.33 配置已迁移' : '配置无需迁移');
+  } catch (error) {
+    maintenanceOutput.value = error instanceof Error ? error.message : String(error);
+    toast('Kimi 0.33 配置迁移失败');
   } finally {
     maintenanceBusy.value = '';
   }
@@ -504,6 +634,8 @@ function setFontSize(px: number) {
 const archivedSessions = ref<AppSession[]>([]);
 const archiveQuery = ref('');
 const archiveSelectedIds = ref<string[]>([]);
+const archiveDeleteIds = ref<string[]>([]);
+const archiveDeleting = ref(false);
 const archiveFiltered = computed(() => {
   const query = archiveQuery.value.trim().toLocaleLowerCase();
   if (!query) return archivedSessions.value;
@@ -520,6 +652,14 @@ const archiveAllVisibleSelected = computed(() =>
 const backupBusy = ref(false);
 const backupInfo = ref<KimiBackupInfo | null>(null);
 const restoreArmed = ref(false);
+const orphanScan = ref<OrphanSessionScanResult | null>(null);
+const orphanDetecting = ref(false);
+const orphanCleaning = ref(false);
+const orphanCleanupProgress = ref('');
+const orphanConfirmMode = ref<'delete' | 'backup' | null>(null);
+const emptyWorkspaceScan = ref<WorkspaceView[]>([]);
+const emptyWorkspaceCleaning = ref(false);
+const emptyWorkspaceConfirmOpen = ref(false);
 /** 应用版本(构建期注入,单一来源 tauri.conf.json) */
 const appVersion = __APP_VERSION__;
 
@@ -555,12 +695,76 @@ async function loadArchive() {
     archivedLoading.value = false;
   }
 }
+async function detectOrphanSessions(): Promise<void> {
+  if (!nativeAvailable || orphanDetecting.value || orphanCleaning.value) return;
+  orphanDetecting.value = true;
+  try {
+    orphanScan.value = await kimiRuntime.detectOrphanSessions();
+    emptyWorkspaceScan.value = client.workspacesView.value.filter(
+      (workspace) => workspace.sessionCount === 0,
+    );
+    const parts = [];
+    if (orphanScan.value.items.length) parts.push(`${orphanScan.value.items.length} 个失效任务`);
+    if (emptyWorkspaceScan.value.length) parts.push(`${emptyWorkspaceScan.value.length} 个空工作区`);
+    toast(parts.length ? `发现 ${parts.join('、')}` : '未发现需要清理的数据');
+  } catch (error) {
+    orphanScan.value = null;
+    emptyWorkspaceScan.value = [];
+    toast(error instanceof Error ? error.message : '检测失效任务失败');
+  } finally {
+    orphanDetecting.value = false;
+  }
+}
+async function removeDetectedEmptyWorkspaces(): Promise<void> {
+  const items = [...emptyWorkspaceScan.value];
+  emptyWorkspaceConfirmOpen.value = false;
+  if (!items.length || emptyWorkspaceCleaning.value) return;
+  emptyWorkspaceCleaning.value = true;
+  try {
+    for (const workspace of items) await client.deleteWorkspace(workspace.id);
+    emptyWorkspaceScan.value = [];
+    toast(`已移除 ${items.length} 个空工作区；目录和会话数据均未删除`);
+  } finally {
+    emptyWorkspaceCleaning.value = false;
+  }
+}
+function requestOrphanCleanup(mode: 'delete' | 'backup'): void {
+  if (!orphanScan.value?.items.length || orphanCleaning.value) return;
+  orphanConfirmMode.value = mode;
+}
+async function cleanupDetectedOrphans(): Promise<void> {
+  const mode = orphanConfirmMode.value;
+  const items = [...(orphanScan.value?.items ?? [])];
+  orphanConfirmMode.value = null;
+  if (!mode || !items.length) return;
+  orphanCleaning.value = true;
+  const failed = [];
+  let cleaned = 0;
+  for (const [index, item] of items.entries()) {
+    orphanCleanupProgress.value = `正在处理 ${index + 1}/${items.length}`;
+    const result = await client.cleanupOrphanSession(item.sessionId, mode === 'backup');
+    if (result) cleaned += 1;
+    else failed.push(item);
+  }
+  const failedIds = new Set(failed.map((item) => item.sessionId));
+  orphanScan.value = {
+    items: failed,
+    totalBytes: failed.reduce((sum, item) => sum + item.bytes, 0),
+  };
+  orphanCleanupProgress.value = '';
+  orphanCleaning.value = false;
+  toast(
+    `已清理 ${cleaned} 个失效任务${failedIds.size ? `，${failedIds.size} 个失败` : ''}`,
+  );
+}
 /** 恢复归档会话(返回成功则移出列表) */
 async function onRestore(id: string) {
   const ok = await client.restoreSession(id);
   if (ok) {
     archivedSessions.value = archivedSessions.value.filter((s) => s.id !== id);
     archiveSelectedIds.value = archiveSelectedIds.value.filter((value) => value !== id);
+    if (nativeAvailable) requestDaemonRestart('restore');
+    else toast('任务已恢复；请重启 Kimi Engine 后再继续对话');
   }
 }
 function toggleArchiveSelection(id: string): void {
@@ -582,6 +786,32 @@ async function restoreSelectedArchives(): Promise<void> {
   archivedSessions.value = archivedSessions.value.filter((session) => !restored.has(session.id));
   archiveSelectedIds.value = archiveSelectedIds.value.filter((id) => !restored.has(id));
   toast(`已恢复 ${restored.size} 条${restored.size < ids.length ? `，${ids.length - restored.size} 条失败` : ''}`);
+  if (restored.size) {
+    if (nativeAvailable) requestDaemonRestart('restore');
+    else toast('继续已恢复的对话前，请先重启 Kimi Engine');
+  }
+}
+function requestDeleteArchived(ids: string[]): void {
+  archiveDeleteIds.value = [...new Set(ids.filter(Boolean))];
+}
+async function deleteSelectedArchives(): Promise<void> {
+  const ids = [...archiveDeleteIds.value];
+  archiveDeleteIds.value = [];
+  if (!nativeAvailable || !ids.length || archiveDeleting.value) return;
+  archiveDeleting.value = true;
+  const deleted = new Set<string>();
+  for (const id of ids) {
+    try {
+      await kimiRuntime.deleteArchivedSession(id);
+      deleted.add(id);
+    } catch (error) {
+      console.warn('[settings] permanently delete archived session failed', id, error);
+    }
+  }
+  archivedSessions.value = archivedSessions.value.filter((session) => !deleted.has(session.id));
+  archiveSelectedIds.value = archiveSelectedIds.value.filter((id) => !deleted.has(id));
+  archiveDeleting.value = false;
+  toast(`已永久删除 ${deleted.size} 条归档对话${deleted.size < ids.length ? `，${ids.length - deleted.size} 条失败` : ''}`);
 }
 function formatBackupBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -691,18 +921,54 @@ watch(() => props.initialSection, (section) => { active.value = section; });
           <!-- 通用 -->
           <section class="settings-section" :class="{ active: active === 'general' }" id="general">
             <h2>通用</h2>
+            <h3 class="settings-group-title">新任务默认值</h3>
             <div class="setting-row">
               <div class="setting-info">
                 <div class="setting-label">默认权限模式</div>
               </div>
               <div class="setting-control">
-                <select v-model="permDefault" class="control">
+                <select v-model="permDefault" class="control" aria-label="默认权限模式">
                   <option value="manual">逐条确认</option>
                   <option value="yolo">YOLO · 自动批准工具，仍可提问</option>
                   <option value="auto">自动 · 完全自主，不再提问</option>
                 </select>
               </div>
             </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">默认模型</div>
+              </div>
+              <div class="setting-control">
+                <select v-model="defaultModelId" class="control" aria-label="默认模型">
+                  <option v-for="m in modelOptions" :key="m.id" :value="m.id">{{ m.name }}</option>
+                </select>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">默认开启思考</div>
+                <div class="setting-desc">新任务使用模型默认思考强度；关闭后默认不启用扩展思考。</div>
+              </div>
+              <div class="setting-control">
+                <label class="switch">
+                  <input v-model="defaultThinkingEnabled" type="checkbox" aria-label="默认开启思考" />
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">默认计划模式</div>
+                <div class="setting-desc">新任务默认先制定计划，再进入执行。</div>
+              </div>
+              <div class="setting-control">
+                <label class="switch">
+                  <input v-model="defaultPlanMode" type="checkbox" aria-label="默认计划模式" />
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+            </div>
+            <h3 class="settings-group-title">输入与提醒</h3>
             <div class="setting-row">
               <div class="setting-info">
                 <div class="setting-label">发送快捷键</div>
@@ -716,22 +982,12 @@ watch(() => props.initialSection, (section) => { active.value = section; });
             </div>
             <div class="setting-row">
               <div class="setting-info">
-                <div class="setting-label">默认模型</div>
-              </div>
-              <div class="setting-control">
-                <select v-model="defaultModelId" class="control">
-                  <option v-for="m in modelOptions" :key="m.id" :value="m.id">{{ m.name }}</option>
-                </select>
-              </div>
-            </div>
-            <div class="setting-row">
-              <div class="setting-info">
                 <div class="setting-label">完成时通知</div>
                 <div class="setting-desc">agent 完成任务后发送系统通知</div>
               </div>
               <div class="setting-control">
                 <label class="switch">
-                  <input v-model="notifyComplete" type="checkbox" />
+                  <input v-model="notifyComplete" type="checkbox" aria-label="完成时通知" />
                   <span class="switch-slider"></span>
                 </label>
               </div>
@@ -742,7 +998,7 @@ watch(() => props.initialSection, (section) => { active.value = section; });
               </div>
               <div class="setting-control">
                 <label class="switch">
-                  <input v-model="notifyQuestion" type="checkbox" />
+                  <input v-model="notifyQuestion" type="checkbox" aria-label="提问时通知" />
                   <span class="switch-slider"></span>
                 </label>
               </div>
@@ -753,7 +1009,7 @@ watch(() => props.initialSection, (section) => { active.value = section; });
               </div>
               <div class="setting-control">
                 <label class="switch">
-                  <input v-model="notifyApproval" type="checkbox" />
+                  <input v-model="notifyApproval" type="checkbox" aria-label="审批时通知" />
                   <span class="switch-slider"></span>
                 </label>
               </div>
@@ -764,7 +1020,7 @@ watch(() => props.initialSection, (section) => { active.value = section; });
               </div>
               <div class="setting-control">
                 <label class="switch">
-                  <input v-model="soundComplete" type="checkbox" />
+                  <input v-model="soundComplete" type="checkbox" aria-label="完成时播放声音" />
                   <span class="switch-slider"></span>
                 </label>
               </div>
@@ -805,16 +1061,19 @@ watch(() => props.initialSection, (section) => { active.value = section; });
                 <div class="setting-desc">Agent / Swarm 子任务优先使用；未设置时继承主模型。只影响新创建的子任务。</div>
               </div>
               <div class="setting-control settings-inline-controls">
-                <select v-model="secondaryModelId" class="control">
+                <select v-model="secondaryModelId" class="control" aria-label="次级模型" :disabled="!secondaryModelExperimentEnabled">
                   <option value="">继承主模型</option>
                   <option v-for="m in modelOptions" :key="m.id" :value="m.id">{{ m.name }}</option>
                 </select>
-                <select v-model="secondaryEffort" class="control compact" :disabled="!secondaryModelId" @change="saveSecondaryEffort">
+                <select v-model="secondaryEffort" class="control compact" aria-label="次级模型思考强度" :disabled="!secondaryModelExperimentEnabled || !secondaryModelId" @change="saveSecondaryEffort">
                   <option value="low">Low</option>
                   <option value="high">High</option>
                   <option value="max">Max</option>
                 </select>
               </div>
+            </div>
+            <div v-if="!secondaryModelExperimentEnabled" class="settings-callout">
+              当前 daemon 没有启用 <code>secondary-model</code> 实验，次级模型不会参与 Agent / Swarm 路由。
             </div>
             <div v-if="client.providers.value.length" class="archive-preview">
               <div class="ap-head">已配置 Provider</div>
@@ -833,7 +1092,7 @@ watch(() => props.initialSection, (section) => { active.value = section; });
           <section class="settings-section" :class="{ active: active === 'agents' }" id="agents">
             <h2>Agents</h2>
             <div v-if="!nativeAvailable" class="settings-callout">Agent 文件管理仅在桌面应用中可用；浏览器模式仍可使用 daemon 已发现的 Skills。</div>
-            <template v-else>
+            <template v-if="nativeAvailable">
               <div class="setting-row top-aligned">
                 <div class="setting-info">
                   <div class="setting-label">SYSTEM.md</div>
@@ -883,16 +1142,32 @@ watch(() => props.initialSection, (section) => { active.value = section; });
           <!-- 插件与 Skills -->
           <section class="settings-section" :class="{ active: active === 'plugins-skills' }" id="plugins-skills">
             <h2>插件与 Skills</h2>
-            <div class="settings-callout subtle">Skills 是当前会话可直接调用的能力；插件的安装、启停和重载由 Kimi 官方插件管理器完成，变更通常在新会话或重载后生效。</div>
+            <div class="settings-callout subtle">这里展示 daemon 为当前会话实际加载的 Skills、MCP 与内置工具。当前 daemon REST 尚未提供插件管理接口；桌面版可在应用内运行官方插件管理器，所有变更仍由 Kimi CLI 执行。</div>
             <div class="setting-row">
               <div class="setting-info">
-                <div class="setting-label">插件管理器</div>
-                <div class="setting-desc">在输入框中打开 <code>/plugins</code>，继续选择 list / install / enable / disable / reload。</div>
+                <div class="setting-label">官方插件管理器</div>
+                <div class="setting-desc">安装、浏览市场、启停、MCP 开关、删除与重载均使用当前 Kimi Code 的原生 <code>/plugins</code> 流程，不会跳到外部终端。</div>
               </div>
               <div class="setting-control settings-button-row">
-                <button class="btn primary" @click="emit('launch-command', '/plugins ')">打开插件管理</button>
+                <button class="btn primary" :disabled="!nativeAvailable || !activeWorkspaceRoot" @click="emit('open-plugin-manager')">应用内管理</button>
+              </div>
+            </div>
+            <div v-if="!nativeAvailable" class="settings-callout">浏览器模式不能启动本机 PTY；请在 Kimi GUI 桌面应用中打开插件管理器。</div>
+            <div v-else-if="!activeWorkspaceRoot" class="settings-callout">请先在主界面选择一个工作区；插件状态是全局的，但官方 TUI 需要从一个已登记的工作区启动。</div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">当前会话能力</div>
+                <div class="setting-desc">数据直接来自正在连接的 Kimi Engine，不根据本地目录猜测安装状态。</div>
+              </div>
+              <div class="setting-control settings-button-row">
                 <button class="btn" :disabled="toolsLoading" @click="loadTools">刷新能力</button>
               </div>
+            </div>
+            <div class="capability-summary" aria-label="当前会话能力统计">
+              <div><strong>{{ skillCount }}</strong><span>Skills</span></div>
+              <div><strong>{{ toolCounts.skill }}</strong><span>Skill 工具</span></div>
+              <div><strong>{{ toolCounts.mcp }}</strong><span>MCP 工具</span></div>
+              <div><strong>{{ toolCounts.builtin }}</strong><span>内置工具</span></div>
             </div>
             <div v-if="skillsBySource.length" class="capability-groups">
               <div v-for="[source, sourceSkills] in skillsBySource" :key="source" class="capability-group">
@@ -907,8 +1182,18 @@ watch(() => props.initialSection, (section) => { active.value = section; });
             <div v-else class="archive-empty">当前工作区或会话没有发现可调用 Skill</div>
             <div class="setting-row">
               <div class="setting-info"><div class="setting-label">运行时工具</div><div class="setting-desc">{{ tools.length }} 个工具；MCP 工具会标记来源。</div></div>
-              <div class="setting-control"><span class="pill">{{ toolsLoading ? '加载中…' : `${tools.filter(t => t.active !== false).length} 可用` }}</span></div>
+              <div class="setting-control"><span class="pill">{{ toolsLoading ? '加载中…' : `${toolCounts.active} 可用` }}</span></div>
             </div>
+            <div v-if="tools.length" class="tool-list">
+              <div v-for="tool in tools" :key="`${tool.source}:${tool.mcpServerId || ''}:${tool.name}`" class="tool-row">
+                <span class="pill">{{ tool.source }}</span><strong>{{ tool.name }}</strong><span>{{ tool.description || '无描述' }}</span><em :class="{ ok: tool.active !== false }">{{ tool.active === false ? '未启用' : '可用' }}</em>
+              </div>
+            </div>
+          </section>
+
+          <section class="settings-section" :class="{ active: active === 'capabilities' }" id="capabilities">
+            <h2>Capabilities</h2>
+            <CapabilitiesSettings :runtime-version="client.serverVersion.value || undefined" @manage="emit('open-plugin-manager')" />
           </section>
 
           <!-- MCP -->
@@ -1061,14 +1346,17 @@ watch(() => props.initialSection, (section) => { active.value = section; });
           <!-- Hooks -->
           <section class="settings-section" :class="{ active: active === 'hooks' }" id="hooks">
             <h2>Hooks</h2>
-            <div class="settings-callout subtle">Hook 会在匹配事件发生时执行本机命令。保存前请确认命令来源；超时用于防止 Hook 长时间阻塞 Agent。</div>
+            <div class="settings-callout subtle">Hook 会在匹配事件发生时执行本机命令。已包含 Kimi Code 0.32 新增的 TurnStarted、UserPromptQueued、TaskStarted 和 SessionHeartbeat；保存前请确认命令来源。</div>
+            <datalist id="kimi-hook-events">
+              <option v-for="eventName in HOOK_EVENT_TYPES" :key="eventName" :value="eventName"></option>
+            </datalist>
             <div class="settings-subhead"><div><strong>事件 Hook</strong><span>{{ hooks.length }} 条</span></div><button class="btn" @click="hooks.push({ event: '', matcher: '', command: '', timeout: 30 })"><CodexIcon name="plus" /> 添加 Hook</button></div>
             <div v-if="hooks.length" class="rule-list hook-list">
               <div v-for="(hook, index) in hooks" :key="index" class="rule-row hook-row">
-                <input v-model="hook.event" class="control" placeholder="event" />
+                <input v-model="hook.event" class="control" list="kimi-hook-events" placeholder="选择或输入 event" />
                 <input v-model="hook.matcher" class="control" placeholder="matcher（可选）" />
                 <input v-model="hook.command" class="control rule-pattern" placeholder="command" />
-                <label class="timeout-field"><input v-model.number="hook.timeout" class="control compact" type="number" min="1" /> 秒</label>
+                <label class="timeout-field"><input v-model.number="hook.timeout" class="control compact" type="number" min="1" max="600" /> 秒</label>
                 <button class="icon-btn" aria-label="删除 Hook" @click="hooks.splice(index, 1)"><CodexIcon name="trash" /></button>
               </div>
               <div class="settings-button-row"><button class="btn primary" @click="saveHooks">保存 Hooks</button></div>
@@ -1133,6 +1421,13 @@ watch(() => props.initialSection, (section) => { active.value = section; });
           </section>
 
           <!-- 工作区目录 -->
+          <section class="settings-section" :class="{ active: active === 'tasks' }" id="tasks">
+            <h2>任务中心</h2>
+            <div class="settings-callout subtle">集中搜索、筛选、归档、恢复、导出和永久删除任务。结果按批次渲染，不会扩展侧栏 DOM。</div>
+            <TaskCenter @open-session="emit('open-session', $event)" />
+          </section>
+
+          <!-- 工作区目录 -->
           <section class="settings-section" :class="{ active: active === 'directories' }" id="directories">
             <h2>工作区目录</h2>
             <div v-if="!activeWorkspaceRoot" class="settings-callout">先选择一个工作区，再为它配置附加目录。</div>
@@ -1191,8 +1486,46 @@ watch(() => props.initialSection, (section) => { active.value = section; });
               </div>
             </div>
 
+            <div class="settings-subhead">
+              <div><strong>失效数据清理</strong><span>检测工作区已经不存在的任务，以及没有任何任务的空工作区；正常任务不会被处理。</span></div>
+              <button class="btn" :disabled="!nativeAvailable || orphanDetecting || orphanCleaning || emptyWorkspaceCleaning" @click="detectOrphanSessions">
+                <CodexIcon name="search" /> {{ orphanDetecting ? '检测中…' : '一键检测' }}
+              </button>
+            </div>
+            <div v-if="orphanScan && !orphanScan.items.length && !emptyWorkspaceScan.length" class="settings-callout subtle">未发现需要清理的失效任务或空工作区。</div>
+            <div v-if="orphanScan?.items.length" class="archive-preview orphan-preview">
+              <div class="ap-head">发现 {{ orphanScan.items.length }} 个失效任务 · {{ formatBackupBytes(orphanScan.totalBytes) }}</div>
+              <div v-for="item in orphanScan.items" :key="item.sessionId" class="archive-item">
+                <span class="ai-icon"><CodexIcon name="alert-triangle" /></span>
+                <div class="ai-info">
+                  <div class="ai-name">{{ item.title }}</div>
+                  <div class="ai-meta">{{ item.workDir }} · {{ formatBackupBytes(item.bytes) }}</div>
+                </div>
+              </div>
+              <div class="settings-button-row orphan-actions">
+                <span v-if="orphanCleaning" class="setting-desc">{{ orphanCleanupProgress }}</span>
+                <button class="btn" :disabled="orphanCleaning" @click="requestOrphanCleanup('backup')">全部备份后清理</button>
+                <button class="btn danger" :disabled="orphanCleaning" @click="requestOrphanCleanup('delete')">全部直接清理</button>
+              </div>
+            </div>
+            <div v-if="emptyWorkspaceScan.length" class="archive-preview orphan-preview">
+              <div class="ap-head">发现 {{ emptyWorkspaceScan.length }} 个空工作区</div>
+              <div v-for="(workspace, index) in emptyWorkspaceScan" :key="`${workspace.id || workspace.root || 'empty'}-${index}`" class="archive-item">
+                <span class="ai-icon"><CodexIcon name="folder" /></span>
+                <div class="ai-info">
+                  <div class="ai-name">{{ workspace.name || workspace.root || workspace.id || '未命名工作区' }}</div>
+                  <div class="ai-meta">{{ workspace.root || '未记录工作区路径' }}</div>
+                </div>
+              </div>
+              <div class="settings-button-row orphan-actions">
+                <button class="btn danger" :disabled="emptyWorkspaceCleaning" @click="emptyWorkspaceConfirmOpen = true">
+                  {{ emptyWorkspaceCleaning ? '移除中…' : '全部移除空工作区' }}
+                </button>
+              </div>
+            </div>
+
             <div class="settings-subhead archive-subhead">
-              <div><strong>已归档对话</strong><span>{{ archivedSessions.length }} 条，可搜索、选择并批量恢复。</span></div>
+              <div><strong>已归档对话</strong><span>{{ archivedSessions.length }} 条，可搜索、恢复或永久删除。</span></div>
               <button class="btn" @click="loadArchive" :disabled="archivedLoading">{{ archivedLoading ? '加载中…' : '刷新' }}</button>
             </div>
             <div class="setting-row">
@@ -1200,6 +1533,7 @@ watch(() => props.initialSection, (section) => { active.value = section; });
               <div class="setting-control settings-button-row">
                 <button class="btn" :disabled="!archiveFiltered.length" @click="toggleVisibleArchives">{{ archiveAllVisibleSelected ? '取消全选' : '选择当前结果' }}</button>
                 <button class="btn primary" :disabled="!archiveSelectedIds.length" @click="restoreSelectedArchives">恢复所选（{{ archiveSelectedIds.length }}）</button>
+                <button class="btn danger" :disabled="!nativeAvailable || !archiveSelectedIds.length || archiveDeleting" @click="requestDeleteArchived(archiveSelectedIds)">永久删除所选（{{ archiveSelectedIds.length }}）</button>
               </div>
             </div>
 
@@ -1212,11 +1546,21 @@ watch(() => props.initialSection, (section) => { active.value = section; });
                   <div class="ai-name">{{ s.title || s.id }}</div>
                   <div class="ai-meta">归档于 {{ s.updatedAt ? formatLocalDate(s.updatedAt) : '未知' }}<template v-if="s.cwd"> · {{ s.cwd }}</template></div>
                 </div>
-                <button class="ai-restore" @click="onRestore(s.id)">恢复</button>
+                <div class="settings-button-row">
+                  <button class="ai-restore" @click="onRestore(s.id)">恢复</button>
+                  <button class="ai-restore danger" :disabled="!nativeAvailable || archiveDeleting" @click="requestDeleteArchived([s.id])">永久删除</button>
+                </div>
               </div>
               <div v-if="!archiveFiltered.length" class="archive-empty">没有匹配的归档对话</div>
             </div>
             <div v-else-if="!archivedLoading" class="archive-empty">暂无归档对话</div>
+          </section>
+
+          <!-- Kimi Engine -->
+          <section class="settings-section" :class="{ active: active === 'performance' }" id="performance">
+            <h2>运行与性能</h2>
+            <div class="settings-callout subtle">配置 Agent 步数、后台并发、超时、上下文预算和图像读取。保存时保留 config.toml 中不相关的官方或自定义字段。</div>
+            <PerformanceSettings />
           </section>
 
           <!-- Kimi Engine -->
@@ -1235,7 +1579,7 @@ watch(() => props.initialSection, (section) => { active.value = section; });
                   <button
                     class="btn"
                     :disabled="Boolean(maintenanceBusy) || !engine?.installed || (engineVersionRelation !== null && engineVersionRelation < 0)"
-                    @click="restartConfirmOpen = true"
+                    @click="requestDaemonRestart('manual')"
                   >{{ maintenanceBusy === 'restart' ? '重启中…' : `使用 CLI ${engine?.version ?? ''} 重启` }}</button>
                 </div>
               </div>
@@ -1251,13 +1595,32 @@ watch(() => props.initialSection, (section) => { active.value = section; });
                   <button class="btn" :disabled="Boolean(maintenanceBusy)" @click="runMaintenance('doctor-config')">检查 config</button>
                   <button class="btn" :disabled="Boolean(maintenanceBusy)" @click="runMaintenance('doctor-tui')">检查 TUI</button>
                   <button class="btn" :disabled="Boolean(maintenanceBusy)" @click="runMaintenance('migrate')">迁移旧 Kimi</button>
+                  <button class="btn" :disabled="Boolean(maintenanceBusy)" @click="migrate033Config">迁移 0.33 配置</button>
                   <button class="btn" :disabled="Boolean(maintenanceBusy)" @click="runMaintenance('update')">{{ maintenanceBusy === 'update' ? '更新中…' : '更新 Kimi CLI' }}</button>
                   <button class="btn" :disabled="Boolean(maintenanceBusy) || !client.activeSessionId.value" @click="runMaintenance('visualizer')">打开 Visualizer</button>
                 </div>
               </div>
               <pre v-if="maintenanceOutput" class="maintenance-output">{{ maintenanceOutput }}</pre>
-              <div class="settings-callout subtle">次级模型实验开关会在 GUI 自己启动 Kimi Engine 时启用；若复用了外部 daemon，请用相同环境变量启动后再使用次级模型。</div>
             </template>
+            <div class="setting-row top-aligned">
+              <div class="setting-info"><div class="setting-label">实验能力</div><div class="setting-desc">显示当前 daemon 的实际状态；可配置项写入 config.toml，新会话生效。</div></div>
+              <div class="setting-control"><span class="pill">{{ enabledExperimentNames.length }} 项运行中</span></div>
+            </div>
+            <div class="experiment-grid">
+              <label v-for="feature in experimentRows" :key="feature.id" class="experiment-card" :class="{ locked: feature.locked }">
+                <span class="experiment-main"><strong>{{ feature.label }}</strong><code>{{ feature.id }}</code><small>{{ feature.description }}</small></span>
+                <span class="experiment-state">
+                  <span v-if="feature.configured !== undefined" class="pill">config</span>
+                  <input
+                    type="checkbox"
+                    :checked="feature.enabled"
+                    :disabled="feature.locked || experimentSaving === feature.id"
+                    @change="setExperiment(feature.id, ($event.target as HTMLInputElement).checked)"
+                  />
+                </span>
+              </label>
+            </div>
+            <div class="settings-callout subtle">GUI 启动的 Kimi Engine 会启用次级模型实验；外部 daemon 的能力以这里显示的运行时开关为准。</div>
           </section>
 
           <!-- 关于 -->
@@ -1306,6 +1669,38 @@ watch(() => props.initialSection, (section) => { active.value = section; });
         </div>
       </div>
     </div>
+    <PromptDialog
+      v-if="archiveDeleteIds.length"
+      title="永久删除归档对话？"
+      :description="`将永久删除 ${archiveDeleteIds.length} 条归档对话的本地记录，聊天内容无法恢复。活动会话不会被删除。`"
+      confirm-label="永久删除"
+      :danger="true"
+      :input="false"
+      @confirm="deleteSelectedArchives"
+      @cancel="archiveDeleteIds = []"
+    />
+    <PromptDialog
+      v-if="orphanConfirmMode"
+      :title="orphanConfirmMode === 'backup' ? '备份后清理全部失效任务？' : '永久清理全部失效任务？'"
+      :description="orphanConfirmMode === 'backup'
+        ? `将清理 ${orphanScan?.items.length ?? 0} 个失效任务，并把完整记录移动到 ~/.kimi-code/orphaned-sessions。`
+        : `将永久删除 ${orphanScan?.items.length ?? 0} 个失效任务的本地记录；此操作无法恢复。`"
+      :confirm-label="orphanConfirmMode === 'backup' ? '备份后清理' : '永久清理'"
+      :danger="orphanConfirmMode === 'delete'"
+      :input="false"
+      @confirm="cleanupDetectedOrphans"
+      @cancel="orphanConfirmMode = null"
+    />
+    <PromptDialog
+      v-if="emptyWorkspaceConfirmOpen"
+      title="移除全部空工作区？"
+      :description="`将从侧栏和工作区注册表移除 ${emptyWorkspaceScan.length} 个没有任务的工作区；不会删除目录或会话数据，之后仍可重新添加。`"
+      confirm-label="移除空工作区"
+      :danger="true"
+      :input="false"
+      @confirm="removeDetectedEmptyWorkspaces"
+      @cancel="emptyWorkspaceConfirmOpen = false"
+    />
     <PromptDialog
       v-if="restartConfirmOpen"
       title="重启 Kimi daemon？"

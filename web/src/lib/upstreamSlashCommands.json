@@ -1,7 +1,7 @@
 {
   "source": {
     "repository": "MoonshotAI/kimi-code",
-    "ref": "@moonshot-ai/kimi-code@0.31.1",
+    "ref": "@moonshot-ai/kimi-code@0.33.0",
     "path": "apps/kimi-code/src/tui/commands/registry.ts"
   },
   "commands": [
@@ -33,7 +33,7 @@
     { "name": "title", "aliases": ["rename"] },
     { "name": "usage", "aliases": [] },
     { "name": "status", "aliases": [] },
-    { "name": "feedback", "aliases": [] },
+    { "name": "feedback", "aliases": ["bug"] },
     { "name": "undo", "aliases": [] },
     { "name": "editor", "aliases": [] },
     { "name": "theme", "aliases": [] },

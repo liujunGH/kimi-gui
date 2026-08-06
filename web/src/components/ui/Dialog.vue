@@ -12,6 +12,7 @@ const props = withDefaults(defineProps<{
   open: boolean;
   title?: string;
   description?: string;
+  closeLabel?: string;
   closeOnOverlay?: boolean;
   closeOnEsc?: boolean;
   /** md 440 (default) · lg 640 · xl 760 (var(--p-content-max)). */
@@ -31,6 +32,7 @@ const props = withDefaults(defineProps<{
   size: 'md',
   height: 'auto',
   padded: true,
+  closeLabel: 'Close',
 });
 
 const emit = defineEmits<{
@@ -151,7 +153,7 @@ onBeforeUnmount(() => {
               <div v-if="description" class="ui-dialog__desc">{{ description }}</div>
             </div>
           </slot>
-          <IconButton class="ui-dialog__close" size="sm" label="Close" @click="close">
+          <IconButton class="ui-dialog__close" size="sm" :label="closeLabel" @click="close">
             <Icon name="close" size="md" />
           </IconButton>
         </div>

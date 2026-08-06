@@ -18,6 +18,7 @@ const apiMock = vi.hoisted(() => ({
   abortPrompt: vi.fn(),
   abortSession: vi.fn(),
   addWorkspace: vi.fn(),
+  deleteWorkspace: vi.fn(),
   updateWorkspace: vi.fn(),
   createSession: vi.fn(),
   exportSession: vi.fn(),
@@ -73,9 +74,11 @@ function createState(): ExtendedState {
     sessions: [createSession()],
     activeSessionId: 'sess_1',
     connected: true,
-    serverVersion: '',
+    serverVersion: '0.33.0',
+    experimentalFlags: {},
     dangerousBypassAuth: false,
-    backend: 'v1',
+    backend: 'v2',
+    unsupportedDaemonVersion: null,
     workspaceName: 'kimi-web',
     connection: 'connected',
     permission: 'manual',
@@ -597,6 +600,41 @@ describe('useWorkspaceState — addWorkspaceByPath', () => {
     expect(deps.pushOperationFailure).not.toHaveBeenCalled();
     expect(state.workspaces).toEqual([]);
     expect(state.activeWorkspaceId).toBeNull();
+  });
+});
+
+describe('useWorkspaceState — deleteWorkspace', () => {
+  beforeEach(() => {
+    apiMock.deleteWorkspace.mockReset();
+    apiMock.deleteWorkspace.mockResolvedValue(undefined);
+  });
+
+  it('removes an empty workspace without deleting any session data', async () => {
+    const state = createState();
+    state.workspaces = [workspace('wd_empty', '/empty/project', '')];
+    const deps = createDeps();
+    const workspaceState = useWorkspaceState(state, deps);
+    const sessionsBefore = [...state.sessions];
+
+    await workspaceState.deleteWorkspace('wd_empty');
+
+    expect(apiMock.deleteWorkspace).toHaveBeenCalledWith('wd_empty');
+    expect(state.workspaces).toEqual([]);
+    expect(state.sessions).toEqual(sessionsBefore);
+    expect(state.hiddenWorkspaceRoots).toEqual(['/empty/project']);
+    expect(deps.saveHiddenWorkspacesToStorage).toHaveBeenCalledWith(['/empty/project']);
+  });
+
+  it('can remove an empty-id legacy workspace by its persisted root', async () => {
+    const state = createState();
+    state.workspaces = [workspace('', '/legacy/blank', '')];
+    const deps = createDeps();
+    const workspaceState = useWorkspaceState(state, deps);
+
+    await workspaceState.deleteWorkspace('');
+
+    expect(state.workspaces).toEqual([]);
+    expect(state.hiddenWorkspaceRoots).toEqual(['/legacy/blank']);
   });
 });
 
@@ -1161,10 +1199,11 @@ describe('useWorkspaceState — first-load auth gate', () => {
     apiMock.getAuth.mockReset();
     apiMock.getHealth.mockReset().mockResolvedValue({ ok: true });
     apiMock.getMeta.mockReset().mockResolvedValue({
-      serverVersion: '0.0.0',
+      serverVersion: '0.33.0',
       openInApps: [],
       dangerousBypassAuth: false,
-      backend: 'v1',
+      backend: 'v2',
+      experimentalFlags: {},
     });
     apiMock.getConfig.mockReset().mockResolvedValue({});
     apiMock.listWorkspaces.mockReset().mockResolvedValue([]);
@@ -1277,10 +1316,11 @@ describe('useWorkspaceState — session list loading', () => {
     });
     apiMock.getHealth.mockReset().mockResolvedValue({ ok: true });
     apiMock.getMeta.mockReset().mockResolvedValue({
-      serverVersion: '0.0.0',
+      serverVersion: '0.33.0',
       openInApps: [],
       dangerousBypassAuth: false,
-      backend: 'v1',
+      backend: 'v2',
+      experimentalFlags: {},
     });
     apiMock.getConfig.mockReset().mockResolvedValue({});
     apiMock.listWorkspaces.mockReset().mockResolvedValue([]);
@@ -1309,6 +1349,23 @@ describe('useWorkspaceState — session list loading', () => {
     } as unknown as UseWorkspaceStateDeps;
     return { state, deps, workspaceState: useWorkspaceState(state, deps) };
   }
+
+  it('blocks workspace APIs when the daemon is older than 0.33', async () => {
+    apiMock.getMeta.mockResolvedValueOnce({
+      serverVersion: '0.32.0',
+      openInApps: [],
+      dangerousBypassAuth: false,
+      backend: 'v2',
+      experimentalFlags: {},
+    });
+    const { state, workspaceState } = createSessionLoadRig([]);
+
+    await workspaceState.load();
+
+    expect(state.unsupportedDaemonVersion).toBe('0.32.0');
+    expect(apiMock.listWorkspaces).not.toHaveBeenCalled();
+    expect(apiMock.listSessions).not.toHaveBeenCalled();
+  });
 
   it('reports one load failure when the no-workspace session fallback rejects', async () => {
     const error = new Error('session index unavailable');
@@ -1571,13 +1628,26 @@ describe('useWorkspaceState — refreshServerMeta', () => {
   it('keeps the previous meta when /meta fails', async () => {
     apiMock.getMeta.mockRejectedValue(new Error('connection refused'));
     const state = createState();
+    state.serverVersion = '0.33.1';
     state.backend = 'v2';
     const ws = useWorkspaceState(state, createDeps());
 
     await ws.refreshServerMeta();
 
     expect(state.backend).toBe('v2');
-    expect(state.serverVersion).toBe('');
+    expect(state.serverVersion).toBe('0.33.1');
+  });
+
+  it('does not treat an unverified cold-start daemon as supported', async () => {
+    apiMock.getMeta.mockRejectedValue(new Error('connection refused'));
+    const state = createState();
+    state.serverVersion = '';
+    state.unsupportedDaemonVersion = null;
+    const ws = useWorkspaceState(state, createDeps());
+
+    await ws.refreshServerMeta();
+
+    expect(state.unsupportedDaemonVersion).toBe('未知');
   });
 });
 

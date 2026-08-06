@@ -62,6 +62,10 @@ export interface WorkspaceView {
   shortPath: string;
   /** Number of sessions in this workspace. */
   sessionCount: number;
+  /** Optional local visual marker used by the desktop sidebar. */
+  emoji?: string;
+  /** Local workspace pin; pinned workspaces sort before the remaining list. */
+  pinned?: boolean;
 }
 
 /**
@@ -312,6 +316,13 @@ export interface TaskItem {
   subagentPhase?: 'queued' | 'working' | 'suspended' | 'completed' | 'failed';
   suspendedReason?: string;
   swarmIndex?: number;
+  /** Actual model id reported live by the daemon for this child agent. */
+  model?: string;
+  modelSource?: 'runtime';
+  createdAt?: string;
+  startedAt?: string;
+  completedAt?: string;
+  backgroundTaskId?: string;
 }
 
 export interface ConversationStatus {

@@ -9,6 +9,7 @@ import { useTerminal } from '../composables/useTerminal';
 import Button from './ui/Button.vue';
 
 const props = defineProps<{ sessionId: string }>();
+const emit = defineEmits<{ dismiss: [] }>();
 
 // xterm's `fontFamily` is a literal font string — it does NOT resolve CSS
 // variables, so passing `var(--mono)` silently fell back to xterm's default
@@ -176,14 +177,15 @@ onUnmounted(() => {
         <span v-if="terminalClient.readOnly.value" class="terminal-readonly">exited</span>
       </div>
       <div class="terminal-actions">
-        <Button size="sm" variant="secondary" @click="fitAndResize">fit</Button>
-        <Button size="sm" variant="secondary" @click="terminalClient.close">close</Button>
-        <Button size="sm" variant="primary" @click="restart">new</Button>
+        <Button size="sm" variant="secondary" @click="fitAndResize">适配</Button>
+        <Button size="sm" variant="secondary" @click="terminalClient.close">结束进程</Button>
+        <Button size="sm" variant="primary" @click="restart">新终端</Button>
+        <Button size="sm" variant="secondary" @click="emit('dismiss')">收起</Button>
       </div>
     </div>
     <div class="terminal-surface">
       <div ref="hostRef" class="terminal-host"></div>
-      <div v-if="terminalClient.loading.value" class="terminal-overlay">starting terminal...</div>
+      <div v-if="terminalClient.loading.value" class="terminal-overlay">正在启动终端…</div>
       <div v-else-if="terminalClient.error.value" class="terminal-overlay error">{{ terminalClient.error.value }}</div>
     </div>
   </section>

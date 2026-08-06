@@ -6,6 +6,7 @@ import { buildRestUrl, buildWsUrl } from '../config';
 import { traceKeyEvent } from '../../debug/trace';
 import type {
   AppConfig,
+  AppCatalogProvider,
   AppAgentConfigInput,
   AppMcpServer,
   AppSearchResult,
@@ -17,7 +18,11 @@ import type {
   AppOAuthUsage,
   AppProvider,
   AppProviderWriteInput,
+  CatalogProviderImportInput,
+  CatalogProviderImportResult,
   ProviderRefreshResult,
+  RegistryProviderImportInput,
+  RegistryProviderImportResult,
   AppSession,
   AppSkill,
   AppSessionCursor,
@@ -105,6 +110,44 @@ function toWireProviderModelInput(model: AppProviderWriteInput['models'][number]
   return wire;
 }
 
+interface WireCatalogProvider {
+  id: string;
+  name: string;
+  wire_type: string | null;
+  guessed: boolean;
+  needs_base_url: boolean;
+  rejected: boolean;
+  reject_reason: string | null;
+  env_key: string | null;
+  models: Array<{
+    id: string;
+    name?: string;
+    max_context_size: number;
+    capabilities?: string[];
+    reasoning: boolean;
+  }>;
+}
+
+function toAppCatalogProvider(item: WireCatalogProvider): AppCatalogProvider {
+  return {
+    id: item.id,
+    name: item.name,
+    wireType: item.wire_type,
+    guessed: item.guessed,
+    needsBaseUrl: item.needs_base_url,
+    rejected: item.rejected,
+    rejectReason: item.reject_reason,
+    envKey: item.env_key,
+    models: item.models.map((model) => ({
+      id: model.id,
+      name: model.name,
+      maxContextSize: model.max_context_size,
+      capabilities: model.capabilities,
+      reasoning: model.reasoning,
+    })),
+  };
+}
+
 function safeExportFileName(contentDisposition: string | undefined, fallback: string): string {
   if (contentDisposition === undefined) return fallback;
   let candidate: string | undefined;
@@ -170,6 +213,8 @@ interface WireMeta {
   dangerous_bypass_auth?: boolean;
   /** Engine generation serving the API; older (v1) servers omit the field. */
   backend?: 'v1' | 'v2';
+  /** Effective runtime flags; older servers omit the field. */
+  experimental_flags?: Record<string, boolean>;
 }
 
 interface WireAbortResult {
@@ -343,6 +388,7 @@ export class DaemonKimiWebApi implements KimiWebApi {
     capabilities: Record<string, boolean>;
     openInApps: string[];
     dangerousBypassAuth: boolean;
+    experimentalFlags: Record<string, boolean>;
     /** Engine generation: 'v2' = kap-server / agent-core-v2; absent ⇒ 'v1'. */
     backend: 'v1' | 'v2';
   }> {
@@ -354,6 +400,7 @@ export class DaemonKimiWebApi implements KimiWebApi {
       capabilities: data.capabilities,
       openInApps: Array.isArray(data.open_in_apps) ? data.open_in_apps : [],
       dangerousBypassAuth: data.dangerous_bypass_auth === true,
+      experimentalFlags: data.experimental_flags ?? {},
       backend: data.backend === 'v2' ? 'v2' : 'v1',
     };
   }
@@ -1252,6 +1299,24 @@ export class DaemonKimiWebApi implements KimiWebApi {
     await this.http.delete(`/workspaces/${encodeURIComponent(id)}`);
   }
 
+  async getWorkspaceTrust(id: string): Promise<{ trusted: boolean }> {
+    return this.http.get<{ trusted: boolean }>(
+      `/workspaces/${encodeURIComponent(id)}/trust`,
+    );
+  }
+
+  async trustWorkspace(id: string): Promise<{ trusted: true }> {
+    return this.http.post<{ trusted: true }>(
+      `/workspaces/${encodeURIComponent(id)}/trust`,
+    );
+  }
+
+  async untrustWorkspace(id: string): Promise<{ trusted: false }> {
+    return this.http.post<{ trusted: false }>(
+      `/workspaces/${encodeURIComponent(id)}/untrust`,
+    );
+  }
+
   /**
    * Rename a workspace (display name only).
    * PATCH /api/v1/workspaces/:id { name }. On error this throws.
@@ -1354,7 +1419,7 @@ export class DaemonKimiWebApi implements KimiWebApi {
   }
 
   // -------------------------------------------------------------------------
-  // Models + Providers — Kimi Code 0.31.1 daemon contract.
+  // Models + Providers — Kimi Code 0.33 daemon contract.
   // -------------------------------------------------------------------------
 
   async listModels(): Promise<AppModel[]> {
@@ -1418,6 +1483,47 @@ export class DaemonKimiWebApi implements KimiWebApi {
   async refreshOAuthProviderModels(): Promise<ProviderRefreshResult> {
     const data = await this.http.post<WireProviderRefreshResult>('/providers:refresh_oauth');
     return toProviderRefreshResult(data);
+  }
+
+  async listCatalogProviders(): Promise<AppCatalogProvider[]> {
+    const data = await this.http.get<{ items: WireCatalogProvider[] }>('/catalog/providers');
+    return data.items.map(toAppCatalogProvider);
+  }
+
+  async getCatalogProvider(catalogId: string): Promise<AppCatalogProvider> {
+    const data = await this.http.get<WireCatalogProvider>(
+      `/catalog/providers/${encodeURIComponent(catalogId)}`,
+    );
+    return toAppCatalogProvider(data);
+  }
+
+  async importCatalogProvider(
+    input: CatalogProviderImportInput,
+  ): Promise<CatalogProviderImportResult> {
+    const body: Record<string, unknown> = { catalog_id: input.catalogId };
+    if (input.id !== undefined) body['id'] = input.id;
+    if (input.apiKey !== undefined) body['api_key'] = input.apiKey;
+    if (input.baseUrl !== undefined) body['base_url'] = input.baseUrl;
+    const data = await this.http.post<{
+      provider: WireProvider;
+      models_imported: number;
+    }>('/providers:import_catalog', body);
+    return { provider: toAppProvider(data.provider), modelsImported: data.models_imported };
+  }
+
+  async importProviderRegistry(
+    input: RegistryProviderImportInput,
+  ): Promise<RegistryProviderImportResult> {
+    const body: Record<string, unknown> = { url: input.url };
+    if (input.apiKey !== undefined) body['api_key'] = input.apiKey;
+    const data = await this.http.post<{
+      providers: WireProvider[];
+      models_imported: number;
+    }>('/providers:import_registry', body);
+    return {
+      providers: data.providers.map(toAppProvider),
+      modelsImported: data.models_imported,
+    };
   }
 
   async listTools(sessionId?: string): Promise<AppToolDescriptor[]> {

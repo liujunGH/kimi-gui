@@ -327,6 +327,27 @@ function projectSubagentProgress(
   return out;
 }
 
+/** Apply authoritative child-agent status fields without turning them into a
+ * noisy progress line. Kimi Code 0.33 reports the child model here (not on the
+ * subagent lifecycle events), so keeping this keyed by agent id lets the UI
+ * replace its spawn-time inference as soon as the runtime value arrives. */
+function projectSubagentStatus(
+  state: SessionState,
+  sessionId: string,
+  subagentId: string,
+  payload: Record<string, unknown>,
+): AppEvent[] {
+  const model = stringField(payload, 'model');
+  const previous = state.subagentMeta.get(subagentId);
+  const task = patchSubagent(state, sessionId, subagentId, {
+    status: 'running',
+    subagentPhase: previous?.subagentPhase ?? 'working',
+    startedAt: previous?.startedAt ?? new Date().toISOString(),
+    ...(model ? { model, modelSource: 'runtime' as const } : {}),
+  });
+  return task ? [{ type: 'taskCreated', sessionId, task }] : [];
+}
+
 // ---------------------------------------------------------------------------
 // Message-log helpers (inlined; mirrors message-log.ts)
 // ---------------------------------------------------------------------------
@@ -423,6 +444,23 @@ function appendToolUse(
 function toolProgressOutput(payload: Record<string, unknown>): { outputChunk: string; stream: 'stdout' | 'stderr' } | null {
   const update = payload['update'];
   const updateRecord = update && typeof update === 'object' ? update as Record<string, unknown> : null;
+  if (
+    updateRecord?.['kind'] === 'custom' &&
+    updateRecord['customKind'] === 'mcp.oauth.authorization_url'
+  ) {
+    const customData = updateRecord['customData'];
+    if (customData && typeof customData === 'object') {
+      const data = customData as Record<string, unknown>;
+      const serverName = typeof data['serverName'] === 'string' ? data['serverName'] : 'MCP';
+      const expiresAt = typeof data['expiresAt'] === 'number' ? data['expiresAt'] : undefined;
+      if (expiresAt !== undefined) {
+        return {
+          outputChunk: `MCP OAuth authorization for ${serverName} expires at ${new Date(expiresAt).toLocaleString()}`,
+          stream: 'stdout',
+        };
+      }
+    }
+  }
   const streamRaw = updateRecord?.['stream'] ?? updateRecord?.['kind'] ?? payload['stream'];
   const stream = streamRaw === 'stderr' ? 'stderr' : 'stdout';
   const chunk =
@@ -433,6 +471,28 @@ function toolProgressOutput(payload: Record<string, unknown>): { outputChunk: st
     (typeof payload['message'] === 'string' && payload['message']) ||
     '';
   return chunk.length > 0 ? { outputChunk: chunk, stream } : null;
+}
+
+function mcpOAuthAuthorizationRequest(payload: Record<string, unknown>): { url: string; label: string } | null {
+  const update = payload['update'];
+  if (!update || typeof update !== 'object') return null;
+  const record = update as Record<string, unknown>;
+  if (record['kind'] !== 'custom' || record['customKind'] !== 'mcp.oauth.authorization_url') return null;
+  const raw = record['customData'];
+  if (!raw || typeof raw !== 'object') return null;
+  const data = raw as Record<string, unknown>;
+  const url = data['authorizationUrl'];
+  if (typeof url !== 'string') return null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+  } catch {
+    return null;
+  }
+  const server = typeof data['serverName'] === 'string' && data['serverName'].trim()
+    ? data['serverName'].trim()
+    : 'MCP';
+  return { url, label: `${server} 授权` };
 }
 
 function finishAssistantMessage(state: SessionState, messageId: string): void {
@@ -654,6 +714,9 @@ export function createAgentProjector(): AgentProjector {
         return [
           { type: 'agentTurnEnded' as const, sessionId, agentId: frameAgentId, reason: p?.reason },
         ];
+      }
+      if (rawType === 'agent.status.updated') {
+        return projectSubagentStatus(s, sessionId, frameAgentId, p ?? {});
       }
       if (MAIN_AGENT_TRANSCRIPT_FRAMES.has(rawType)) {
         return projectSubagentProgress(s, sessionId, frameAgentId, rawType, p ?? {}, sideChannelAgents);
@@ -878,6 +941,16 @@ export function createAgentProjector(): AgentProjector {
       // -----------------------------------------------------------------------
       case 'tool.progress': {
         const toolCallId: string = p?.toolCallId;
+        const oauth = mcpOAuthAuthorizationRequest(p ?? {});
+        if (oauth) {
+          out.push({
+            type: 'externalUrlRequested',
+            sessionId,
+            url: oauth.url,
+            label: oauth.label,
+            source: 'mcp-oauth',
+          });
+        }
         const progress = toolProgressOutput(p ?? {});
         if (toolCallId && progress) {
           out.push({

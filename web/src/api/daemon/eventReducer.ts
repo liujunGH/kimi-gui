@@ -251,6 +251,21 @@ const AGENT_ERROR_TITLE_KEYS: Readonly<Record<string, string>> = {
   'context.overflow': 'contextOverflow',
 };
 
+function agentErrorTitleKey(code: string | undefined): string {
+  if (!code) return 'title';
+  const exact = AGENT_ERROR_TITLE_KEYS[code];
+  if (exact) return exact;
+  if (code.startsWith('agent.')) return 'agent';
+  if (code.startsWith('skill.')) return 'skill';
+  if (code.startsWith('task.')) return 'task';
+  if (code.startsWith('mcp.')) return 'mcp';
+  if (code.startsWith('storage.')) return 'storage';
+  if (code.startsWith('web.')) return 'web';
+  if (code.startsWith('cron.')) return 'cron';
+  if (code.startsWith('wire.')) return 'wire';
+  return 'title';
+}
+
 interface AgentErrorRaw {
   code?: string;
   message?: string;
@@ -287,7 +302,7 @@ function buildAgentErrorNotice(raw: AgentErrorRaw): AppNotice {
     if (key === 'statusCode' || key === 'requestId') continue;
     push(key, value);
   }
-  const titleKey = (raw.code !== undefined ? AGENT_ERROR_TITLE_KEYS[raw.code] : undefined) ?? 'title';
+  const titleKey = agentErrorTitleKey(raw.code);
   return {
     severity: 'error',
     title: t(`warnings.agentError.${titleKey}`),
@@ -661,6 +676,8 @@ export function reduceAppEvent(
           subagentType: event.task.subagentType ?? previous.subagentType,
           runInBackground: event.task.runInBackground ?? previous.runInBackground,
           backgroundTaskId: event.task.backgroundTaskId ?? previous.backgroundTaskId,
+          model: event.task.model ?? previous.model,
+          modelSource: event.task.modelSource ?? previous.modelSource,
         };
         next.tasksBySession[sid] = patched;
       }
@@ -726,6 +743,23 @@ export function reduceAppEvent(
     // -------------------------------------------------------------------------
     case 'configChanged': {
       next.config = event.config;
+      break;
+    }
+
+    case 'configWarningsChanged': {
+      const retained = next.warnings.filter(
+        (warning) => typeof warning === 'string' || warning.source !== 'config',
+      );
+      const current: AppNotice[] = event.warnings.map((warning) => ({
+        severity: 'warning',
+        source: 'config',
+        title: i18n.global.t('warnings.configTitle'),
+        message: warning.message,
+        details: warning.domain
+          ? [{ label: i18n.global.t('warnings.details.configDomain'), value: warning.domain }]
+          : undefined,
+      }));
+      next.warnings = [...retained, ...current];
       break;
     }
 
@@ -802,6 +836,7 @@ export function reduceAppEvent(
     case 'workspaceCreated':
     case 'workspaceUpdated':
     case 'workspaceDeleted':
+    case 'externalUrlRequested':
       break;
 
     default: {

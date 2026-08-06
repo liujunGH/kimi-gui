@@ -1976,7 +1976,7 @@ dependencies = [
 
 [[package]]
 name = "kimi-gui"
-version = "1.0.15"
+version = "1.0.16"
 dependencies = [
  "objc2",
  "objc2-app-kit",

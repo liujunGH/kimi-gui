@@ -694,8 +694,21 @@ export function toAppEvent(wire: WireEvent): AppEvent {
     case 'event.config.changed':
       return {
         type: 'configChanged',
-        changedFields: w.payload.changed_fields,
+        changedFields: w.payload.changedFields,
         config: toAppConfig(w.payload.config),
+      };
+
+    case 'event.config.warning':
+      return {
+        type: 'configWarningsChanged',
+        warnings: Array.isArray(w.payload.warnings)
+          ? w.payload.warnings.filter(
+              (item: unknown): item is { domain?: string; message: string } =>
+                typeof item === 'object' &&
+                item !== null &&
+                typeof (item as { message?: unknown }).message === 'string',
+            )
+          : [],
       };
 
     case 'event.model_catalog.changed':

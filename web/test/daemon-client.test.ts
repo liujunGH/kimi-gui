@@ -76,6 +76,41 @@ function createApi(): DaemonKimiWebApi {
   });
 }
 
+describe('DaemonKimiWebApi.getMeta', () => {
+  beforeEach(() => vi.stubGlobal('fetch', vi.fn()));
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('maps 0.33 effective experimental flags', async () => {
+    vi.mocked(fetch).mockResolvedValue(envelope({
+      server_version: '0.33.0',
+      server_id: 'server-1',
+      started_at: '2026-08-05T00:00:00.000Z',
+      capabilities: { websocket: true },
+      experimental_flags: { 'secondary-model': true },
+      open_in_apps: [],
+      dangerous_bypass_auth: false,
+      backend: 'v2',
+    }));
+
+    await expect(createApi().getMeta()).resolves.toMatchObject({
+      experimentalFlags: { 'secondary-model': true },
+      backend: 'v2',
+    });
+  });
+
+  it('treats an omitted flag map as no enabled flags', async () => {
+    vi.mocked(fetch).mockResolvedValue(envelope({
+      server_version: '0.33.0',
+      server_id: 'server-1',
+      started_at: '2026-08-05T00:00:00.000Z',
+      capabilities: {},
+      backend: 'v2',
+    }));
+
+    await expect(createApi().getMeta()).resolves.toMatchObject({ experimentalFlags: {} });
+  });
+});
+
 describe('DaemonKimiWebApi.exportSession', () => {
   beforeEach(() => {
     vi.stubGlobal('location', { search: '?debug=1' });
@@ -286,6 +321,102 @@ describe('DaemonKimiWebApi provider writes', () => {
     );
     expect(vi.mocked(fetch).mock.calls[0]?.[1]?.method).toBe('DELETE');
   });
+
+  it('maps the daemon-proxied models.dev directory without shelling out to the CLI', async () => {
+    vi.mocked(fetch).mockResolvedValue(envelope({
+      items: [{
+        id: 'anthropic',
+        name: 'Anthropic',
+        wire_type: 'anthropic',
+        guessed: false,
+        needs_base_url: false,
+        rejected: false,
+        reject_reason: null,
+        env_key: 'ANTHROPIC_API_KEY',
+        models: [{
+          id: 'claude-test',
+          name: 'Claude Test',
+          max_context_size: 200_000,
+          capabilities: ['thinking'],
+          reasoning: true,
+        }],
+      }],
+    }));
+
+    await expect(createApi().listCatalogProviders()).resolves.toEqual([expect.objectContaining({
+      id: 'anthropic',
+      wireType: 'anthropic',
+      envKey: 'ANTHROPIC_API_KEY',
+      models: [expect.objectContaining({ id: 'claude-test', maxContextSize: 200_000 })],
+    })]);
+    expect(vi.mocked(fetch).mock.calls[0]?.[0]).toBe(
+      'http://daemon.test/api/v1/catalog/providers',
+    );
+  });
+
+  it('imports a catalog provider directly and keeps an omitted API key omitted', async () => {
+    vi.mocked(fetch).mockResolvedValue(envelope({
+      provider: {
+        id: 'anthropic', type: 'anthropic', has_api_key: false, status: 'unconfigured', models: ['anthropic/claude-test'],
+      },
+      models_imported: 1,
+    }));
+
+    await expect(createApi().importCatalogProvider({ catalogId: 'anthropic' })).resolves.toMatchObject({
+      modelsImported: 1,
+      provider: { id: 'anthropic' },
+    });
+    const [url, init] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toBe('http://daemon.test/api/v1/providers:import_catalog');
+    expect(init?.method).toBe('POST');
+    expect(JSON.parse(String(init?.body))).toEqual({ catalog_id: 'anthropic' });
+  });
+
+  it('imports a private registry with an optional Bearer key and redacts it from traces', async () => {
+    const secret = 'REGISTRY_KEY_MUST_NOT_ENTER_TRACE';
+    vi.mocked(fetch).mockResolvedValue(envelope({
+      providers: [{
+        id: 'private', type: 'openai', has_api_key: true, status: 'connected', models: ['private/model-a'],
+      }],
+      models_imported: 1,
+    }));
+
+    await createApi().importProviderRegistry({
+      url: 'https://registry.example.test/api.json',
+      apiKey: secret,
+    });
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toBe('http://daemon.test/api/v1/providers:import_registry');
+    expect(JSON.parse(String(init?.body))).toMatchObject({ api_key: secret });
+    expect(traceToJsonl()).not.toContain(secret);
+    expect(traceToJsonl()).toContain('[redacted]');
+  });
+});
+
+describe('DaemonKimiWebApi workspace trust', () => {
+  beforeEach(() => vi.stubGlobal('fetch', vi.fn()));
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('reads and updates trust through the public 0.33 workspace routes', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(envelope({ trusted: false }))
+      .mockResolvedValueOnce(envelope({ trusted: true }))
+      .mockResolvedValueOnce(envelope({ trusted: false }));
+    const api = createApi();
+
+    await expect(api.getWorkspaceTrust('workspace/1')).resolves.toEqual({ trusted: false });
+    await expect(api.trustWorkspace('workspace/1')).resolves.toEqual({ trusted: true });
+    await expect(api.untrustWorkspace('workspace/1')).resolves.toEqual({ trusted: false });
+
+    const calls = vi.mocked(fetch).mock.calls;
+    expect(calls.map(([url]) => url)).toEqual([
+      'http://daemon.test/api/v1/workspaces/workspace%2F1/trust',
+      'http://daemon.test/api/v1/workspaces/workspace%2F1/trust',
+      'http://daemon.test/api/v1/workspaces/workspace%2F1/untrust',
+    ]);
+    expect(calls.map(([, init]) => init?.method)).toEqual(['GET', 'POST', 'POST']);
+  });
 });
 
 describe('DaemonKimiWebApi.connectEvents', () => {
@@ -411,6 +542,54 @@ describe('DaemonKimiWebApi.connectEvents', () => {
       mainTurnActive: false,
       pendingInteraction: 'question',
       lastTurnReason: undefined,
+    });
+  });
+
+  it('projects global config warnings from the 0.33 event contract', () => {
+    FakeWebSocket.instances = [];
+    vi.stubGlobal('WebSocket', FakeWebSocket as unknown as typeof WebSocket);
+    const received: Array<{ event: AppEvent; meta: KimiEventMeta }> = [];
+    connection = createApi().connectEvents({
+      onEvent(event, meta) {
+        received.push({ event, meta });
+      },
+      onResync() {},
+      onError() {},
+      onConnectionChange() {},
+    });
+    const [socket] = FakeWebSocket.instances;
+    if (socket === undefined) throw new Error('WebSocket was not created');
+
+    socket.emit({ type: 'server_hello', payload: { protocol_version: 2 } });
+    socket.emit({
+      type: 'event.config.warning',
+      seq: 1,
+      session_id: '__global__',
+      timestamp: '2026-01-01T00:00:00.000Z',
+      payload: {
+        warnings: [
+          {
+            domain: 'loop_control',
+            message: 'max_retries_per_step was renamed to max_attempts_per_step',
+          },
+        ],
+      },
+    });
+
+    expect(received).toContainEqual({
+      event: {
+        type: 'configWarningsChanged',
+        warnings: [
+          {
+            domain: 'loop_control',
+            message: 'max_retries_per_step was renamed to max_attempts_per_step',
+          },
+        ],
+      },
+      meta: {
+        sessionId: '__global__',
+        seq: 1,
+      },
     });
   });
 });

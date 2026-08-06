@@ -35,6 +35,11 @@ import {
 } from '../../lib/storage';
 import { parseDiff } from '../../lib/parseDiff';
 import { workspaceRootKey } from '../../lib/rootKey';
+import { supportsKimiContract } from '../../lib/kimiVersion';
+import {
+  isMissingWorkspaceArchiveError,
+  type ArchiveSessionOutcome,
+} from '../../lib/sessionArchive';
 import { sessionExportTraceToJsonl, traceKeyEvent } from '../../debug/trace';
 import { readSessionIdFromLocation, sessionUrl } from '../../lib/sessionRoute';
 import type { SessionUrlMode } from '../../lib/sessionRoute';
@@ -49,6 +54,10 @@ import type { ExtendedState, PromptAttachment } from '../useKimiWebClient';
 import type { UseModelProviderState } from './useModelProviderState';
 import type { UseSideChat } from './useSideChat';
 import type { UseTaskPoller } from './useTaskPoller';
+import {
+  kimiRuntime,
+  type OrphanSessionCleanupResult,
+} from '../useKimiRuntime';
 
 const MESSAGES_PAGE_SIZE = 50;
 // Sessions fetched per workspace on first load — keeps the initial request
@@ -844,12 +853,22 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
     const m = await getKimiWebApi()
       .getMeta()
       .catch(() => null);
-    if (m === null) return;
+    if (m === null) {
+      // An already verified 0.33 connection may keep its last-known contract
+      // through a transient reconnect. A cold start must never enter feature
+      // APIs when the daemon contract could not be established.
+      if (!rawState.serverVersion) rawState.unsupportedDaemonVersion = '未知';
+      return;
+    }
     rawState.serverVersion = m.serverVersion;
     rawState.serverCapabilities = { ...m.capabilities };
+    rawState.experimentalFlags = { ...m.experimentalFlags };
     rawState.availableOpenInApps = m.openInApps;
     rawState.dangerousBypassAuth = m.dangerousBypassAuth;
     rawState.backend = m.backend;
+    rawState.unsupportedDaemonVersion = supportsKimiContract(m.serverVersion, m.backend)
+      ? null
+      : m.serverVersion;
   }
 
   async function load(): Promise<void> {
@@ -872,12 +891,17 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
         return;
       }
       const api = getKimiWebApi();
-      // Parallel: health + meta + models
+      // Resolve the contract before touching feature APIs. kimi-gui intentionally
+      // supports only Kimi Code 0.33+ on agent-core-v2.
       await Promise.all([
         api.getHealth().catch(() => null),
         refreshServerMeta(),
-        modelProvider.loadModels(),
       ]);
+      if (rawState.unsupportedDaemonVersion !== null) {
+        traceStatus = 'unsupported-daemon';
+        return;
+      }
+      await modelProvider.loadModels();
 
       // Check auth readiness and global config (separate calls — defensive)
       if (!firstLoad) await checkAuth();
@@ -2408,30 +2432,60 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
     }
   }
 
-  /** Archive a session — calls API, persists the archive flag, removes locally, picks another active session or none */
-  async function archiveSession(id: string): Promise<void> {
+  async function removeSessionFromCurrentView(id: string): Promise<void> {
+    forgetSession(id);
+    sideChat.clearSideChatForSession(id);
+    const { [id]: _removedIds, ...restIds } = rawState.sideChatUserMessageIdsBySession;
+    void _removedIds;
+    rawState.sideChatUserMessageIdsBySession = restIds;
+
+    // If removed session was active, pick another. 'replace' so the address
+    // bar doesn't keep pointing at (and back doesn't return to) a dead session.
+    if (rawState.activeSessionId === id) {
+      const next = rawState.sessions[0];
+      if (next) {
+        await selectSession(next.id, { urlMode: 'replace' });
+      } else {
+        setActiveSessionId(undefined);
+        writeSessionUrl(undefined, 'replace');
+      }
+    }
+  }
+
+  /**
+   * Archive a session. When a disposable worktree has already vanished, Kimi
+   * 0.33 cannot archive it; return a distinct outcome so the shell can offer
+   * the recoverable orphan-cleanup flow instead of a raw daemon error.
+   */
+  async function archiveSession(id: string): Promise<ArchiveSessionOutcome> {
     try {
       const api = getKimiWebApi();
       await api.archiveSession(id);
-      forgetSession(id);
-      sideChat.clearSideChatForSession(id);
-      const { [id]: _removedIds, ...restIds } = rawState.sideChatUserMessageIdsBySession;
-      void _removedIds;
-      rawState.sideChatUserMessageIdsBySession = restIds;
-
-      // If archived session was active, pick another. 'replace' so the address
-      // bar doesn't keep pointing at (and back doesn't return to) a dead session.
-      if (rawState.activeSessionId === id) {
-        const next = rawState.sessions[0];
-        if (next) {
-          await selectSession(next.id, { urlMode: 'replace' });
-        } else {
-          setActiveSessionId(undefined);
-          writeSessionUrl(undefined, 'replace');
-        }
-      }
+      await removeSessionFromCurrentView(id);
+      return 'archived';
     } catch (err) {
+      if (isMissingWorkspaceArchiveError(err)) return 'orphaned';
       pushOperationFailure('archiveSession', err, { sessionId: id });
+      return 'failed';
+    }
+  }
+
+  /** Remove an orphaned session, optionally preserving its history in a backup. */
+  async function cleanupOrphanSession(
+    id: string,
+    backup: boolean,
+  ): Promise<OrphanSessionCleanupResult | null> {
+    try {
+      const result = await kimiRuntime.cleanupOrphanSession(id, backup);
+      await removeSessionFromCurrentView(id);
+      return result;
+    } catch (err) {
+      pushOperationFailure('cleanupOrphanSession', err, {
+        title: '清理失效任务失败',
+        message: err instanceof Error ? err.message : String(err),
+        sessionId: id,
+      });
+      return null;
     }
   }
 
@@ -2559,8 +2613,9 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
   }
 
   /**
-   * forkSession() — fork the active session into a new child session via
-   * POST /sessions/{id}:fork, then add it to the list and select it.
+   * Fork the active session into a new child session. Kimi Code 0.33 keeps the
+   * original session active so its foreground/background work is not
+   * interrupted; the fork is added to the sidebar and can be opened there.
    */
   async function forkSession(sessionId?: string): Promise<void> {
     const sid = sessionId ?? rawState.activeSessionId;
@@ -2568,7 +2623,6 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
     try {
       const forked = await getKimiWebApi().forkSession(sid);
       upsertSessionFront(forked);
-      await selectSession(forked.id);
     } catch (err) {
       pushOperationFailure('fork', err, { sessionId: sid });
     }
@@ -2873,6 +2927,7 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
     renameWorkspace,
     deleteWorkspace,
     archiveSession,
+    cleanupOrphanSession,
     exportSession,
     restoreSession,
     loadArchivedSessions,

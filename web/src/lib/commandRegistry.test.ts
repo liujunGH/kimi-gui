@@ -18,6 +18,7 @@ describe('GUI slash-command registry', () => {
     expect(resolveBuiltinCommand('/config')?.canonicalName).toBe('settings');
     expect(resolveBuiltinCommand('/thinking')?.canonicalName).toBe('effort');
     expect(resolveBuiltinCommand('/clear')?.canonicalName).toBe('new');
+    expect(resolveBuiltinCommand('/bug')?.canonicalName).toBe('feedback');
   });
 
   it('records the intentional legacy /export override explicitly', () => {

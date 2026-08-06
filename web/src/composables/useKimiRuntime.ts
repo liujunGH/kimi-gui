@@ -44,12 +44,73 @@ export interface KimiWorkspaceContext {
   additionalDirs: string[];
 }
 
+export interface KimiPerformanceConfig {
+  maxStepsPerTurn?: number;
+  maxAttemptsPerStep: number;
+  reservedContextSize?: number;
+  maxRunningTasks?: number;
+  bashAutoBackgroundOnTimeout: boolean;
+  bashTaskTimeoutS: number;
+  subagentTimeoutMs: number;
+  mcpStartupTimeoutMs: number;
+  mcpToolTimeoutMs: number;
+  tokenCountingStrategy: 'measured+estimated' | 'measured' | 'estimated';
+  imageMaxEdgePx: number;
+  imageReadByteBudget: number;
+  cacheExpiryHint: boolean;
+}
+
 export interface KimiBackupInfo {
   path: string;
   files: number;
   bytes: number;
   entries: string[];
   safetySnapshotPath?: string;
+}
+
+export interface Kimi033MigrationResult {
+  changed: boolean;
+  backupPath?: string;
+  renamedKeys: string[];
+}
+
+export interface OrphanSessionCleanupResult {
+  sessionId: string;
+  backupPath?: string;
+  alreadyCleaned: boolean;
+}
+
+export interface OrphanSessionInfo {
+  sessionId: string;
+  title: string;
+  workDir: string;
+  bytes: number;
+}
+
+export interface OrphanSessionScanResult {
+  items: OrphanSessionInfo[];
+  totalBytes: number;
+}
+
+export interface ArchivedSessionDeleteResult {
+  sessionId: string;
+  alreadyDeleted: boolean;
+}
+
+export interface PluginTuiSnapshot {
+  output: string;
+  running: boolean;
+  pid?: number;
+}
+
+export interface KimiProviderCommandInput {
+  action: 'catalog-list' | 'catalog-add' | 'registry-add';
+  providerId?: string;
+  url?: string;
+  apiKey?: string;
+  defaultModel?: string;
+  baseUrl?: string;
+  filter?: string;
 }
 
 export function kimiNativeAvailable(): boolean {
@@ -63,6 +124,7 @@ async function nativeInvoke<T>(command: string, args?: Record<string, unknown>):
 
 export const kimiRuntime = {
   engineStatus: () => nativeInvoke<KimiEngineStatus>('kimi_engine_status'),
+  migrate033Config: () => nativeInvoke<Kimi033MigrationResult>('migrate_kimi_033_config'),
   restartDaemon: () => nativeInvoke<KimiDaemonInfo>('restart_kimi_daemon'),
   listAgents: (workspaceRoot?: string) =>
     nativeInvoke<KimiAgentProfile[]>('list_kimi_agents', { workspaceRoot }),
@@ -96,12 +158,32 @@ export const kimiRuntime = {
     nativeInvoke<KimiWorkspaceContext>('read_kimi_workspace_context', { workspaceRoot }),
   saveWorkspaceContext: (workspaceRoot: string, additionalDirs: string[]) =>
     nativeInvoke<KimiWorkspaceContext>('save_kimi_workspace_context', { workspaceRoot, additionalDirs }),
+  readPerformanceConfig: () =>
+    nativeInvoke<KimiPerformanceConfig>('read_kimi_performance_config'),
+  savePerformanceConfig: (value: KimiPerformanceConfig) =>
+    nativeInvoke<KimiPerformanceConfig>('save_kimi_performance_config', { value }),
   createSettingsBackup: (destination: string) =>
     nativeInvoke<KimiBackupInfo>('create_kimi_settings_backup', { destination }),
   inspectSettingsBackup: (path: string) =>
     nativeInvoke<KimiBackupInfo>('inspect_kimi_settings_backup', { path }),
   restoreSettingsBackup: (path: string) =>
     nativeInvoke<KimiBackupInfo>('restore_kimi_settings_backup', { path }),
+  detectOrphanSessions: () =>
+    nativeInvoke<OrphanSessionScanResult>('detect_orphan_kimi_sessions'),
+  cleanupOrphanSession: (sessionId: string, backup: boolean) =>
+    nativeInvoke<OrphanSessionCleanupResult>('cleanup_orphan_kimi_session', { sessionId, backup }),
+  deleteArchivedSession: (sessionId: string) =>
+    nativeInvoke<ArchivedSessionDeleteResult>('delete_archived_kimi_session', { sessionId }),
+  runProviderCommand: (input: KimiProviderCommandInput) =>
+    nativeInvoke<string>('run_kimi_provider_command', { ...input }),
   runMaintenance: (action: 'doctor-config' | 'doctor-tui' | 'migrate' | 'update' | 'visualizer', sessionId?: string) =>
     nativeInvoke<string>('run_kimi_maintenance', { action, sessionId }),
+  startPluginTui: (workspaceRoot: string, cols?: number, rows?: number) =>
+    nativeInvoke<PluginTuiSnapshot>('start_kimi_plugin_tui', { workspaceRoot, cols, rows }),
+  readPluginTui: () => nativeInvoke<PluginTuiSnapshot>('read_kimi_plugin_tui'),
+  writePluginTui: (data: string) => nativeInvoke<void>('write_kimi_plugin_tui', { data }),
+  openPluginTui: () => nativeInvoke<void>('open_kimi_plugin_tui'),
+  resizePluginTui: (cols: number, rows: number) =>
+    nativeInvoke<void>('resize_kimi_plugin_tui', { cols, rows }),
+  stopPluginTui: () => nativeInvoke<void>('stop_kimi_plugin_tui'),
 };

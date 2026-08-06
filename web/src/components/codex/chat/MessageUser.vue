@@ -6,12 +6,19 @@
  */
 import { computed, onUnmounted, ref } from 'vue';
 import type { ChatTurn, TurnAttachment } from '../../../types';
+import type { ContextMenuItem } from '../../../lib/contextMenu';
 import AttachmentChip from '../../chat/AttachmentChip.vue';
 import CodexIcon from '../layout/CodexIcon.vue';
+import ContextMenu from '../layout/ContextMenu.vue';
 import { formatLocalTime } from '../../../lib/formatMessageTime';
+import { copyTextToClipboard } from '../../../lib/clipboard';
 
 const props = defineProps<{ turn: ChatTurn }>();
-const emit = defineEmits<{ (e: 'edit', turn: ChatTurn): void }>();
+const emit = defineEmits<{
+  (e: 'edit', turn: ChatTurn): void;
+  (e: 'quote', turn: ChatTurn): void;
+  (e: 'fork'): void;
+}>();
 
 const meta = computed(() => {
   const t = props.turn.createdAt;
@@ -20,6 +27,7 @@ const meta = computed(() => {
 
 /** 轻量灯箱:图片/视频附件点击放大查看 */
 const preview = ref<TurnAttachment | null>(null);
+const rootEl = ref<HTMLElement | null>(null);
 function onActivate(att: TurnAttachment) {
   if (att.kind === 'image' || att.kind === 'video') preview.value = att;
 }
@@ -28,11 +36,7 @@ function onActivate(att: TurnAttachment) {
 const copied = ref(false);
 let copyTimer: ReturnType<typeof setTimeout> | undefined;
 function copyText() {
-  try {
-    if (navigator.clipboard) navigator.clipboard.writeText(props.turn.text);
-  } catch {
-    /* 忽略 */
-  }
+  void copyTextToClipboard(props.turn.text);
   copied.value = true;
   clearTimeout(copyTimer);
   copyTimer = setTimeout(() => {
@@ -40,10 +44,39 @@ function copyText() {
   }, 1000);
 }
 onUnmounted(() => clearTimeout(copyTimer));
+
+const contextOpen = ref(false);
+const contextPos = ref({ x: 0, y: 0 });
+const selectedText = ref('');
+const contextItems = computed<ContextMenuItem[]>(() => [
+  ...(selectedText.value ? [{ id: 'copy-selection', label: '复制所选内容', icon: 'copy' }] : []),
+  { id: 'copy', label: '复制消息', icon: 'copy' },
+  { id: 'quote', label: '引用到输入框', icon: 'reply' },
+  { id: 'edit', label: '编辑并重发', icon: 'pencil', separatorBefore: true },
+  { id: 'fork', label: '分叉当前会话', icon: 'git-branch' },
+]);
+
+function openContextMenu(event: MouseEvent): void {
+  const selection = window.getSelection();
+  selectedText.value = selection && rootEl.value?.contains(selection.anchorNode)
+    ? selection.toString().trim()
+    : '';
+  contextPos.value = { x: event.clientX, y: event.clientY };
+  contextOpen.value = true;
+}
+
+function onContextSelect(id: string): void {
+  contextOpen.value = false;
+  if (id === 'copy-selection') void copyTextToClipboard(selectedText.value);
+  else if (id === 'copy') copyText();
+  else if (id === 'quote') emit('quote', props.turn);
+  else if (id === 'edit') emit('edit', props.turn);
+  else if (id === 'fork') emit('fork');
+}
 </script>
 
 <template>
-  <div class="msg-user">
+  <div ref="rootEl" class="msg-user" @contextmenu.prevent.stop="openContextMenu">
     <div v-if="props.turn.attachments?.length" class="u-atts">
       <AttachmentChip
         v-for="(att, ai) in props.turn.attachments"
@@ -86,6 +119,15 @@ onUnmounted(() => clearTimeout(copyTimer));
       <img v-if="preview.kind === 'image'" :src="preview.url" :alt="preview.name ?? ''" />
       <video v-else :src="preview.url" controls autoplay />
     </div>
+    <ContextMenu
+      :open="contextOpen"
+      :x="contextPos.x"
+      :y="contextPos.y"
+      :items="contextItems"
+      aria-label="用户消息操作"
+      @select="onContextSelect"
+      @close="contextOpen = false"
+    />
   </div>
 </template>
 

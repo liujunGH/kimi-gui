@@ -543,7 +543,7 @@ export function useModelProviderState(
   }
 
   /** Refresh a single provider's remote model metadata, then reload caches. */
-  async function refreshProvider(id: string): Promise<void> {
+  async function refreshProvider(id: string): Promise<boolean> {
     try {
       const result = await getKimiWebApi().refreshProvider(id);
       for (const failure of result.failed) {
@@ -552,8 +552,10 @@ export function useModelProviderState(
         });
       }
       await Promise.all([loadProviders(), loadModels()]);
+      return result.failed.length === 0;
     } catch (err) {
       pushOperationFailure('refreshProvider', err);
+      return false;
     }
   }
 

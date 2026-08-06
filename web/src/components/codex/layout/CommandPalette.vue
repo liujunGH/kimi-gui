@@ -37,6 +37,7 @@ const emit = defineEmits<{
 }>();
 
 const query = ref('');
+const mode = ref<'sessions' | 'commands'>('sessions');
 const inputEl = ref<HTMLInputElement | null>(null);
 const cursor = ref(0);
 
@@ -53,19 +54,27 @@ const filteredSessions = computed(() => {
     : props.sessions;
   return list.slice(0, 50);
 });
+const visibleActions = computed(() => mode.value === 'commands' ? filteredActions.value : []);
+const visibleSessions = computed(() => mode.value === 'sessions' ? filteredSessions.value : []);
 
 interface Row {
   kind: 'action' | 'session';
   id: string;
 }
 const rows = computed<Row[]>(() => [
-  ...filteredActions.value.map((a) => ({ kind: 'action' as const, id: a.id })),
-  ...filteredSessions.value.map((s) => ({ kind: 'session' as const, id: s.id })),
+  ...visibleActions.value.map((a) => ({ kind: 'action' as const, id: a.id })),
+  ...visibleSessions.value.map((s) => ({ kind: 'session' as const, id: s.id })),
 ]);
 watch(rows, () => {
   cursor.value = 0;
 });
-watch(query, (value) => emit('query', value));
+watch([query, mode], ([value, currentMode]) => emit('query', currentMode === 'sessions' ? value : ''));
+
+function selectMode(value: 'sessions' | 'commands'): void {
+  mode.value = value;
+  cursor.value = 0;
+  void nextTick(() => inputEl.value?.focus());
+}
 
 function exec(row: Row | undefined) {
   if (!row) return;
@@ -99,16 +108,24 @@ onMounted(() => void nextTick(() => inputEl.value?.focus()));
           ref="inputEl"
           v-model="query"
           class="cp-input"
-          placeholder="输入命令或搜索会话…"
+          :placeholder="mode === 'sessions' ? '搜索会话…' : '搜索命令…'"
           @keydown="onKeydown"
         />
         <span class="kbd">Esc</span>
       </div>
+      <div class="cp-tabs" role="tablist" aria-label="命令面板内容">
+        <button type="button" role="tab" :aria-selected="mode === 'sessions'" :class="{ active: mode === 'sessions' }" @click="selectMode('sessions')">
+          会话
+        </button>
+        <button type="button" role="tab" :aria-selected="mode === 'commands'" :class="{ active: mode === 'commands' }" @click="selectMode('commands')">
+          命令
+        </button>
+      </div>
       <div v-if="rows.length" class="cp-list">
-        <template v-if="filteredActions.length">
+        <template v-if="visibleActions.length">
           <div class="cp-label">命令</div>
           <button
-            v-for="(a, i) in filteredActions"
+            v-for="(a, i) in visibleActions"
             :key="a.id"
             type="button"
             class="cp-item"
@@ -121,23 +138,23 @@ onMounted(() => void nextTick(() => inputEl.value?.focus()));
             <span v-if="a.kbd" class="kbd">{{ a.kbd }}</span>
           </button>
         </template>
-        <div v-if="q && !filteredSessions.length" class="cp-search-state-row">
+        <div v-if="mode === 'sessions' && q && !visibleSessions.length" class="cp-search-state-row">
           {{ props.searchLoading ? '正在搜索全部历史…' : (props.searchHint || '没有匹配的会话') }}
         </div>
-        <template v-if="filteredSessions.length">
+        <template v-if="visibleSessions.length">
           <div class="cp-label cp-session-label">
             <span>会话</span>
             <span v-if="props.searchLoading" class="cp-search-state">搜索全部历史中…</span>
             <span v-else-if="props.searchHint" class="cp-search-state">{{ props.searchHint }}</span>
           </div>
           <button
-            v-for="(s, j) in filteredSessions"
+            v-for="(s, j) in visibleSessions"
             :key="s.id"
             type="button"
             class="cp-item"
-            :class="{ active: cursor === filteredActions.length + j }"
+            :class="{ active: cursor === j }"
             @click="exec({ kind: 'session', id: s.id })"
-            @mousemove="cursor = filteredActions.length + j"
+            @mousemove="cursor = j"
           >
             <span class="mi-ic"><CodexIcon name="list" /></span>
             <span class="cp-session-text">
@@ -186,6 +203,27 @@ onMounted(() => void nextTick(() => inputEl.value?.focus()));
   font-size: var(--text-md);
 }
 .cp-input::placeholder { color: var(--text-3); }
+.cp-tabs {
+  flex: none;
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.cp-tabs button {
+  min-width: 64px;
+  padding: 7px 10px 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.cp-tabs button:hover { color: var(--text-2); }
+.cp-tabs button.active { border-bottom-color: var(--accent); color: var(--text); font-weight: var(--weight-semibold); }
+.cp-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .cp-list {
   flex: 1; min-height: 0;
   overflow-y: auto;

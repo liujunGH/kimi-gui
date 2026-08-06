@@ -22,13 +22,17 @@ for v in $(hdiutil info | grep -B1 "$PWD/$SRC_DIR" | grep '^/dev/disk' | awk '{p
   hdiutil detach "$v" -force >/dev/null 2>&1 || true
 done
 
-# 2. 干净 staging
+# 2. 先完整签名构建目录中的 App，再复制到干净 staging。
+# Tauri 的 ad-hoc 结果只绑定主二进制；如果只在 staging 中重签，DMG
+# 虽然有效，但 bundle/macos 下供本地体验的 App 会继续校验失败。
+codesign --deep --force --sign - "$SRC_DIR/Kimi Code.app"
+
+# 2.1 干净 staging
 STAGE="$(mktemp -d /tmp/kimi-dmg-stage.XXXXXX)"
 trap 'rm -rf "$STAGE"' EXIT
 cp -R "$SRC_DIR/Kimi Code.app" "$STAGE/"
 
-# 2.5 完整 ad-hoc 签名:tauri build 只签主二进制(Info.plist 未 seal,macOS 26 判「已损坏」),
-# 必须 --deep --force 重签整个 bundle,对齐 electron-builder afterSign 的行为。
+# 2.5 再签 staging，避免复制工具或文件系统丢失 bundle seal。
 codesign --deep --force --sign - "$STAGE/Kimi Code.app"
 
 # 3. 打包

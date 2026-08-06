@@ -71,6 +71,7 @@ const pct = computed(() => {
       </span>
       <span v-if="props.subagent.model" class="sa-model" :title="props.subagent.modelHint">
         {{ props.subagent.modelRoute === 'secondary' ? '次级模型' : '主模型' }} · {{ props.subagent.model }}
+        <template v-if="props.subagent.modelSource === 'runtime'"> · 运行时</template>
       </span>
       <span v-if="props.subagent.summary" class="sa-body">{{ props.subagent.summary }}</span>
       <span class="sa-bar"><span class="sa-bar-fill" :style="{ width: pct + '%' }"></span></span>

@@ -385,18 +385,29 @@ export interface Subagent {
   status: SubagentStatus;
   progress?: { current: number; total: number };
   summary?: string;
-  /** Spawn-time model route reconstructed from tool/profile/config. The daemon
-   *  currently does not include the bound model in subagent lifecycle events. */
+  /** Runtime-reported model when available, otherwise spawn-time inference. */
   model?: string;
   modelRoute?: 'primary' | 'secondary';
   modelHint?: string;
+  modelSource?: 'runtime' | 'inferred';
   /** 已运行时长(已完成 agent 的耗时,如 "12s" "1m 3s");kimi3 报的契约缺字段 */
   elapsed?: string;
+  createdAt?: string;
+  startedAt?: string;
+  completedAt?: string;
+  subagentType?: string;
+  background?: boolean;
+  activityCount?: number;
+  outputChars?: number;
+  parentToolCallId?: string;
+  swarmIndex?: number;
 }
 
 export interface AgentPanelProps {
   active: Subagent[];
   completed: Subagent[];
+  sessionTitle?: string;
+  workspaceName?: string;
 }
 
 export interface AgentPanelEmits {

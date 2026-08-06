@@ -7,6 +7,10 @@ export default {
   swarm: { desc: 'Toggle swarm mode; /swarm <task> runs a task in swarm' },
   goal: { desc: 'Create/control a goal: /goal <objective>, /goal pause|resume|cancel' },
   btw: { desc: 'Side chat: /btw <question> asks a forked side session' },
+  help: { desc: 'Open the complete command and GUI capability index' },
+  addDir: { desc: 'Add an extra project workspace directory: /add-dir <path>' },
+  init: { desc: 'Analyze the codebase and generate or improve AGENTS.md' },
+  feedback: { desc: 'Open the Kimi Code feedback and issue page' },
   yolo: { desc: 'Auto-approve tool actions; the agent may still ask questions' },
   auto: { desc: 'Fully autonomous — the agent never asks questions' },
   thinking: { desc: 'Set the thinking level' },
@@ -19,6 +23,7 @@ export default {
     desc: 'Download this session and troubleshooting logs as a ZIP',
     noSession: 'Open a session before exporting it.',
   },
+  exportMarkdown: { desc: 'Export the visible conversation as readable Markdown' },
   status: { desc: 'View session status' },
   undo: { desc: 'Undo the last message' },
   notice: {

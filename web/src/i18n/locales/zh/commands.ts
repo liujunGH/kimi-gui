@@ -7,6 +7,10 @@ export default {
   swarm: { desc: '切换 swarm 模式；/swarm <任务> 直接在 swarm 下执行' },
   goal: { desc: '创建/控制目标：/goal <目标>、/goal pause|resume|cancel' },
   btw: { desc: '侧边聊天：/btw <问题> 向 fork 的侧边会话提问' },
+  help: { desc: '打开完整命令与 GUI 能力索引' },
+  addDir: { desc: '为当前项目添加附加工作目录：/add-dir <路径>' },
+  init: { desc: '分析代码库并生成或完善 AGENTS.md' },
+  feedback: { desc: '打开 Kimi Code 反馈与问题页面' },
   yolo: { desc: '自动批准工具操作，Agent 仍可能提问' },
   auto: { desc: '完全自主，Agent 不再提问' },
   thinking: { desc: '设置思考强度' },
@@ -19,6 +23,7 @@ export default {
     desc: '将当前会话和排障日志下载为 ZIP 压缩包',
     noSession: '请先打开一个会话再导出。',
   },
+  exportMarkdown: { desc: '将当前可见对话导出为可读 Markdown' },
   status: { desc: '查看会话状态' },
   undo: { desc: '撤销上一条消息' },
   notice: {

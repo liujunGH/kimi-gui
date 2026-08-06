@@ -426,17 +426,33 @@ async function handleRefreshProvider(id: string): Promise<void> {
   await client.refreshProvider(id);
 }
 
+async function handleProviderImported(): Promise<void> {
+  await Promise.all([client.loadProviders(), client.loadModels()]);
+}
+
 // Destructive session/workspace/provider actions confirm through the shared
 // modal here (the menu components only emit the intent). Each passes its work
 // as the dialog `action`, so the dialog stays open with a loading state until
 // the operation settles. All three client calls toast their own errors and
 // never reject.
 async function confirmArchiveSession(id: string): Promise<void> {
+  let outcome: Awaited<ReturnType<typeof client.archiveSession>> | undefined;
   await confirm({
     title: t('sidebar.archive'),
     message: t('sidebar.archiveConfirm'),
     variant: 'danger',
-    action: () => client.archiveSession(id),
+    action: async () => {
+      outcome = await client.archiveSession(id);
+    },
+  });
+  if (outcome !== 'orphaned') return;
+  await confirm({
+    title: '清理失效任务?',
+    message:
+      '这个任务的临时工作区已经被删除，Kimi 无法正常归档。清理后会从列表移除，完整聊天记录将移动到本机 ~/.kimi-code/orphaned-sessions 备份目录。',
+    confirmLabel: '清理并备份',
+    variant: 'danger',
+    action: () => client.cleanupOrphanSession(id, true),
   });
 }
 
@@ -1059,6 +1075,7 @@ function openPr(url: string): void {
       @update="handleUpdateProvider"
       @refresh="handleRefreshProvider($event)"
       @delete="confirmDeleteProvider($event)"
+      @imported="handleProviderImported"
       @open-login="() => { showProviders = false; openLogin(); }"
       @close="showProviders = false"
     />

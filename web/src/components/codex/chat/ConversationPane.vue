@@ -33,6 +33,10 @@ const emit = defineEmits<ConversationPaneEmits & {
   (e: 'load-older'): void;
   /** MessageUser 的「编辑重发」透传(本地交叉类型,不改契约文件) */
   (e: 'edit-message', turn: ChatTurn): void;
+  /** 消息右键「引用到输入框」 */
+  (e: 'quote-message', text: string): void;
+  /** 消息右键「分叉当前会话」 */
+  (e: 'fork-session'): void;
   /** 压缩分隔线点击 → 父级在右栏展示该 turn 的摘要文本 */
   (e: 'view-compaction', turn: ChatTurn): void;
 }>();
@@ -271,7 +275,12 @@ void emit;
 
         <template v-for="t in shownTurns" :key="t.id">
           <div v-if="t.role === 'user'" :data-turn-id="t.id">
-            <MessageUser :turn="t" @edit="(turn) => emit('edit-message', turn)" />
+            <MessageUser
+              :turn="t"
+              @edit="(turn) => emit('edit-message', turn)"
+              @quote="(turn) => emit('quote-message', turn.text)"
+              @fork="emit('fork-session')"
+            />
           </div>
           <!-- 压缩分隔线(transcript 持久 divider,点击在右栏查看摘要) -->
           <button
@@ -297,6 +306,8 @@ void emit;
             :running="props.running && t.id === lastTurnId"
             :open-file="props.openFile"
             @inspect="(tab) => emit('inspect', tab)"
+            @quote="(text) => emit('quote-message', text)"
+            @fork="emit('fork-session')"
           />
         </template>
 

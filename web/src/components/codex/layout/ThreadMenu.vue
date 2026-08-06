@@ -3,7 +3,7 @@
  * ThreadMenu —— 工具栏标题 ⋯ 任务菜单(样式在 base.css 的 .thread-menu)
  *
  * 所有菜单项都有真实 emit(轮次 4e 补全):
- * - pin / rename / archive / open-side-task / copy / fork / export / new-window
+ * - pin / rename / archive / open-side-task / copy-all / copy-summary / fork / export
  */
 import { onMounted, onUnmounted, ref } from 'vue';
 import CodexIcon from './CodexIcon.vue';
@@ -13,7 +13,8 @@ const emit = defineEmits<{
   (e: 'rename'): void;
   (e: 'archive'): void;
   (e: 'open-side-task'): void;
-  (e: 'copy'): void;
+  (e: 'copy-all'): void;
+  (e: 'copy-summary'): void;
   (e: 'fork'): void;
   (e: 'export'): void;
   (e: 'export-markdown'): void;
@@ -24,7 +25,7 @@ interface MenuEntry {
   icon?: string;
   label?: string;
   kbd?: string;
-  action?: 'pin' | 'rename' | 'archive' | 'open-side-task' | 'copy' | 'fork' | 'export' | 'export-markdown';
+  action?: 'pin' | 'rename' | 'archive' | 'open-side-task' | 'copy-all' | 'copy-summary' | 'fork' | 'export' | 'export-markdown';
   sub?: boolean;
 }
 
@@ -35,7 +36,8 @@ const ENTRIES: MenuEntry[] = [
   { kind: 'sep' },
   { kind: 'item', icon: 'panel-side', label: '打开侧边任务', kbd: '⌥⌘S', action: 'open-side-task' },
   { kind: 'sep' },
-  { kind: 'item', icon: 'copy', label: '复制最近回复', action: 'copy' },
+  { kind: 'item', icon: 'copy', label: '复制全部对话为 Markdown', action: 'copy-all' },
+  { kind: 'item', icon: 'copy', label: '仅复制最终总结', action: 'copy-summary' },
   { kind: 'item', icon: 'git-branch', label: '分叉会话', action: 'fork' },
   { kind: 'item', icon: 'file', label: '导出 Markdown', action: 'export-markdown' },
   { kind: 'item', icon: 'download', label: '导出完整归档 ZIP', action: 'export' },

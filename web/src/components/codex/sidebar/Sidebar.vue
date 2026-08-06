@@ -19,7 +19,11 @@ import { useTauriDaemon } from '../../../composables/codex/useTauriDaemon';
 
 const { startWindowDragging } = useTauriDaemon();
 
-const props = defineProps<SidebarProps & { pinnedIds?: string[] }>();
+const props = defineProps<SidebarProps & {
+  pinnedIds?: string[];
+  workspaceTrust?: Record<string, boolean | null | undefined>;
+  workspaceTrustBusy?: string[];
+}>();
 const emit = defineEmits<SidebarEmits & {
   (e: 'open-settings'): void;
   (e: 'select-workspace', id: string): void;
@@ -27,10 +31,16 @@ const emit = defineEmits<SidebarEmits & {
   (e: 'rename-session', id: string): void;
   (e: 'export-session', id: string): void;
   (e: 'copy-session-id', id: string): void;
+  (e: 'fork-session', id: string): void;
   (e: 'set-workspace-sort', mode: WorkspaceSortMode): void;
   (e: 'rename-workspace', id: string): void;
   (e: 'delete-workspace', id: string): void;
   (e: 'copy-path', root: string): void;
+  (e: 'toggle-workspace-pin', id: string): void;
+  (e: 'edit-workspace-emoji', id: string): void;
+  (e: 'inspect-workspace-trust', id: string): void;
+  (e: 'set-workspace-trust', id: string, trusted: boolean): void;
+  (e: 'reorder-workspaces', ids: string[]): void;
 }>();
 
 /** 工作区排序模式:接 client.setWorkspaceSortMode(持久化) */
@@ -41,6 +51,33 @@ function sortOf(name: string): WorkspaceSortMode {
 function onSetSort(wsId: string, mode: WorkspaceSortMode) {
   sortModes.value[wsId] = mode;
   emit('set-workspace-sort', mode);
+}
+
+const draggingWorkspaceId = ref('');
+function onWorkspaceDragStart(event: DragEvent, id: string): void {
+  draggingWorkspaceId.value = id;
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', id);
+  }
+}
+function onWorkspaceDragOver(event: DragEvent): void {
+  if (!draggingWorkspaceId.value) return;
+  event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+}
+function onWorkspaceDrop(event: DragEvent, targetId: string): void {
+  event.preventDefault();
+  const sourceId = draggingWorkspaceId.value || event.dataTransfer?.getData('text/plain') || '';
+  draggingWorkspaceId.value = '';
+  if (!sourceId || sourceId === targetId) return;
+  const ids = props.workspaces.map((workspace) => workspace.id);
+  const sourceIndex = ids.indexOf(sourceId);
+  const targetIndex = ids.indexOf(targetId);
+  if (sourceIndex < 0 || targetIndex < 0) return;
+  ids.splice(sourceIndex, 1);
+  ids.splice(targetIndex, 0, sourceId);
+  emit('reorder-workspaces', ids);
 }
 
 const filteredSessions = computed(() => {
@@ -160,6 +197,7 @@ function sessionsOf(wsName: string): Session[] {
             @rename="emit('rename-session', s.id)"
             @export="emit('export-session', s.id)"
             @copy-id="emit('copy-session-id', s.id)"
+            @fork="emit('fork-session', s.id)"
           />
         </div>
       </section>
@@ -173,17 +211,29 @@ function sessionsOf(wsName: string): Session[] {
         :sort-mode="sortOf(ws.name)"
         :pinned-ids="props.pinnedIds"
         :active-workspace="ws.id === props.currentWorkspaceId"
+        :trusted="props.workspaceTrust?.[ws.id]"
+        :trust-busy="props.workspaceTrustBusy?.includes(ws.id)"
+        :dragging="draggingWorkspaceId === ws.id"
         @select-session="(id) => emit('select-session', id)"
         @toggle-pin="(id) => emit('toggle-pin', id)"
         @archive-session="emit('archive-session', $event)"
         @rename-session="emit('rename-session', $event)"
         @export-session="emit('export-session', $event)"
         @copy-session-id="emit('copy-session-id', $event)"
+        @fork-session="emit('fork-session', $event)"
         @set-sort="(m) => onSetSort(ws.name, m)"
         @select-workspace="emit('select-workspace', $event)"
         @rename-workspace="emit('rename-workspace', $event)"
         @delete-workspace="emit('delete-workspace', $event)"
         @copy-path="emit('copy-path', $event)"
+        @toggle-workspace-pin="emit('toggle-workspace-pin', $event)"
+        @edit-workspace-emoji="emit('edit-workspace-emoji', $event)"
+        @inspect-trust="emit('inspect-workspace-trust', $event)"
+        @set-trust="(id, trusted) => emit('set-workspace-trust', id, trusted)"
+        @drag-start="onWorkspaceDragStart"
+        @drag-over="onWorkspaceDragOver"
+        @drop="onWorkspaceDrop"
+        @drag-end="draggingWorkspaceId = ''"
       />
       <div v-if="hiddenWorkspaceCount > 0 || canCollapseWorkspaces" class="workspace-pager">
         <button

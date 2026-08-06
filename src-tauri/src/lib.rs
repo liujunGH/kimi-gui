@@ -2,6 +2,7 @@
 
 mod daemon;
 mod dock_badge;
+mod plugin_tui;
 mod runtime;
 mod shortcut;
 mod tray;
@@ -50,6 +51,14 @@ fn quit_app(app: tauri::AppHandle) {
     app.exit(0);
 }
 
+/// Native drag/drop exposes absolute paths but does not classify them. Keep
+/// this tiny check in Rust so the WebView only registers dropped directories
+/// as workspaces and leaves dropped files to the composer attachment flow.
+#[tauri::command]
+fn path_is_directory(path: String) -> bool {
+    std::path::Path::new(&path).is_dir()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -63,13 +72,16 @@ pub fn run() {
         // 全局快捷键 plugin(builder 构造,内部已注册 Cmd+Option+N)
         .plugin(shortcut::build_global_shortcut_plugin())
         .manage(SharedDaemon(Mutex::new(None)))
+        .manage(plugin_tui::PluginTuiState::default())
         .invoke_handler(tauri::generate_handler![
             daemon_info,
             restart_kimi_daemon,
             quit_app,
+            path_is_directory,
             dock_badge::set_dock_badge,
             usage::plan_usage,
             runtime::kimi_engine_status,
+            runtime::migrate_kimi_033_config,
             runtime::list_kimi_agents,
             runtime::save_kimi_agent,
             runtime::delete_kimi_agent,
@@ -80,10 +92,22 @@ pub fn run() {
             runtime::delete_kimi_mcp_server,
             runtime::read_kimi_workspace_context,
             runtime::save_kimi_workspace_context,
+            runtime::read_kimi_performance_config,
+            runtime::save_kimi_performance_config,
             runtime::create_kimi_settings_backup,
             runtime::inspect_kimi_settings_backup,
             runtime::restore_kimi_settings_backup,
-            runtime::run_kimi_maintenance
+            runtime::detect_orphan_kimi_sessions,
+            runtime::cleanup_orphan_kimi_session,
+            runtime::delete_archived_kimi_session,
+            runtime::run_kimi_provider_command,
+            runtime::run_kimi_maintenance,
+            plugin_tui::start_kimi_plugin_tui,
+            plugin_tui::read_kimi_plugin_tui,
+            plugin_tui::write_kimi_plugin_tui,
+            plugin_tui::open_kimi_plugin_tui,
+            plugin_tui::resize_kimi_plugin_tui,
+            plugin_tui::stop_kimi_plugin_tui
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
