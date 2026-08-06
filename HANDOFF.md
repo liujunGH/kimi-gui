@@ -1174,3 +1174,4 @@ ROADMAP 给 kimi3 的 5 项全部完成，vue-tsc 全绿，`verify5.mjs` 10 断�
 - **性能与安全**：后台任务面板关闭即停止轮询；性能 TOML 写入原子保留无关字段并做范围校验，可实时应用的 loop-control/background 同步到 daemon。
 - **收口修复**：归档恢复增加 Engine 重连引导；全局任务面板按 daemon 权威快照刷新；Capabilities 与官方插件管理读取当前 daemon 版本；内嵌 `/plugins` 增加焦点状态、显式聚焦和 Tab/方向键/Enter/Esc 指引，并修复浅色主题透明叠层。
 - **阶段验收**：每阶段均通过 Web 类型检查；最终为 51 文件/737 tests，Rust 16 tests 全绿。1.0.16 已在真实桌面应用中验收任务中心、性能配置、Capabilities、全局任务面板、插件 TUI 键盘交互和标题栏双击缩放；最终候选 DMG 已通过镜像、挂载、版本 `1.0.16`、arm64 与深度签名校验，SHA-256 为 `f05ac286ccb3c9d664dfcde8d4ee5b00058f259ef77e9e9dc2c589b377b8b5a2`。
+- **线上发行验收**：GitHub Actions `31087431085` 的 quality、prepare、macOS、Windows 与 manifest 全绿；Release 已正式公开，DMG、NSIS、MSI、app.tar.gz 和 `latest.json` 齐全。线上 DMG 已重新下载并通过镜像、挂载、版本 `1.0.16`、arm64 与深度签名校验，SHA-256 为 `19b0b36dec427aac4e53473cc01e13485478833bdd059c626ffcd062de1d0614`；Release 与仓库更新包逐字节一致，`latest.json` 含 macOS/Windows 双平台；Homebrew Cask 已同步到 1.0.16 并通过 Ruby 语法与 `brew style` 校验。
