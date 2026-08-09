@@ -29,10 +29,11 @@ web/            前端(fork 自 kimi-web)
   src/codex-demo/         组件沙箱(codex.html)
 src-tauri/      Rust 壳(窗口/daemon 拉起/托盘/全局快捷键/原生对话框/用量抓取)
 prototype/      交互与视觉契约(静态原型,UI 决策的源头)
-docs/           设计 spec
-HANDOFF.md      开发日志(事实上的 CHANGELOG)
+docs/           设计 spec / 命令映射 / 上游能力矩阵
+AGENTS.md       开发规范(接手迭代怎么写代码、功能怎么落地、提交门槛)
 ARCHITECTURE.md 组件契约 / 数据流 / 文件分工
-ROADMAP.md      功能路线图
+CHANGELOG.md    发行说明
+ROADMAP.md      迭代待办
 ```
 
 ## 开发
@@ -66,7 +67,7 @@ pnpm build            # web build → postbuild → Rust release → .app + DMG
 
 **版本规则**(小版本迭代,不追大):
 - **单一版本源**:`src-tauri/tauri.conf.json` 的 `version`(DMG 文件名、.app 版本、关于页展示都由它驱动;发版时同步根 `package.json` / `web/package.json` / `Cargo.toml`——脚本/手动都行,但必须一致)
-- 语义化小步:功能合入后递增 patch 版本;每次发版同步 `CHANGELOG.md` 和 `HANDOFF.md`
+- 语义化小步:功能合入后递增 patch 版本;每次发版同步 `CHANGELOG.md` 和 `docs/upstream-capabilities.md`(能力状态标记变动)
 - 推送 `v*` tag 后,GitHub Actions 先跑类型检查、测试、样式检查、前端构建和 Rust 校验,再构建 macOS/Windows 产物与自动更新清单
 - 当前版本:**1.0.16**
 
@@ -84,7 +85,7 @@ pnpm build            # web build → postbuild → Rust release → .app + DMG
 |---|---|
 | 看 UI 组件怎么约定 | `ARCHITECTURE.md` |
 | 看交互为什么长这样 | `prototype/`(配 `prototype/README.md`) |
-| 看最近改了什么 | `HANDOFF.md`(按轮次) |
+| 接手开发怎么写代码 | `AGENTS.md` |
 | 看发行说明 | `CHANGELOG.md` |
 | 看接下来做什么 | `ROADMAP.md` |
 | 添加工作区 / 登录 / 设置 | app 内:左下角账号行 / 侧栏「工作区」+ / 左下齿轮 |

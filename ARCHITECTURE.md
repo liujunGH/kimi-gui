@@ -1,6 +1,6 @@
 # ARCHITECTURE.md —— kimi-gui 技术架构
 
-> **必读**:本文档定义 kimi-gui 的代码架构。HANDOFF.md 定义分工,本文档定义**怎么写代码**。ZCode 和 kimi3 都必须遵守。动手前读完。
+> **必读**:本文档定义 kimi-gui 的代码架构——目录结构、数据流、组件契约、主题系统。开发规范与提交门槛见 `AGENTS.md`。动手前读完。
 >
 > **方法论**:架构不是发明,是**继承 + 最小偏离**。官方 Kimi web 的架构已被生产验证,我们 fork 后继承 90%,只在 UI 层做必要偏离。
 
@@ -55,7 +55,7 @@
 
 ```
 kimi-gui/
-├── src-tauri/                              Rust 壳(ZCode 负责)
+├── src-tauri/                              Rust 壳
 │   ├── src/
 │   │   ├── main.rs                         入口 + tauri::Builder 装配
 │   │   ├── daemon.rs                       connect_daemon / kimi_home / find_kimi(复用 kimi-ui)
@@ -105,9 +105,9 @@ kimi-gui/
 │   │   │   ├── useAuthGate.ts              🔒 fork 官方
 │   │   │   ├── useSlashMenu.ts             🟡 fork 官方(参考逻辑,扩展 Skills 动态拉取)
 │   │   │   ├── useMentionMenu.ts           🟡 fork 官方
-│   │   │   └── codex/                      🟢 新增,UI 状态(ZCode 写)
+│   │   │   └── codex/                      🟢 新增,UI 状态
 │   │   │       ├── useUIState.ts           右栏/侧边任务/Review pane(独立布尔,共存制 Q5)
-│   │   │       ├── useHotkeys.ts           全局快捷键注册表(组件级处理函数由 kimi3 注册)
+│   │   │       ├── useHotkeys.ts           全局快捷键注册表(组件级处理函数在组件里写并注册)
 │   │   │       ├── useComposerMode.ts      steer/queue 意图方法:queue() / steer() / 队列操作
 │   │   │       ├── useThinkingToggle.ts    思考全局开关状态
 │   │   │       ├── useContextMeter.ts      token 用量环(读 client.snapshot)
@@ -116,7 +116,7 @@ kimi-gui/
 │   │   ├── components/
 │   │   │   ├── chat/                       🔒 fork 官方,只读参考(不直接用)
 │   │   │   ├── ui/                         🔒 fork 官方通用组件(Button/Icon/Tooltip)
-│   │   │   └── codex/                      🟢 新增,我们的 UI(kimi3 负责)
+│   │   │   └── codex/                      🟢 新增,我们的 UI
 │   │   │       ├── AppShell.vue            两栏布局骨架
 │   │   │       ├── layout/
 │   │   │       │   ├── SideTask.vue        真分栏容器(props + 默认 slot,⌥⌘S)
@@ -161,7 +161,7 @@ kimi-gui/
 │   │   │       └── settings/
 │   │   │           └── SettingsPage.vue
 │   │   │
-│   │   ├── styles/                         🟢 kimi3 负责(10 文件,对应 prototype v2)
+│   │   ├── styles/                         🟢 新增(10 文件,对应 prototype v2)
 │   │   │   ├── tokens.css                  设计 token(浅色 :root + 深色 [data-theme="dark"] 块)
 │   │   │   ├── base.css                    重置 + 骨架 + 滚动条 + 通用组件 + 菜单/toast
 │   │   │   ├── sidebar.css                 左栏
@@ -179,25 +179,27 @@ kimi-gui/
 │   │
 │   ├── public/                             静态资源
 │   ├── index.html                          入口 HTML
-│   ├── vite.config.ts                      🟡 ZCode(去 dev proxy,对接 Tauri)
+│   ├── vite.config.ts                      🟡 改造(去 dev proxy,对接 Tauri)
 │   ├── tsconfig.json
-│   └── package.json                        🟡 ZCode(依赖管理)
+│   └── package.json                        🟡 改造(依赖管理)
 │
-├── prototype/                              视觉契约(kimi3 v2,只读参考)
+├── prototype/                              视觉契约(v2,只读参考)
 │   ├── *.html                              7 个场景
-│   ├── styles/*.css                        10 个 CSS(kimi3 搬到 web/src/styles/)
-│   └── mock/shared.js                      交互逻辑(kimi3 搬到 components/codex/)
+│   ├── styles/*.css                        10 个 CSS(搬到 web/src/styles/)
+│   └── mock/shared.js                      交互逻辑(搬到 components/codex/)
 │
 ├── docs/
 │   └── superpowers/specs/
 │       └── 2026-07-18-kimi-gui-design.md   设计文档(权威)
 │
-├── .upstream/                              fork 同步(ZCode)
+├── .upstream/                              fork 同步
 │   ├── sync.sh                             pull apps/kimi-web 更新
 │   └── PATCHES.md                          改过的官方文件清单
 │
-├── HANDOFF.md                              协作交接
+├── AGENTS.md                               开发规范
 ├── ARCHITECTURE.md                         本文档
+├── CHANGELOG.md                            发行说明
+├── ROADMAP.md                              迭代待办
 ├── package.json                            根(管理 Tauri + web 协作)
 └── README.md
 ```
@@ -295,7 +297,7 @@ export function useUIState() {
 - 所有跨组件状态用**模块级 ref 单例**(像上面这样)
 - 组件**不能**自己 `ref()` 一个全局状态,必须从 composable 拿
 - composable 文件**只暴露 use 函数**,不直接 export ref(防止绕过 action 改)
-- 全局快捷键:注册表在 `composables/codex/useHotkeys.ts`;**组件级处理函数由 kimi3 写并注册**(SlashMenu 的 ↑↓/Enter、审批卡的 y/a/n/p 等)
+- 全局快捷键:注册表在 `composables/codex/useHotkeys.ts`;**组件级处理函数在组件里写并注册**(SlashMenu 的 ↑↓/Enter、审批卡的 y/a/n/p 等)
 
 ### client(协议状态)怎么给组件
 
@@ -331,7 +333,7 @@ const currentModel = computed(() => client.models.value.current);
 
 ## 4. 组件契约(每个组件的 props/emit)
 
-> 这些是 ZCode 写的 `types/codex.ts` 里会定义的接口,kimi3 写组件时**必须按这些 props 接数据**,不能自己造字段。
+> 这些是 `types/codex.ts` 里定义的接口,写组件时**必须按这些 props 接数据**,不能自己造字段。
 >
 > **动作路径约定**:深组件(嵌套 3 层以上,如 ApprovalCard)直接 `inject('client')` 调 action(`client.approve()` 等);**emit 只用于纯 UI 事件**(toggle / close / select-tab / select-item),不走 emit 链穿透。
 >
@@ -477,7 +479,7 @@ interface SlashMenuProps {
   skills: Skill[];                 // 动态,来自 /sessions/{id}/skills,标 isSkill
   query: string;                   // 当前过滤词(v-model 传入)
 }
-// cursorIndex 是组件内部 ref(kimi3 的键盘导航行为),不是 prop
+// cursorIndex 是组件内部 ref(键盘导航行为),不是 prop
 interface SlashMenuEmits {
   (e: 'select', cmd: BuiltinCommand | Skill, args?: string): void;  // acceptsInput 留参,其余直接执行
   (e: 'close'): void;
@@ -602,7 +604,7 @@ interface SideTaskProps {
 
 ### 完整类型定义位置
 
-所有上面的 interface 放在 **`web/src/types/codex.ts`**(ZCode 写)。fork 的官方类型在 `web/src/types.ts`(不动)。两者通过 `import type` 引用,不混。
+所有上面的 interface 放在 **`web/src/types/codex.ts`**。fork 的官方类型在 `web/src/types.ts`(不动)。两者通过 `import type` 引用,不混。
 
 ---
 
@@ -610,7 +612,7 @@ interface SideTaskProps {
 
 ### 5.1 token 定义
 
-`web/src/styles/tokens.css` 直接搬 `prototype/styles/tokens.css`(kimi3 负责):
+`web/src/styles/tokens.css` 直接搬 `prototype/styles/tokens.css`:
 - 浅色:`:root { --bg: #ffffff; ... }`
 - 深色:同文件内 `[data-theme="dark"] { ... }` 块(**不单独建 themes.css**)
 
@@ -639,11 +641,11 @@ export function useTheme() {
 
 ### 5.4 主题影响的所有组件
 
-**所有组件必须浅+深双主题测试**。kimi3 写完一个组件,必须验证 `[data-theme="dark"]` 下不破。
+**所有组件必须浅+深双主题测试**。写完一个组件,必须验证 `[data-theme="dark"]` 下不破。
 
 ---
 
-## 6. Tauri 壳(ZCode 负责)
+## 6. Tauri 壳
 
 ### 6.1 复用 kimi-ui 的 Rust 代码
 
@@ -676,7 +678,7 @@ prod:vite build → web/dist/
 
 ## 7. 已拍板的问题(Q1-Q5 结论)
 
-> 本节原为 ZCode 提问,kimi3 复核 + ZCode 轮次 0.2 回应后全部定案,结论如下。
+> 本节记录早期架构争议的最终定案,作为后续开发的约束沿用。
 
 ### Q1. 组件粒度:ConversationPane 是大组件还是拆?
 
@@ -692,25 +694,15 @@ prod:vite build → web/dist/
 
 ### Q4. 思考块流式动画用 CSS 还是 JS?
 
-**【结论】CSS 管视觉,JS 管节奏**:cursor blink、rail pulse、max-height 过渡全在 CSS;流式节奏(批量更新 + 节流)**复用 fork 的 `composables/client/eventBatcher.ts`,不新写**;流式期间的自动跟随滚动(滚锚)是组件行为,归 kimi3,不进 composable。
+**【结论】CSS 管视觉,JS 管节奏**:cursor blink、rail pulse、max-height 过渡全在 CSS;流式节奏(批量更新 + 节流)**复用 fork 的 `composables/client/eventBatcher.ts`,不新写**;流式期间的自动跟随滚动(滚锚)是组件行为,不进 composable。
 
 ### Q5. 侧边任务(SideTask)和 Inspect 右栏会不会同时开?
 
-**【结论】共存,不互斥**:SideTask 真分栏(主区 padding 让位),DetailPane / ReviewPane 以更高 z-index **覆盖**在其上;**Esc 分层关闭**——先关最上层覆盖物,再关分栏。覆盖是瞬态(看完 Esc 即回),不构成持久三栏。ZCode 原互斥建议撤回(与其 `useUIState` 草图的两个独立布尔自相矛盾)。
+**【结论】共存,不互斥**:SideTask 真分栏(主区 padding 让位),DetailPane / ReviewPane 以更高 z-index **覆盖**在其上;**Esc 分层关闭**——先关最上层覆盖物,再关分栏。覆盖是瞬态(看完 Esc 即回),不构成持久三栏。
 
 ---
 
-## 8. 开工前还要做的事(ZCode 的 TODO)
-
-- [x] 把本文档 + HANDOFF.md 丢给用户转 kimi3 核对(轮次 0.2/0.3 完成)
-- [x] kimi3 确认 Q1-Q5 + 契约异议(结论见第 7 节与附录 B)
-- [x] 在设计文档追加决策 19(状态管理:纯 composables)—— 2026-07-19
-- [x] 在 HANDOFF.md 追加 ARCHITECTURE.md 引用 —— 2026-07-19 轮次 1.2
-- [x] 开始轮次 1(搭骨架)—— 2026-07-19 完成,详见 HANDOFF 轮次 1 / 1.1 / 1.2
-
----
-
-## 附录 A:架构看门狗(每次提交前自查)
+## 附录:架构看门狗(每次提交前自查)
 
 1. **协议层动了没?** → 动了回退(`api/daemon/` / `lib/slashCommands.ts` / `types.ts`)
 2. **组件直接调 api 了没?** → 调了必须改走 client action
@@ -719,8 +711,3 @@ prod:vite build → web/dist/
 5. **样式用了硬编码 hex 吗?** → 用了要改 `var(--xxx)`
 6. **改过的官方文件记 PATCHES.md 了吗?** → 没记要补
 7. **深色主题下验证了吗?** → 没验证要补
-
-## 附录 B:修订记录
-
-- **2026-07-19 轮次 0.2(ZCode)**:接受 kimi3 复核 8 处契约异议中的 7 处;唯一反驳 —— permission 维持官方 `yolo`(types.ts:314/373 实证,kimi3 验证后认账);Q1-Q5 全部按 kimi3 立场定案。
-- **2026-07-19 轮次 0.3(kimi3)**:落地全部修订 —— 契约改用官方 `ChatTurn` / `TurnBlock`(AppMessage 作废);`ComposerProps` 补 `modes` + `toggle-mode`;permission 回 `yolo`(UI 标签层映射「完全自主」);SlashMenu / MentionMenu 的 cursor 改内部 ref;弹层簇 4 个全独立;组件树补 AgentPanel / TurnProgress / ThreadMenu / FileMenu / Toast;SideTask 挪 `codex/layout/` 并 slot 化(AgentTranscript 为内容组件);5.3 改写 + styles 列 10 文件 + 删 themes.css;Q5 定共存(覆盖 + 分层 Esc);`useKeyboardShortcuts` 统一改名 `useHotkeys`;Q4 节奏控制明确复用 `eventBatcher.ts`。

@@ -1,13 +1,11 @@
 /**
  * useHotkeys —— 全局快捷键注册表
  *
- * 职责边界(HANDOFF 轮次 0.1):
- * - ZCode 维护**注册表**(keymap → handler)
- * - kimi3 写**组件级 handler**(键盘导航、y/a/n/p 审批、命令面板触发等)
+ * 职责边界:
+ * - 这里维护**注册表**(keymap → handler)
+ * - 组件级 handler(键盘导航、y/a/n/p 审批、命令面板触发等)在组件里写,
  *   并通过 `register` 注册进来
  * - useHotkeys 在 window 上挂单个 keydown 监听,按 keymap 分发
- *
- * ⚠️ 冻结点:register/unregister 签名一旦 kimi3 开始用,改动需双方同意。
  *
  * 快捷键清单(prototype v2 实现):
  *   ⌘K        搜索(展示)

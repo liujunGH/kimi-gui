@@ -1,16 +1,14 @@
 /**
  * useUIState —— 跨组件 UI 状态(右栏 / 侧边任务 / Review pane / 全局思考开关)
  *
- * 职责边界(HANDOFF 轮次 0.1 + 0.3):
+ * 职责边界:
  * - 这里只暴露**状态 ref + 意图方法**(open/close/toggle/set-tab)
- * - **不写组件行为逻辑**(键盘导航、动画、滚锚)—— 那归 kimi3
+ * - **不写组件行为逻辑**(键盘导航、动画、滚锚)—— 那些归组件
  * - 状态是模块级单例(模块作用域 ref,所有组件拿到同一个)
  *
- * Q5(ARCHITECTURE 第 7.5):DetailPane/ReviewPane 跟 SideTask **共存**,
- * 不互斥。覆盖物分层级(DetailPane/ReviewPane z-index 高于 SideTask),
- * Esc 分层关闭(先关最上层覆盖物,再关分栏)。
- *
- * ⚠️ 冻结点:本文件签名一旦 kimi3 开始用,改动需双方同意(HANDOFF 5.1)。
+ * DetailPane/ReviewPane 跟 SideTask **共存**,不互斥。覆盖物分层级
+ * (DetailPane/ReviewPane z-index 高于 SideTask),Esc 分层关闭
+ * (先关最上层覆盖物,再关分栏)。详见 ARCHITECTURE.md Q5。
  */
 import { ref } from 'vue';
 import type { DetailPaneTab } from '../../types/codex';

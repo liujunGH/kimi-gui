@@ -1,13 +1,10 @@
 /**
  * kimi-gui Codex UI 组件契约(types/codex.ts)
  *
- * 本文件是 ZCode 与 kimi3 的「接口冻结点」(HANDOFF 5.1 按域并行条款)。
- * 一旦冻结,任何一方要改这里的类型必须提 issue、双方同意后才能动。
- *
- * 命名约定:fork 官方的类型(ChatTurn / TurnBlock / ToolCall / TodoView /
- * PermissionMode 等)直接 `import type` from '../../types',不重新定义;
- * 这里只放 codex UI 自有的派生类型(ModelInfo / Skill / Subagent / 各种
- * View 状态等),以及为方便组件使用而做的别名/重组。
+ * 这里是 codex UI 层的类型定义。fork 官方的类型(ChatTurn / TurnBlock /
+ * ToolCall / TodoView / PermissionMode 等)直接 `import type` from
+ * '../../types',不重新定义;这里只放 codex UI 自有的派生类型(ModelInfo /
+ * Skill / Subagent / 各种 View 状态等),以及为方便组件使用而做的别名/重组。
  *
  * 对应文档:ARCHITECTURE.md 第 4 节(组件契约)。
  */
