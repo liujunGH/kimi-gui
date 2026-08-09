@@ -65,13 +65,11 @@ pnpm build            # web build → postbuild → Rust release → .app + DMG
 - `src-tauri/target/release/bundle/macos/Kimi Code.app`
 - `src-tauri/target/release/bundle/dmg/Kimi Code_<version>_aarch64.dmg`
 
-**版本规则**(小版本迭代,不追大):
-- **单一版本源**:`src-tauri/tauri.conf.json` 的 `version`(DMG 文件名、.app 版本、关于页展示都由它驱动;发版时同步根 `package.json` / `web/package.json` / `Cargo.toml`——脚本/手动都行,但必须一致)
-- 语义化小步:功能合入后递增 patch 版本;每次发版同步 `CHANGELOG.md` 和 `docs/upstream-capabilities.md`(能力状态标记变动)
-- 推送 `v*` tag 后,GitHub Actions 先跑类型检查、测试、样式检查、前端构建和 Rust 校验,再构建 macOS/Windows 产物与自动更新清单
-- 当前版本:**1.0.16**
+**版本规则**:单一版本源是 `src-tauri/tauri.conf.json` 的 `version`,发版时同步根 `package.json` / `web/package.json` / `Cargo.toml` 保持一致。当前版本:**1.0.16**。
 
-**签名现状**:adhoc 自签名。分享给别人(M 系列 Mac):
+**完整发版流程**(tag 触发 → CI 四阶段:质量门禁 / 创建 Release / 双平台构建 / 签名入仓)与签名约定见 [`AGENTS.md`](./AGENTS.md) 第 4 节。
+
+**分享给别人(M 系列 Mac,adhoc 自签名)**:
 1. 对方先装 Kimi Code CLI 并 `kimi login`
 2. 拖入「应用程序」
 3. 首次打开若提示"无法验证开发者":右键 app →「打开」;仍不行执行

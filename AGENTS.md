@@ -84,12 +84,41 @@ Kimi Code(Moonshot CLI agent)的**原生桌面客户端**,体验对齐 Codex 桌
 
 语义化小步迭代:功能合入后递增 patch;每次发版同步 `CHANGELOG.md`(对应版本下记录新增/改进/修复)。
 
-发版流程:
-1. 递增版本,同步上述 4 处
-2. 更新 `CHANGELOG.md` 与 `docs/upstream-capabilities.md`(状态标记变动)
-3. 推送 `v*` tag → `.github/workflows/release.yml` 自动跑 CI(类型检查/测试/样式/构建/Rust 校验),产出 macOS/Windows 产物 + `updates/latest.json` 自动更新清单
+### 发版流程(tag 触发,CI 全自动)
 
-签名现状:adhoc 自签名。正式对外发行需 Apple 开发者账号签名 + 公证(未配置)。
+**发版前(本地):**
+1. 递增 patch 版本,同步上述 4 处保持一致
+2. 更新 `CHANGELOG.md`:在对应版本号下记录新增/改进/修复(CI 会自动提取该段落作为 GitHub Release 说明)
+3. 更新 `docs/upstream-capabilities.md`:能力状态标记有变动(✅/🟡/⬜/🧪)就同步
+4. 提交这些文档变更到 main
+
+**触发构建(二选一):**
+- `git tag vX.Y.Z && git push origin vX.Y.Z`(常规)
+- 或 Actions →「发行构建」→ Run workflow,填版本号(不带 v)
+
+**CI 四阶段(`.github/workflows/release.yml`):**
+1. `quality` —— 质量门禁(Ubuntu):typecheck + 单测 + 样式 + `web:build` + `cargo fmt --check` + `cargo test --locked`。**不通过则中止,不创建 Release**
+2. `prepare` —— 创建 GitHub Release(空壳,防双平台抢建)
+3. `build` —— macOS + Windows 矩阵并行:tauri-action 构建 → macOS 完整 adhoc 重签 + 重打 DMG → 上传资产到 Release
+4. `manifest` —— 下载双平台包 → tauri signer 重签名 → 更新包入仓 `updates/` → 生成 `latest.json`(从 CHANGELOG 提取说明) → 上传 Release + 回传 main 分支(`[skip ci]`)+ 回填 Release 正文
+
+产物落点:
+- GitHub Release:macOS DMG / Windows NSIS exe(手动下载)
+- 仓库 `updates/`:`latest.json`(双平台自动更新清单)+ 双平台更新包(raw.githubusercontent 主端点,jsDelivr 备;入仓是因为本机直连 github 下载链不通)
+
+### 签名约定(无证书下的现状)
+
+adhoc 自签名(`codesign --deep --force --sign -`)。几个**不能踩的坑**(release.yml 注释里的血泪经验):
+- macOS 26 会把不完整签名判为「已损坏」,所以构建后**必须 `--deep --force` 重签整个 bundle**——CI 的 build 阶段已自动做
+- **不要剥签名**:无签名 app 在 macOS 26 直接被 SIGKILL,adhoc 反而能跑(v1.0.5 试过剥签名,是方向性错误已回滚)
+- 用户端「已损坏」提示用 `xattr -dr com.apple.quarantine /Applications/Kimi\ Code.app` 一次即可解
+- tauri-action 重打包会使 bundler 签名失效,manifest 阶段对最终资产重新 tauri signer sign
+
+正式对外发行需 Apple 开发者账号签名 + 公证(`tauri build` 配置后自动完成),**未配置**。
+
+### `updates/` 回传 main 的冲突处理
+
+manifest 阶段回传时,updates/ 的二进制必然和远端冲突(两版都改了同文件),CI 用 `git rebase -X theirs origin/main` 让本次新构建胜出。若发版期间 main 有更新,文档/代码提交会被 rebase 在 updates 提交之上。
 
 ---
 
@@ -104,6 +133,8 @@ pnpm --filter @moonshot-ai/kimi-web commands:check      # 改了命令/分类必
 pnpm --filter @moonshot-ai/kimi-web test                # 改了 composable/逻辑
 cargo test --manifest-path src-tauri/Cargo.toml         # 改了 Rust 壳
 ```
+
+> 发版时 CI 的 `quality` 阶段会跑 typecheck + 单测 + 样式 + `web:build` + `cargo fmt --check` + `cargo test --locked`。发 tag 前本地预跑这些可避免 CI 门禁挂掉、Release 建一半中止。
 
 **架构看门狗自查**(每次提交前过一遍,见 `ARCHITECTURE.md` 附录 A):
 1. 协议层动了没?(动了回退)
