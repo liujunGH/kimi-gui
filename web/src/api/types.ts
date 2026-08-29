@@ -805,12 +805,13 @@ export interface AppConfig {
   secondaryModel?: {
     /** Legacy single-model key (no pool configured). */
     model?: string;
-    /** Pool mode (0.36+): the DEFAULT ALIAS — must be a key of `models`. */
+    /** Pool mode (0.36+): the default MODEL ID — must be a key of `models`. */
     defaultModel?: string;
     defaultEffort?: string;
-    /** Kimi Code 0.36+ named model pool: alias → model id; the main agent
-     *  picks from the pool per spawn. Aliases are the agent's selection cue
-     *  (there is no description field in the official schema). */
+    /** Kimi Code 0.36+ model pool: MODEL ID → ROUTING DESCRIPTION. The key is
+     *  what the main agent passes to the Agent tool's `model` parameter (must
+     *  resolve in the catalog); the value is rendered into the tool description
+     *  as the agent's per-model selection cue. */
     models?: Record<string, string>;
     /** Kimi Code 0.36+: route ALL subagents to the secondary model, ignoring
      *  per-agent profile preferences. Mutually exclusive with `models`. */

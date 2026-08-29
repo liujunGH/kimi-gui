@@ -265,14 +265,21 @@ function saveSecondaryEffort(): void {
   });
 }
 
-// Kimi Code 0.36+ secondary-model details, aligned with the official schema:
-// - pool mode: `models` = alias → model; `default_model` = the default ALIAS
-//   (a key of models, NOT a model id); aliases are the main agent's selection
-//   cue — the official schema has no per-entry description field.
+// Kimi Code 0.36+ secondary-model details — OFFICIAL semantics (verified
+// against agent-core-v2 buildSubagentModelDescriptions/assertValidSubagent-
+// ModelPool at 0.39.1):
+// - `models` = MODEL ID → ROUTING DESCRIPTION. The key must resolve in the
+//   model catalog (it is what the main agent passes to the Agent tool's
+//   `model` parameter); the value is rendered into the Agent tool description
+//   the main agent reads when picking a model per spawn.
+// - `default_model` = the default MODEL ID (must be a key of models when the
+//   pool table exists; marked [default] for the agent, [main model] is added
+//   automatically when it equals the caller's model).
 // - single-model mode: legacy `model` key (+ optional `force`).
 // - `force` is mutually exclusive with `models` (the pool exists to give the
-//   main agent a choice; force removes it) and `primary` is a reserved alias.
-const secondaryPool = ref<Array<{ alias: string; model: string }>>([]);
+//   main agent a choice; force removes it).
+const secondaryPool = ref<Array<{ model: string; description: string }>>([]);
+const secondaryPoolDefault = ref('');
 const secondaryPoolSaving = ref(false);
 const secondaryForce = computed(
   () => (client.config.value as AppConfig | null)?.secondaryModel?.force === true,
@@ -284,9 +291,31 @@ const secondaryPoolConfigured = computed(() => {
   const models = (client.config.value as AppConfig | null)?.secondaryModel?.models;
   return models !== undefined && Object.keys(models).length > 0;
 });
+/** Routing summary shown above the pool editor — what the daemon will
+ *  actually do with the current config (mirrors the official description
+ *  markers the main agent sees). */
+const secondaryRoutingSummary = computed(() => {
+  const section = (client.config.value as AppConfig | null)?.secondaryModel;
+  const models = section?.models ?? {};
+  const entries = Object.entries(models);
+  if (section?.force) {
+    return `强制路由：所有子任务一律走次级模型，主 Agent 不再挑选。`;
+  }
+  if (entries.length === 0) {
+    const single = section?.model ?? section?.defaultModel;
+    return single
+      ? `单模型路由：子任务默认走 ${single}，主 Agent 无可选池。`
+      : '未配置次级模型：子任务继承主模型。';
+  }
+  const defaultId = section?.defaultModel;
+  const described = entries.filter(([, d]) => d && d.trim().length > 0).length;
+  return `池路由：主 Agent 派发子任务时从 ${entries.length} 个模型里挑选（${described} 个带路由描述）${defaultId ? `，默认 ${defaultId}` : ''}；另有 primary（主模型自身）始终可选。`;
+});
 function syncSecondaryPoolFromConfig(modelsOverride?: Record<string, string>): void {
-  const models = modelsOverride ?? (client.config.value as AppConfig | null)?.secondaryModel?.models ?? {};
-  secondaryPool.value = Object.entries(models).map(([alias, model]) => ({ alias, model }));
+  const section = (client.config.value as AppConfig | null)?.secondaryModel;
+  const models = modelsOverride ?? section?.models ?? {};
+  secondaryPool.value = Object.entries(models).map(([model, description]) => ({ model, description }));
+  secondaryPoolDefault.value = section?.defaultModel ?? '';
 }
 // Watch the pool VALUE (stringified), not the section reference: effort /
 // force writes replace the whole config object and would otherwise reset
@@ -295,25 +324,22 @@ watch(() => JSON.stringify((client.config.value as AppConfig | null)?.secondaryM
 async function saveSecondaryPool(): Promise<void> {
   const models: Record<string, string> = {};
   for (const entry of secondaryPool.value) {
-    const alias = entry.alias.trim();
-    if (!alias || !entry.model) continue;
-    if (alias === 'primary') {
-      toast('别名 "primary" 是保留字（始终绑定主模型），请换一个');
+    if (!entry.model) continue;
+    if (models[entry.model]) {
+      toast(`模型 ${entry.model} 在池中重复，请删除重复行`);
       return;
     }
-    if (models[alias]) {
-      toast(`别名 "${alias}" 重复，请修改`);
-      return;
-    }
-    models[alias] = entry.model;
+    // Empty descriptions are legal — the agent then only sees the model id.
+    models[entry.model] = entry.description.trim();
   }
   const current = (client.config.value as AppConfig | null)?.secondaryModel ?? {};
   const hasPool = Object.keys(models).length > 0;
-  // In pool mode the single-model select is disabled, so secondaryModelId is
-  // often empty even for an already-saved pool whose defaultModel (a pool
-  // alias) carries the fallback. Only block when BOTH sources are missing.
-  if (hasPool && !secondaryModelId.value && !current.defaultModel) {
-    toast('配置模型池需要先选择默认模型或池默认别名（池的兜底）');
+  if (hasPool && !secondaryPoolDefault.value) {
+    toast('请在池中选择一个默认模型（子任务派发未指定时的兜底）');
+    return;
+  }
+  if (hasPool && !models[secondaryPoolDefault.value]) {
+    toast('默认模型必须在池内，请先勾选一个池成员为默认');
     return;
   }
   secondaryPoolSaving.value = true;
@@ -321,12 +347,8 @@ async function saveSecondaryPool(): Promise<void> {
     const ok = await client.updateConfig({
       secondaryModel: hasPool
         ? {
-            // Pool mode: default_model must be a pool ALIAS — keep the stored
-            // default when it is still in the pool, else default to the first.
             models,
-            defaultModel: current.defaultModel && models[current.defaultModel]
-              ? current.defaultModel
-              : Object.keys(models)[0],
+            defaultModel: secondaryPoolDefault.value,
             defaultEffort: secondaryEffort.value || current.defaultEffort,
             // force is mutually exclusive with models — dropped intentionally.
           }
@@ -340,7 +362,7 @@ async function saveSecondaryPool(): Promise<void> {
             force: current.force,
           },
     });
-    toast(ok ? (hasPool ? '模型池已保存；主 Agent 将按别名挑选' : '已切回单模型模式') : '模型池保存失败');
+    toast(ok ? (hasPool ? '模型池已保存；描述会作为主 Agent 的路由提示' : '已切回单模型模式') : '模型池保存失败');
   } finally {
     secondaryPoolSaving.value = false;
   }
@@ -1339,7 +1361,7 @@ watch(() => props.initialSection, (section) => { active.value = section; });
               </div>
               <div class="setting-control settings-inline-controls">
                 <select v-model="secondaryModelId" class="control" aria-label="次级模型" :disabled="!secondaryModelExperimentEnabled || secondaryPoolConfigured">
-                  <option value="">{{ secondaryPoolConfigured ? '使用模型池（主 Agent 按别名挑选）' : '继承主模型' }}</option>
+                  <option value="">{{ secondaryPoolConfigured ? '使用模型池（主 Agent 按路由描述挑选）' : '继承主模型' }}</option>
                   <option v-for="m in modelOptions" :key="m.id" :value="m.id">{{ m.name }}<template v-if="m.provider">（{{ m.provider }}）</template></option>
                 </select>
                 <select v-model="secondaryEffort" class="control compact" aria-label="次级模型思考强度" :disabled="!secondaryModelExperimentEnabled || (!secondaryModelId && !secondaryPoolConfigured)" @change="saveSecondaryEffort">
@@ -1358,25 +1380,40 @@ watch(() => props.initialSection, (section) => { active.value = section; });
                 <input type="checkbox" :checked="secondaryForce" :disabled="!secondaryModelExperimentEnabled || secondaryPoolSaving || secondaryPoolConfigured" @change="setSecondaryForce(($event.target as HTMLInputElement).checked)" />
               </div>
             </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">当前路由</div>
+                <div class="setting-desc">{{ secondaryRoutingSummary }}</div>
+              </div>
+              <div class="setting-control"><span class="pill">{{ secondaryPoolConfigured ? '池模式' : secondaryForce ? '强制' : '单模型' }}</span></div>
+            </div>
             <div class="setting-row top-aligned">
               <div class="setting-info">
                 <div class="setting-label">模型池</div>
-                <div class="setting-desc">Kimi Code 0.36+：别名 → 模型的候选池，主 Agent 派发子任务时按别名挑选——<strong>别名就是给主 Agent 的描述线索</strong>（官方配置没有单独的描述字段，起名要表意，如 fast、deep、cheap）；保存后默认使用第一个别名，与强制路由互斥。清空保存即切回单模型模式。</div>
+                <div class="setting-desc">Kimi Code 0.36+：每个成员 = <strong>模型 + 路由描述</strong>。描述会作为该模型的使用提示展示给主 Agent（派发子任务时据此挑选），如「快速模型，适合简单查询」；勾选一个成员作为默认（未指定时的兜底）。与强制路由互斥；清空保存即切回单模型模式。</div>
               </div>
               <div class="setting-control wide-control">
                 <div v-if="secondaryPool.length" class="rule-list">
                   <div v-for="(entry, index) in secondaryPool" :key="index" class="rule-row">
-                    <input v-model="entry.alias" class="control compact" placeholder="别名（给主 Agent 的挑选线索）" />
+                    <input
+                      type="radio"
+                      name="secondary-pool-default"
+                      :checked="secondaryPoolDefault === entry.model"
+                      :disabled="!entry.model"
+                      title="设为默认模型（未指定时的兜底）"
+                      @change="secondaryPoolDefault = entry.model"
+                    />
                     <select v-model="entry.model" class="control">
                       <option value="">选择模型</option>
                       <option v-for="m in modelOptions" :key="m.id" :value="m.id">{{ m.name }}<template v-if="m.provider">（{{ m.provider }}）</template></option>
                     </select>
+                    <input v-model="entry.description" class="control rule-pattern" placeholder="路由描述（给主 Agent 的使用提示，可空）" />
                     <button class="icon-btn" aria-label="删除池成员" @click="secondaryPool.splice(index, 1)"><CodexIcon name="trash" /></button>
                   </div>
                 </div>
                 <div v-else class="archive-empty">未配置模型池</div>
                 <div class="settings-button-row">
-                  <button class="btn" :disabled="!secondaryModelExperimentEnabled || secondaryForce" @click="secondaryPool.push({ alias: '', model: '' })"><CodexIcon name="plus" /> 添加池成员</button>
+                  <button class="btn" :disabled="!secondaryModelExperimentEnabled || secondaryForce" @click="secondaryPool.push({ model: '', description: '' })"><CodexIcon name="plus" /> 添加池成员</button>
                   <button class="btn primary" :disabled="!secondaryModelExperimentEnabled || secondaryPoolSaving" @click="saveSecondaryPool">{{ secondaryPoolSaving ? '保存中…' : '保存模型池' }}</button>
                 </div>
               </div>
