@@ -1,0 +1,15 @@
+{
+  "version": "1.0.17",
+  "notes": "\n### 新增\n\n- **Kimi Code 0.39 契约整合**：协议层同步至官方 0.39.1——子智能体 spawn 权威模型/思考档位/后台任务绑定、`/auth` 跨版本兼容（`models_ready` 双读）、MCP `removed` 状态、会话用量字段容错（context limit 未知不再出错）、prompt_id 提交回显、plugin/capability 全局事件、`/tower` 与 `/remote-control`（别名 `/rc`）命令基线（42 条）\n- **Engine 环境实验**：设置 → Kimi Engine 新增环境变量实验开关（tower 多智能体编排、Remote Control 远程访问）；选择持久化于 `~/.kimi-code/kimi-gui-experiments.json`，GUI 拉起的 daemon 自动注入，重启 Engine 生效\n- **任务转后台**：Agent 面板运行中的前台子任务可一键\"移到后台\"（0.39 `task:detach`），转入后台任务存储继续运行\n- **插件与能力实时刷新**：订阅 0.36+ `plugin.changed` / `capability.changed` 全局事件——设置页工具列表在插件集变更后自动刷新，能力安装显示实时进度条与完成/失败通知\n- **附件链路**：skill 命令携带附件不再被丢弃（修复带附件时命令被降级为普通 prompt 的问题）；拖入窗口的文件以本地路径零拷贝直传（0.39 `path` 源，免上传，daemon 原地读取），排队/插话/子任务链路全通\n- **工具门控**：设置 → 权限与工具新增 0.34+ 全局 `[tools]` 允许/禁用列表编辑\n- **自定义 Agent 目录**：设置 → Agents 新增 `extra_agent_dirs` 编辑（0.34+ Markdown Agent 扫描目录）\n- **次级模型详细配置**：0.36+ 模型池（别名 → 模型，主 Agent 派发时挑选）与强制路由开关；切换默认模型不再覆盖丢失池配置\n\n### 改进\n\n- **命令基线**：`/secondary_model` 更名为 `/secondary-model`（官方 0.38，别名 `subagent-model`），GUI 导航同步；`commands:check` 基线升至 0.39.1\n- **模型选择器**过滤 secondary 实验运行时合成的 `__` 前缀内部派生条目（官方 0.36 要求）\n- **项目文档重构**：删除前期协作流水（HANDOFF.md），新增 `AGENTS.md` 开发规范（含上游同步例行流程）、ROADMAP 改为真实迭代待办；发版流程与签名约定完整化\n\n### 变更\n\n- **产品更名为 Kimi Studio**：打包名/托盘/关于页/DMG 更名为 Kimi Studio（`Kimi.Studio_*`），避免与官方桌面壳（kimi-ui，承载官方 Kimi Code web bundle）的安装名冲突；identifier 不变，登录态与本地数据保留。**老版本自动更新到本版后，`/Applications` 中旧的 Kimi Code.app 需手动删除一次**\n\n",
+  "pub_date": "2026-08-29T10:35:07Z",
+  "platforms": {
+    "darwin-aarch64": {
+      "url": "https://raw.githubusercontent.com/liujunGH/kimi-gui/main/updates/Kimi.Studio_aarch64.app.tar.gz",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxamZraWR5Y3dzYXFXQWtXMHlKSHU5WTA4L2JrVTU3NEQzQXpoSTRibW9oVnNCR3FNMTFNVGpkeVRYTUJVRHhGNVJEZ3U0RWdqZldGQjArR0N0L29ZUkEwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3OTk5NzA2CWZpbGU6S2ltaS5TdHVkaW9fYWFyY2g2NC5hcHAudGFyLmd6CkJzNjVpcGdaS1RFWFZlSk9MQ3A5NkVhYVo4eXV0cVJHTWpwZGRXREwxQ3VmN2JPT0c4djU2VHVtS0NDUEhUVmJYc0NIUHVUanRvZVVsaU5GT2RBbURnPT0K"
+    },
+    "windows-x86_64": {
+      "url": "https://raw.githubusercontent.com/liujunGH/kimi-gui/main/updates/Kimi.Studio_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxamNTT0F1RnZ0ZU50VmYwWWdsWm1pQkdycE5uRFlmWHhZb3pNOVBxWWJrN2UrVW1FaDA5V2g0ZDVMMkVRNmxrZVhUQmxsNDRZcFNJZ203MmhnaVlsL2dBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3OTk5NzA3CWZpbGU6S2ltaS5TdHVkaW9fMS4wLjE3X3g2NC1zZXR1cC5leGUKaEZHMkZYSk9CcnRJellEYUJ5aml3Uit2L3JGNjZmRTQ4Q0ZSTmNCNmRuelpBTWJ2cWFkTWRxSm16QkRBaWdrcDdJT0VZai9neUI5blVibCtWNHNtQUE9PQo="
+    }
+  }
+}
