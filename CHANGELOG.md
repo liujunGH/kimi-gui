@@ -19,7 +19,9 @@
 - **任务系统**：全局任务面板的前台运行任务（含 bash）新增「移到后台」入口（官方前台任务本就注册任务库可 detach）；`task.terminated` 的 killed/timed_out/lost 按官方映射；WaitFor 工具卡适配（图标/摘要）+ 周期状态行 replace 替换防堆积；问题类后台任务 kind 修正；取消任务的 40904/40406 错误语义
 - **tower 协议写入面**：`updateSession`/`createSession` 支持 `tower_mode`（官方 profile 写入面，UI 入口后续）
 - **沙箱崩溃修复**：ApprovalCard 可选链补全 + mock 补字段（approval 场景此前整页白屏，y/a/n/p 无法验收）；补注册 refresh-cw 图标
-- **杂项**：自定义 Agent 目录文案补官方扫描规则（~/ 展开、相对项目根、深度 8、frontmatter 需非空 description）；备份恢复后提示环境实验需重启 Engine；实验 env 注释更正（config [experimental] 亦可开启）；session_media 的 blob 获取方法与分流注释就绪（UI 接线涉及官方锁层组件，登记 PATCHES 后续）
+- **杂项**：自定义 Agent 目录文案补官方扫描规则（~/ 展开、相对项目根、深度 8、frontmatter 需非空 description）；备份恢复后提示环境实验需重启 Engine；实验 env 注释更正（config [experimental] 亦可开启）；补注册 refresh-cw / folder 图标
+- **Tower 模式 GUI 入口**：模式条新增 Tower 开关——daemon 上报 tower 实验旗标时显示，经会话 profile（`tower_mode`）写入，状态由 GET /status 回读；未开实验不显示
+- **session_media 渲染接线完成**：TurnAttachment → AttachmentChip → AuthMedia 全链透传会话域标记，历史媒体的鉴权字节改走 `/sessions/{sid}/media/{id}`（会话持久副本），不再依赖会被清理的临时 /files 存储（锁层文件可选字段扩展，已登记 PATCHES.md）
 
 ## [1.0.18] - 2026-08-29
 

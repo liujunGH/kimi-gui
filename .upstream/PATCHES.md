@@ -181,3 +181,13 @@ Kimi Code 0.33.0 已从公开仓库移除 `apps/kimi-web` 源码，官方脚本�
 
 ---
 
+
+---
+
+### 锁层文件扩展:session_media 渲染接线 + ConversationStatus.towerMode(2026-08-29)
+
+**改动**:`web/src/types.ts`(TurnAttachment + `sessionId?`、ConversationStatus + `towerMode?`)、`components/chat/AttachmentChip.vue`(透传 `sessionId?`)、`components/chat/AuthMedia.vue`(sessionId 存在时经 `getSessionMediaBlob` 从 `/sessions/{sid}/media/{id}` 取字节,默认行为不变)。
+
+**原因**:0.39 `session_media` 是会话自有持久媒体副本,`/files` 只查临时上传存储且无回退——不带会话域标记的历史媒体最终会破图。均为可选字段向后兼容,不改变官方语义。towerMode 为 0.39 tower 实验的会话状态透出。
+
+**冲突风险**:低(可选字段;上游若加同名官方字段可直接切换)。

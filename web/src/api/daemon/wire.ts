@@ -387,7 +387,7 @@ export interface WireFsEntry {
   child_count?: number;
 }
 
-/** POST /fs/suggest hit (Kimi Code 0.37+) — fuzzy path suggestion for @-menus. */
+/** fs suggest hit (Kimi Code 0.37+) — official routes: POST /workspace/fs:suggest and POST /fs:suggest (roots). */
 export interface WireFsSuggestItem {
   path: string;
   name: string;

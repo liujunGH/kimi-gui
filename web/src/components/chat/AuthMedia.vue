@@ -16,6 +16,10 @@ const props = withDefaults(
     /** File-store id. When present the bytes are fetched with auth and played
      *  from a blob URL; otherwise `url` is used directly (e.g. a data: URL). */
     fileId?: string;
+    /** kimi-gui extension: when set (with fileId), the bytes resolve from the
+     *  session-owned media store (GET /sessions/{sid}/media/{id}, 0.39+) —
+     *  the canonical persistent copy — instead of the transient /files store. */
+    sessionId?: string;
     mediaClass?: string;
     /** Video: show native controls. Defaults to true (chat bubble); queue
      *  thumbnails pass false. */
@@ -57,7 +61,9 @@ async function resolve(): Promise<void> {
   }
   if (!visible.value) return; // defer until near the viewport
   try {
-    const blob = await getKimiWebApi().getFileBlob(props.fileId);
+    const blob = props.sessionId
+      ? await getKimiWebApi().getSessionMediaBlob(props.sessionId, props.fileId)
+      : await getKimiWebApi().getFileBlob(props.fileId);
     const url = URL.createObjectURL(blob);
     if (disposed || seq !== requestSeq) {
       URL.revokeObjectURL(url);

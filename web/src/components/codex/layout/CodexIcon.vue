@@ -41,6 +41,7 @@ const ICONS: Record<string, IconDef> = {
   grip: { body: '<circle cx="9" cy="6" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="18" r="1.4"/>', fill: true },
   stop: { body: '<rect x="7" y="7" width="10" height="10" rx="1.5"/>', fill: true },
   'move-down': { body: '<path d="M12 3v10M8 9l4 4 4-4"/><path d="M4 17v1.5A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5V17"/>' },
+  folder: { body: '<path d="M4 20h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-9.5L9 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z"/>' },
   file: { body: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>' },
   'file-code': { body: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9.5 12.5L7.5 14.5l2 2M14.5 12.5l2 2-2 2"/>' },
   archive: { body: '<rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/>' },

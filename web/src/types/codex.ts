@@ -25,6 +25,9 @@ export interface ModeFlags {
   plan: boolean;
   swarm: boolean;
   goal: boolean;
+  /** Kimi Code 0.39+ experimental tower orchestration (only shown when the
+   *  daemon reports the tower experiment flag). */
+  tower: boolean;
 }
 
 /** Composer 运行态模式:queue=排队下轮 / steer=立即插话当前轮(见 6.6)。 */

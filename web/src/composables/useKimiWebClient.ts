@@ -327,6 +327,8 @@ export interface ExtendedState extends KimiClientState {
   planModeBySession: Record<string, boolean>;
   /** Swarm-mode toggle per session. */
   swarmModeBySession: Record<string, boolean>;
+  /** Kimi Code 0.39+ tower mode per session, folded from GET /status. */
+  towerModeBySession: Record<string, boolean>;
   /** Goal-mode (one-shot "next send creates a goal") toggle per session. */
   goalModeBySession: Record<string, boolean>;
   loading: boolean;
@@ -409,6 +411,7 @@ const rawState: ExtendedState = reactive({
   thinkingBySession: {},
   planModeBySession: loadModeMapFromStorage(PLAN_MODE_STORAGE_KEY),
   swarmModeBySession: loadModeMapFromStorage(SWARM_MODE_STORAGE_KEY),
+  towerModeBySession: {},
   goalModeBySession: loadModeMapFromStorage(GOAL_MODE_STORAGE_KEY),
   loading: false,
   sessionLoading: false,
@@ -681,6 +684,7 @@ async function refreshSessionStatus(sessionId: string): Promise<void> {
   }));
   rawState.swarmModeBySession = { ...rawState.swarmModeBySession, [sessionId]: st.swarmMode };
   saveSwarmModeToStorage();
+  rawState.towerModeBySession = { ...rawState.towerModeBySession, [sessionId]: st.towerMode ?? false };
   rawState.planModeBySession = { ...rawState.planModeBySession, [sessionId]: st.planMode };
   savePlanModeToStorage();
   // Fold the session's own thinking level too — per-session state wins over the
@@ -2309,6 +2313,7 @@ const status = computed<ConversationStatus>(() => {
     branch,
     cwd: activeSession?.cwd ?? '',
     isGitRepo: gitInfo.value !== null,
+    towerMode: rawState.towerModeBySession[rawState.activeSessionId ?? ''] ?? false,
   };
 });
 
@@ -2967,6 +2972,7 @@ export function useKimiWebClient() {
     togglePlanMode: workspaceState.togglePlanMode,
     setSwarmMode: workspaceState.setSwarmMode,
     toggleSwarmMode: workspaceState.toggleSwarmMode,
+    setTowerMode: workspaceState.setTowerMode,
     setGoalMode: workspaceState.setGoalMode,
     toggleGoalMode: workspaceState.toggleGoalMode,
     createGoal: workspaceState.createGoal,

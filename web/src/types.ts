@@ -242,6 +242,10 @@ export interface TurnAttachment {
   name?: string;
   mediaType?: string;
   size?: number;
+  /** kimi-gui extension: set when fileId is a SESSION-scoped media id
+   *  (0.39+ session_media) — the authenticated fetch must go through
+   *  GET /sessions/{sid}/media/{id}, not the transient /files store. */
+  sessionId?: string;
 }
 
 export interface ChatTurn {
@@ -338,6 +342,9 @@ export interface ConversationStatus {
   cwd: string;
   /** True when the active session's cwd is inside a real git repository */
   isGitRepo: boolean;
+  /** Kimi Code 0.39+ experimental tower orchestration (kimi-gui extension,
+   *  folded from GET /sessions/{id}/status). */
+  towerMode?: boolean;
 }
 
 /** Kind of the global right-side detail layer. Only one detail is visible at a

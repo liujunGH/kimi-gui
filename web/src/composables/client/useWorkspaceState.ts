@@ -231,6 +231,8 @@ export interface PersistSessionProfilePatch {
   goalObjective?: string;
   goalControl?: 'pause' | 'resume' | 'cancel';
   thinking?: string;
+  /** Kimi Code 0.39+ experimental tower orchestration (profile write path). */
+  towerMode?: boolean;
 }
 
 export interface UseWorkspaceStateDeps {
@@ -2277,6 +2279,19 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
     }
   }
 
+  /** Kimi Code 0.39+ experimental tower orchestration toggle: persisted onto
+   *  the session profile (tower_mode); the daemon reports the live state via
+   *  GET /sessions/{id}/status (towerMode). No local optimistic map — the
+   *  status read is authoritative and refreshes on the next poll. */
+  function setTowerMode(on: boolean): void {
+    const sid = rawState.activeSessionId;
+    if (!sid) {
+      useToast().toast('Tower 模式需要先创建会话');
+      return;
+    }
+    void persistSessionProfile({ towerMode: on });
+  }
+
   /** Flip swarm mode on/off. In manual permission mode, ask before enabling. */
   async function toggleSwarmMode(): Promise<void> {
     const sid = rawState.activeSessionId;
@@ -2994,6 +3009,7 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
     togglePlanMode,
     setSwarmMode,
     toggleSwarmMode,
+    setTowerMode,
     setGoalMode,
     toggleGoalMode,
     createGoal,

@@ -28,6 +28,7 @@ const OPTIONS: ModeOption[] = [
   { id: 'plan', name: '计划', desc: '先让智能体梳理计划,再修改文件', icon: 'plan' },
   { id: 'swarm', name: 'Swarm', desc: '并行运行多个智能体,适合大范围探索', icon: 'sparkle' },
   { id: 'goal', name: '目标', desc: '持续跟踪一个目标,直到任务完成', icon: 'target' },
+  { id: 'tower', name: 'Tower', desc: '实验性多智能体编排,用 /tower <目标> 启动', icon: 'apps' },
 ];
 
 const open = ref(false);

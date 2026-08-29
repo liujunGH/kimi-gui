@@ -24,6 +24,9 @@ const props = withDefaults(
     url?: string;
     /** When present, AuthMedia fetches image bytes with auth. */
     fileId?: string;
+    /** kimi-gui extension: session-scoped media (0.39 session_media) — the
+     *  authenticated fetch resolves via /sessions/{sid}/media instead of /files. */
+    sessionId?: string;
     mediaType?: string;
     size?: number;
     /** Composer: upload in flight — spinner replaces the ext badge. */
@@ -93,6 +96,7 @@ const title = computed(() => {
           kind="image"
           :alt="name"
           :file-id="fileId"
+          :session-id="sessionId"
           media-class="att-thumb"
         />
         <Icon v-else-if="kind === 'video'" name="play" size="sm" />

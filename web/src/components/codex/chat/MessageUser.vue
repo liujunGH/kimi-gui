@@ -85,6 +85,7 @@ function onContextSelect(id: string): void {
         :name="att.name"
         :url="att.url"
         :file-id="att.fileId"
+        :session-id="att.sessionId"
         :media-type="att.mediaType"
         :size="att.size"
         @activate="onActivate(att)"

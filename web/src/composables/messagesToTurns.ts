@@ -746,7 +746,7 @@ export function messagesToTurns(
   function resolveMediaUrl(
     c: AppMessage['content'][number],
     sid: string,
-  ): { url: string; kind: 'image' | 'video'; fileId?: string } | undefined {
+  ): { url: string; kind: 'image' | 'video'; fileId?: string; sessionId?: string } | undefined {
     if (c.type === 'image' || c.type === 'video') {
       const kind = c.type;
       const src = c.source;
@@ -762,14 +762,12 @@ export function messagesToTurns(
       // chain AuthMedia → getFileBlob(fileId) always resolves upload-store
       // ids against GET /files/{id} — which never falls back to session media
       // (404). Authenticated playback must call
-      // getKimiWebApi().getSessionMediaBlob(sid, fileId) (client.ts exposes it
-      // since 0.39 sync) instead. AuthMedia/AttachmentChip are locked
-      // official files with no session-scope hook, so UI wiring is deferred;
-      // this branch keeps URL+fileId so the future consumer can split by
-      // source kind. See .upstream/PATCHES.md (session_media blob channel).
+      // getKimiWebApi().getSessionMediaBlob(sid, fileId) — wired through
+      // TurnAttachment.sessionId → AttachmentChip → AuthMedia (registered in
+      // .upstream/PATCHES.md as locked-file extensions).
       if (src.kind === 'session_media') {
         const url = sessionMediaUrl(sid, src.fileId);
-        return url === undefined ? undefined : { url, kind, fileId: src.fileId };
+        return url === undefined ? undefined : { url, kind, fileId: src.fileId, sessionId: sid };
       }
     }
     if (c.type === 'file' && getFileUrl) {
@@ -895,6 +893,7 @@ export function messagesToTurns(
             kind: media.kind,
             name: c.type === 'file' ? c.name : undefined,
             fileId: media.fileId,
+            sessionId: media.sessionId,
           });
           continue;
         }

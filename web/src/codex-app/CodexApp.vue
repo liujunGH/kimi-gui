@@ -716,10 +716,16 @@ const composerCurrentModel = computed(() => {
   const starred = models.find((m) => client.starredModelIds.value?.includes(m.id));
   return (starred ?? models[0])?.id ?? '';
 });
+/** Tower only exists when the daemon reports the 0.39 experiment flag — the
+ *  ModePicker row is data-driven and reads this flag off the modes object. */
+const towerAvailable = computed(
+  () => client.experimentalFlags.value['tower'] === true,
+);
 const composerModes = computed<ModeFlags>(() => ({
   plan: client.planMode.value || false,
   swarm: client.swarmMode.value || false,
   goal: client.goalMode.value || false,
+  tower: towerAvailable.value && (client.status.value?.towerMode ?? false),
 }));
 const builtinCommands = computed(() =>
   SLASH_COMMANDS.map((c) => ({ ...c, name: c.name.replace(/^\//, ''), desc: i18n.global.t(c.desc) })),
@@ -2491,10 +2497,11 @@ async function searchFiles(q: string) {
           @send="onSend"
           @set-mode="onComposerMode"
           @cancel="() => client.abortCurrentPrompt()"
-          @toggle-mode="(m: 'plan' | 'swarm' | 'goal') => {
+          @toggle-mode="(m: 'plan' | 'swarm' | 'goal' | 'tower') => {
             if (m === 'plan') client.togglePlanMode();
             else if (m === 'swarm') client.toggleSwarmMode();
             else if (m === 'goal') client.toggleGoalMode();
+            else if (m === 'tower') client.setTowerMode(!composerModes.tower);
           }"
           @set-permission="(p: PermissionMode) => client.setPermission(p)"
           @set-model="onSetModel"

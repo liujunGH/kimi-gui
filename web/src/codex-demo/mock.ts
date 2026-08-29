@@ -121,7 +121,7 @@ export const files: FileEntry[] = [
 
 export const contextInfo: ContextInfo = { used: '108.5k', total: '258k', pct: 42 };
 export const quotaInfo: QuotaInfo = { q5h: 33, q5hReset: '3h 38m', qWeek: 7, qWeekReset: '6d 22h' };
-export const defaultModes: ModeFlags = { plan: false, swarm: false, goal: false };
+export const defaultModes: ModeFlags = { plan: false, swarm: false, goal: false, tower: false };
 
 // ---------------------------------------------------------------- 场景:index(空闲态)
 
