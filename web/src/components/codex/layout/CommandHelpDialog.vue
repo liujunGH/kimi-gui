@@ -4,6 +4,7 @@ import i18n from '../../../i18n';
 import {
   GUI_COMMAND_MAPPINGS,
   UPSTREAM_COMMANDS,
+  UPSTREAM_COMMAND_SOURCE,
   resolveBuiltinCommand,
   type CommandMapping,
 } from '../../../lib/commandRegistry';
@@ -13,6 +14,14 @@ const emit = defineEmits<{
   (e: 'run', command: string): void;
   (e: 'close'): void;
 }>();
+
+/** 上游契约快照版本(ref 形如 `@moonshot-ai/kimi-code@0.39.1`,取末段)。
+ *  与 commandRegistry 同源,上游升级后此处不再需要手工同步。 */
+const sourceVersion = (() => {
+  const ref = UPSTREAM_COMMAND_SOURCE.ref;
+  const at = ref.lastIndexOf('@');
+  return at >= 0 ? ref.slice(at + 1) : ref;
+})();
 
 const query = ref('');
 const input = ref<HTMLInputElement | null>(null);
@@ -68,7 +77,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
       <header class="command-help-head">
         <div>
           <h2 id="command-help-title">命令与能力</h2>
-          <p>命令按 Kimi Code 0.33 契约分类；GUI 能力会显示实际入口。</p>
+          <p>命令按 Kimi Code {{ sourceVersion }} 契约分类；GUI 能力会显示实际入口。</p>
         </div>
         <button class="icon-btn" aria-label="关闭" @click="emit('close')"><CodexIcon name="x" /></button>
       </header>

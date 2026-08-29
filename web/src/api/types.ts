@@ -96,6 +96,10 @@ export interface AppSession {
    *  `!busy && (cancelled | failed)`. */
   lastTurnReason?: 'completed' | 'cancelled' | 'failed';
   archived: boolean;
+  /** When the session was archived (ISO 8601); falls back to `updatedAt` for
+   *  sessions archived before the daemon shipped `archived_at` (Kimi Code
+   *  0.35+). Consumed by the archive-tree sort. */
+  archivedAt?: string;
   currentPromptId?: string;
   /** Text of the most recent user prompt, for search/preview. */
   lastPrompt?: string;
@@ -128,6 +132,9 @@ export interface AppSessionRuntimeStatus {
   permission: string;
   planMode: boolean;
   swarmMode: boolean;
+  /** Kimi Code 0.39+: experimental multi-agent tower mode
+   *  (`KIMI_CODE_EXPERIMENTAL_TOWER=1`, `/tower on`). Absent on older daemons. */
+  towerMode?: boolean;
   contextTokens: number;
   maxContextTokens: number;
   contextUsage: number;
@@ -186,6 +193,12 @@ export type ImageSource =
   | { kind: 'url'; url: string; id?: string }
   | { kind: 'base64'; mediaType: string; data: string }
   | { kind: 'file'; fileId: string }
+  /** Kimi Code 0.39+: session-owned canonical media copy. Distinct from
+   *  `file`: the render endpoint is GET /sessions/{sid}/media/{file_id}
+   *  (session-persistent storage), NOT GET /files/{id} (transient upload
+   *  storage that the daemon prunes) — folding the two broke images after
+   *  the upload expired. */
+  | { kind: 'session_media'; fileId: string }
   /** Kimi Code 0.39+: server-local absolute path, read in place by the daemon. */
   | { kind: 'path'; path: string };
 
@@ -254,8 +267,9 @@ export interface PromptSubmitResult {
   promptId: string;
   userMessageId: string;
   /** 'running' when the prompt started a turn immediately; 'queued' when
-      another prompt is active and the daemon parked it (steerable). */
-  status?: 'running' | 'queued';
+      another prompt is active and the daemon parked it (steerable);
+      'blocked' when a pre-submit hook rejected it (no turn is started). */
+  status?: 'running' | 'queued' | 'blocked';
 }
 
 // ---------------------------------------------------------------------------
@@ -789,13 +803,17 @@ export interface AppConfig {
   defaultModel?: string;
   models?: Record<string, unknown>;
   secondaryModel?: {
+    /** Legacy single-model key (no pool configured). */
     model?: string;
+    /** Pool mode (0.36+): the DEFAULT ALIAS — must be a key of `models`. */
+    defaultModel?: string;
     defaultEffort?: string;
     /** Kimi Code 0.36+ named model pool: alias → model id; the main agent
-     *  picks from the pool per spawn (experimental secondary-model). */
+     *  picks from the pool per spawn. Aliases are the agent's selection cue
+     *  (there is no description field in the official schema). */
     models?: Record<string, string>;
     /** Kimi Code 0.36+: route ALL subagents to the secondary model, ignoring
-     *  per-agent profile preferences. */
+     *  per-agent profile preferences. Mutually exclusive with `models`. */
     force?: boolean;
     [key: string]: unknown;
   };
@@ -945,6 +963,9 @@ export interface KimiWebApi {
   listDirectory(sessionId: string, input: { path?: string; depth?: number; includeGitStatus?: boolean }): Promise<{ items: FsEntry[]; childrenByPath?: Record<string, FsEntry[]>; truncated: boolean }>;
   readFile(sessionId: string, input: { path: string; offset?: number; length?: number }): Promise<{ path: string; content: string; encoding: 'utf-8' | 'base64'; size: number; truncated: boolean; etag: string; mime: string; languageId?: string; lineCount?: number; isBinary: boolean }>;
   searchFiles(sessionId: string, input: { query: string; limit?: number }): Promise<{ items: Array<{ path: string; name: string; kind: FsKind; score: number; matchPositions: number[] }>; truncated: boolean }>;
+  /** Kimi Code 0.37+ POST /sessions/{id}/fs:suggest — fuzzy path suggestion for
+   *  @-menus; lighter than searchFiles (scored fuzzy matching server-side). */
+  suggestFiles(sessionId: string, input: { query: string; limit?: number; followGitignore?: boolean; showHidden?: boolean; includeGlobs?: string[]; excludeGlobs?: string[] }): Promise<{ items: Array<{ path: string; name: string; kind: FsKind; score: number; matchPositions: number[] }>; truncated: boolean }>;
   searchWorkspaceFiles(workspace: string, input: { query: string; limit?: number }): Promise<{ items: Array<{ path: string; name: string; kind: FsKind; score: number; matchPositions: number[] }>; truncated: boolean }>;
   searchAll(input: { query: string; mode?: 'terms' | 'literal'; op?: 'AND' | 'OR'; role?: 'user' | 'assistant' | 'title'; sort?: 'score' | 'time_desc' | 'time_asc'; pageSize?: number; pageToken?: string }): Promise<AppSearchResult>;
   grepFiles(sessionId: string, input: { pattern: string; regex?: boolean; caseSensitive?: boolean }): Promise<{ files: Array<{ path: string; matches: Array<{ line: number; col: number; text: string; before: string[]; after: string[] }> }>; filesScanned: number; truncated: boolean; elapsedMs: number }>;
@@ -990,6 +1011,9 @@ export interface KimiWebApi {
   // File upload / download
   uploadFile(input: { file: Blob; name?: string }): Promise<{ id: string; name: string; mediaType: string; size: number }>;
   getFileUrl(fileId: string): string;
+  /** Kimi Code 0.39+ session-owned canonical media URL
+   *  (GET /sessions/{sid}/media/{file_id}) — session-persistent storage. */
+  getSessionMediaUrl(sessionId: string, fileId: string): string;
   /** Fetch a file's bytes with auth — feed the resulting Blob to a blob URL for <video>/<img> src. */
   getFileBlob(fileId: string): Promise<Blob>;
 

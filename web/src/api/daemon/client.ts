@@ -26,6 +26,7 @@ import type {
   AppSession,
   AppSkill,
   AppSessionCursor,
+  AppSessionWarning,
   AppSessionRuntimeStatus,
   AppSessionSnapshot,
   AppTask,
@@ -90,7 +91,6 @@ import type {
   WireProviderRefreshResult,
   WireSession,
   WireSessionAbortResult,
-  WireSessionWarning,
   WireSessionWarningsResponse,
   WireSessionRuntimeStatus,
   WireSessionSnapshot,
@@ -536,6 +536,8 @@ export class DaemonKimiWebApi implements KimiWebApi {
       permission: data.permission,
       planMode: data.plan_mode === true,
       swarmMode: data.swarm_mode === true,
+      // Kimi Code 0.39+: optional — absent on daemons without tower mode.
+      towerMode: data.tower_mode,
       contextTokens: data.context_tokens ?? 0,
       maxContextTokens: data.max_context_tokens ?? 0,
       contextUsage: data.context_usage ?? 0,
@@ -553,10 +555,12 @@ export class DaemonKimiWebApi implements KimiWebApi {
     return toAppGoal(data);
   }
 
-  async getSessionWarnings(sessionId: string): Promise<WireSessionWarning[]> {
+  async getSessionWarnings(sessionId: string): Promise<AppSessionWarning[]> {
     const data = await this.http.get<WireSessionWarningsResponse>(
       `/sessions/${encodeURIComponent(sessionId)}/warnings`,
     );
+    // Wire and App shapes are structurally identical here (code/message/
+    // severity) — return the app-facing type so wire DTOs stay in api/daemon.
     return data.warnings ?? [];
   }
 
@@ -1742,6 +1746,16 @@ export class DaemonKimiWebApi implements KimiWebApi {
 
   getFileUrl(fileId: string): string {
     return buildRestUrl(this.config.serverHttpUrl, `/files/${encodeURIComponent(fileId)}`);
+  }
+
+  /** Kimi Code 0.39+: session-owned canonical media copy
+   *  (GET /sessions/{sid}/media/{file_id}) — session-persistent storage, unlike
+   *  the transient /files upload store the daemon prunes. */
+  getSessionMediaUrl(sessionId: string, fileId: string): string {
+    return buildRestUrl(
+      this.config.serverHttpUrl,
+      `/sessions/${encodeURIComponent(sessionId)}/media/${encodeURIComponent(fileId)}`,
+    );
   }
 
   /** Fetch a file's bytes with the Bearer credential attached. Use this (not

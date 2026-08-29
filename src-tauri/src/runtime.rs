@@ -1548,7 +1548,9 @@ fn backup_entry_allowed(path: &Path) -> bool {
         return false;
     };
     match first {
-        "config.toml" | "tui.toml" | "SYSTEM.md" | "mcp.json" => parts.next().is_none(),
+        "config.toml" | "tui.toml" | "SYSTEM.md" | "mcp.json" | "kimi-gui-experiments.json" => {
+            parts.next().is_none()
+        }
         "agents" | "skills" => {
             path.components().count() > 1
                 && !path.components().any(|part| {
@@ -1619,6 +1621,7 @@ fn backup_sources(root: &Path) -> Result<Vec<(PathBuf, PathBuf, u64)>, String> {
         "tui.toml",
         "SYSTEM.md",
         "mcp.json",
+        "kimi-gui-experiments.json",
         "plugins/installed.json",
         "agents",
         "skills",

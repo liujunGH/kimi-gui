@@ -167,6 +167,7 @@
 .mp-check { width: 14px; height: 14px; flex: none; color: var(--accent); visibility: hidden; }
 .mp-item.active .mp-check { visibility: visible; }
 .mp-name { flex: 1; min-width: 0; }
+.mp-provider { font-style: normal; font-size: var(--text-xs); color: var(--text-3); margin-left: 6px; }
 .mp-sep { height: 1px; margin: 4px 6px; background: var(--border-soft); }
 
 .mp-row { display: flex; align-items: center; gap: 9px; padding: 7px 9px; }

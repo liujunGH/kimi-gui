@@ -7,7 +7,8 @@
  * - dot:working→dot-running / completed→dot-done / suspended·queued→dot-waiting
  * - failed(契约里有、原型未展示):无变体 + dot-error(契约外补充,已报备)
  * 点击卡片 emit('inspect') → 父级钻取该 agent 的 transcript 分栏。
- * working 卡卡头有 stop 按钮(@click.stop)→ emit('cancel') 取消子任务。
+ * working 卡卡头有 stop 按钮(@click.stop)→ emit('cancel') 取消子任务;
+ * stop 左侧另有「移到后台」按钮(0.39+ task:detach)→ emit('detach')。
  * 结构对齐 prototype/multi-agent.html;样式类全部在 conversation.css。
  */
 import { computed } from 'vue';
@@ -78,6 +79,14 @@ const pct = computed(() => {
     </button>
     <button
       v-if="status === 'working'"
+      class="sa-cancel sa-detach"
+      title="移到后台"
+      @click="emit('detach')"
+    >
+      <CodexIcon name="move-down" size="sm" />
+    </button>
+    <button
+      v-if="status === 'working'"
       class="sa-cancel"
       title="取消该子任务"
       @click="emit('cancel')"
@@ -90,7 +99,9 @@ const pct = computed(() => {
 <style scoped>
 .subagent-card { position: relative; }
 .sa-inspect { display: block; width: 100%; text-align: left; }
-.has-cancel .sa-inspect { padding-right: 24px; }
+.has-cancel .sa-inspect { padding-right: 48px; }
 .sa-inspect:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .sa-cancel { position: absolute; top: 10px; right: 10px; }
+/* 「移到后台」在 stop 左侧让位(两个 20px 按钮 + 4px 间距) */
+.sa-detach { right: 34px; }
 </style>

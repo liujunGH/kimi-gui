@@ -428,6 +428,8 @@ export interface SubagentCardEmits {
   (e: 'inspect'): void;
   /** 卡头 stop 按钮(仅 working 显示)→ client.cancelTask(subagent.id) */
   (e: 'cancel'): void;
+  /** 卡头「移到后台」按钮(仅 working 显示,Kimi Code 0.39+)→ client.detachTask(subagent.id) */
+  (e: 'detach'): void;
 }
 
 export interface AgentTranscriptProps {

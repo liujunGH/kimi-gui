@@ -20,7 +20,7 @@ import { useTheme } from '../composables/codex/useTheme';
 import { useTauriDaemon } from '../composables/codex/useTauriDaemon';
 import { getCredential, onAuthRequired, setEphemeralCredential } from '../api/daemon/serverAuth';
 import { getKimiWebApi } from '../api';
-import { parseSlash, SLASH_COMMANDS } from '../lib/slashCommands';
+import { parseSlash, SLASH_COMMANDS, stripSkillPrefix } from '../lib/slashCommands';
 import { resolveBuiltinCommand, type CommandMapping } from '../lib/commandRegistry';
 import i18n from '../i18n';
 import type { ChatTurn, TaskItem, TodoView, ToolCall } from '../types';
@@ -138,14 +138,20 @@ onMounted(() => {
       let added = 0;
       let attached = 0;
       for (const path of event.payload.paths) {
-        if (await invoke<boolean>('path_is_directory', { path })) {
-          await client.addWorkspaceByPath(path);
-          added += 1;
-        } else {
-          // Kimi Code 0.39+ zero-copy attach: dropped files become path
-          // attachments (the daemon reads them in place — no upload).
-          composerRef.value?.addPathAttachment(path);
-          attached += 1;
+        try {
+          if (await invoke<boolean>('path_is_directory', { path })) {
+            // 按真实结果计数:addWorkspaceByPath 失败(重复/daemon 拒绝)不报成功
+            if (await client.addWorkspaceByPath(path)) added += 1;
+          } else if (composerRef.value) {
+            // Kimi Code 0.39+ zero-copy attach: dropped files become path
+            // attachments (the daemon reads them in place — no upload).
+            if (composerRef.value.addPathAttachment(path)) attached += 1;
+          } else {
+            // 设置页等场景 Composer 已卸载:不假装附加成功
+            toast('请先返回对话界面再拖入文件');
+          }
+        } catch (error) {
+          toast(`处理 ${path} 失败:${error instanceof Error ? error.message : String(error)}`);
         }
       }
       if (added) toast(`已从拖放添加 ${added} 个工作区`);
@@ -697,6 +703,7 @@ const composerModels = computed(() =>
   (client.models.value ?? []).map((m) => ({
     id: m.id,
     name: (m as { displayName?: string }).displayName ?? m.model ?? m.id,
+    provider: m.provider,
   })),
 );
 const composerCurrentModel = computed(() => {
@@ -724,9 +731,34 @@ const composerSkills = computed(() =>
     source: 'session',
   })),
 );
-const queueItems = computed<QueuedPrompt[]>(() =>
-  (client.queued.value ?? []).map((q, i) => ({ id: String(i), text: q.text, queuedAt: i })),
-);
+/** 队列条目视图:在契约 QueuedPrompt 之上附带附件信息(QueuePanel 行内计数用)。
+ *  client.queued 的视图对象不透出底层 id,这里以「内容+出现序」生成稳定 id,
+ *  重排/删除时 Vue 按 key 移动节点而不是原地改写。 */
+interface QueueItemView extends QueuedPrompt {
+  attachmentCount: number;
+  attachments?: { fileId: string; kind: 'image' | 'video' | 'file'; url: string; name?: string }[];
+}
+function queueEntryId(text: string, attachmentCount: number, occurrence: number): string {
+  // djb2 短哈希 + 附件数 + 同内容出现序:同队重复文本也能保持 key 唯一
+  let h = 5381;
+  for (let i = 0; i < text.length; i++) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0;
+  return `q-${h.toString(36)}-${attachmentCount}-${occurrence}`;
+}
+const queueItems = computed<QueueItemView[]>(() => {
+  const seen = new Map<string, number>();
+  return (client.queued.value ?? []).map((q, i) => {
+    const base = `${q.attachmentCount}\u0000${q.text}`;
+    const occurrence = seen.get(base) ?? 0;
+    seen.set(base, occurrence + 1);
+    return {
+      id: queueEntryId(q.text, q.attachmentCount, occurrence),
+      text: q.text,
+      queuedAt: i,
+      attachmentCount: q.attachmentCount,
+      attachments: q.attachments,
+    };
+  });
+});
 
 function fmtK(n: number): string {
   if (!n) return '0';
@@ -1044,29 +1076,48 @@ function sendCurrentPrompt(text: string, attachments?: PromptAttachment[]): void
   void client.sendPrompt(text, attachments as any);
 }
 
+/** 发送被拒(未连接/无工作区)时回填:文本回输入框,附件无法恢复则提示重加 */
+function refillComposerAfterReject(text: string, attachments?: PromptAttachment[]): void {
+  composerRef.value?.setText(text);
+  if (attachments?.length) toast(`该消息含 ${attachments.length} 个附件,需重新添加`);
+}
+
+/** 已知技能名校验(与 Composer `/` 菜单的 Skills 同源:client.skills)。
+ *  兼容裸名 `/foo` 与官方 `skill:` 前缀 `/skill:foo` 两种写法。 */
+function isKnownSkillToken(cmdToken: string): boolean {
+  const stripped = stripSkillPrefix(cmdToken.replace(/^\//, '')).toLowerCase();
+  if (!stripped) return false;
+  return (client.skills.value ?? []).some((s) => s.name.toLowerCase() === stripped);
+}
+
 function onSend(text: string, mode: ComposerMode, attachments?: PromptAttachment[]) {
   if (!text.trim() && !attachments?.length) return;
   // Commands that accept arguments remain in the composer until Enter. Route
   // them through the same registry as menu-selected bare commands; otherwise
   // `/compact ...`, `/goal ...`, `/title ...`, etc. become ordinary prompts.
   const parsedCommand = parseSlash(text.trim());
-  if (parsedCommand && resolveBuiltinCommand(parsedCommand.cmd)) {
-    // Built-in commands carry their arguments in text and cannot take
-    // attachments — with attachments present, keep the historical fallback
-    // of sending the whole thing as a plain prompt.
-    if (!attachments?.length) {
-      handleCommand(text.trim());
+  if (parsedCommand) {
+    if (resolveBuiltinCommand(parsedCommand.cmd)) {
+      // Built-in commands carry their arguments in text and cannot take
+      // attachments — with attachments present, keep the historical fallback
+      // of sending the whole thing as a plain prompt.
+      if (!attachments?.length) {
+        handleCommand(text.trim());
+        return;
+      }
+    } else if (isKnownSkillToken(parsedCommand.cmd)) {
+      // Known skill (Kimi Code 0.34+, with or without attachments): activate
+      // via handleCommand, carrying attachments into the skill turn instead
+      // of silently dropping them into a plain prompt. Unknown /tokens fall
+      // through as ordinary prompts, so arbitrary text with attachments can
+      // no longer masquerade as a skill activation.
+      handleCommand(text.trim(), attachments);
       return;
     }
-  } else if (parsedCommand && attachments?.length) {
-    // Skill command with attachments (Kimi Code 0.34+): activate the skill
-    // with the attachments carried into the skill turn instead of silently
-    // dropping them into a plain prompt.
-    handleCommand(text.trim(), attachments);
-    return;
   }
   if (client.connection.value !== 'connected') {
     toast('未连接到 daemon,无法发送');
+    refillComposerAfterReject(text, attachments);
     return;
   }
   if (mode === 'steer' && conversationRunning.value) {
@@ -1083,7 +1134,10 @@ function onSend(text: string, mode: ComposerMode, attachments?: PromptAttachment
       pendingAgentBinding = draftAgentName.value;
       void client.startSessionAndSendPrompt(wsId, text, attachments as any, selectedAgentConfig());
     }
-    else toast('请先在左侧选择工作区');
+    else {
+      toast('请先在左侧选择工作区');
+      refillComposerAfterReject(text, attachments);
+    }
     return;
   }
   const session = activeSession.value;
@@ -1254,6 +1308,18 @@ function openNativeUiCommand(canonicalName: string, command: string, mapping: Ex
     openPluginManager();
     return;
   }
+  if (canonicalName === 'exit') {
+    if (tauriDaemon.isTauri()) {
+      // 对齐「关窗到托盘」的既有行为:/exit 隐藏主窗口而非退出进程。
+      // 若当前构建的 capabilities 未授予 window:allow-hide,降级为提示。
+      void import('@tauri-apps/api/window')
+        .then(({ getCurrentWindow }) => getCurrentWindow().hide())
+        .catch(() => toast('窗口隐藏未获授权;可直接关闭窗口,应用会保留在托盘'));
+    } else {
+      explainNonExecutableCommand(command, mapping);
+    }
+    return;
+  }
   const sectionByCommand: Partial<Record<string, typeof settingsSection.value>> = {
     permission: 'permissions',
     model: 'models-providers',
@@ -1381,24 +1447,33 @@ function replaceGoal(objective: string): void {
 
 /** Registry-backed slash-command dispatcher for the actual desktop entry. */
 function handleCommand(cmd: string, attachments?: PromptAttachment[]): void {
-  const space = cmd.indexOf(' ');
-  const token = space === -1 ? cmd : cmd.slice(0, space);
-  const arg = space === -1 ? '' : cmd.slice(space + 1).trim();
+  // 与 parseSlash 一致按首个空白(空格/Tab/换行)切分,`/goal\n目标` 也能解析
+  const ws = /\s/.exec(cmd);
+  const token = ws === null ? cmd : cmd.slice(0, ws.index);
+  const arg = ws === null ? '' : cmd.slice(ws.index + 1).trim();
   const resolved = resolveBuiltinCommand(token);
   if (resolved === null) {
-    const stripped = token.slice(1);
-    if (stripped) void client.activateSkill(stripped, arg || undefined, undefined, attachments);
+    const stripped = stripSkillPrefix(token.slice(1));
+    if (!stripped) return;
+    // Mirror the App.vue fallback: with no session yet, create the draft
+    // session and activate there — otherwise the skill silently no-ops.
+    if (!client.activeSessionId.value && client.activeWorkspaceId.value) {
+      void client.startSessionAndActivateSkill(client.activeWorkspaceId.value, stripped, arg || undefined, attachments);
+    } else {
+      void client.activateSkill(stripped, arg || undefined, undefined, attachments);
+    }
     return;
   }
 
   const { canonicalName, mapping } = resolved;
+  // idle-only 守卫对 native-ui 等非 command 映射同样生效(先于 kind 分支)
+  if (mapping.availability === 'idle-only' && conversationRunning.value) {
+    toast(`${token} 只能在会话空闲时执行`);
+    return;
+  }
   if (mapping.kind !== 'command') {
     if (mapping.kind === 'native-ui') openNativeUiCommand(canonicalName, token, mapping);
     else explainNonExecutableCommand(token, mapping);
-    return;
-  }
-  if (mapping.availability === 'idle-only' && conversationRunning.value) {
-    toast(`${token} 只能在会话空闲时执行`);
     return;
   }
 
@@ -1448,7 +1523,11 @@ function handleCommand(cmd: string, attachments?: PromptAttachment[]): void {
       break;
     case 'goal':
       if (!arg || arg === 'status') showGoalStatus();
-      else if (arg === 'pause' || arg === 'resume' || arg === 'cancel') client.controlGoal(arg);
+      // 子命令按「精确或带参前缀」匹配(同 next 写法):`/goal pause now`
+      // 不再误落入创建目标分支
+      else if (arg === 'pause' || arg.startsWith('pause ')) client.controlGoal('pause');
+      else if (arg === 'resume' || arg.startsWith('resume ')) client.controlGoal('resume');
+      else if (arg === 'cancel' || arg.startsWith('cancel ')) client.controlGoal('cancel');
       else if (arg.startsWith('replace ')) replaceGoal(arg.slice('replace '.length).trim());
       else if (arg === 'next' || arg.startsWith('next ')) {
         toast('即将目标队列仍只存在于 TUI 会话 RPC，0.33 daemon REST 尚未开放；当前目标管理已可在顶部目标卡完成');
@@ -1489,9 +1568,16 @@ function handleCommand(cmd: string, attachments?: PromptAttachment[]): void {
     case 'yolo':
       client.setPermission('yolo');
       break;
-    case 'thinking':
-      client.setThinking('high');
+    case 'thinking': {
+      // /thinking low|high|max(大小写归一);缺失/非法时提示用法不落地
+      const level = arg.trim().toLowerCase();
+      if (level !== 'low' && level !== 'high' && level !== 'max') {
+        toast('用法：/thinking low|high|max');
+        break;
+      }
+      client.setThinking(level);
       break;
+    }
     case 'status':
       ui.openDetail('tasks');
       break;
@@ -1828,14 +1914,21 @@ function qSteerAll() {
   void client.steerPrompt('');
 }
 const composerRef = ref<InstanceType<typeof Composer> | null>(null);
-function qEdit(i: number) {
-  const q = queueItems.value[i];
-  if (!q) return;
-  composerRef.value?.setText(q.text);
-  client.unqueue(i);
+function queueIndexById(id: string): number {
+  return queueItems.value.findIndex((q) => q.id === id);
 }
-function qRemove(i: number) {
-  client.unqueue(i);
+function qEdit(id: string) {
+  const idx = queueIndexById(id);
+  if (idx < 0) return;
+  const q = queueItems.value[idx]!;
+  composerRef.value?.setText(q.text);
+  // 附件无法随文本回填到 Composer:有附件时提示需要重新添加
+  if (q.attachmentCount > 0) toast(`该排队消息含 ${q.attachmentCount} 个附件,编辑后需重新添加`);
+  client.unqueue(idx);
+}
+function qRemove(id: string) {
+  const idx = queueIndexById(id);
+  if (idx >= 0) client.unqueue(idx);
 }
 
 // ---------------------------------------------------------------- diff / ReviewPane(数据流,轮次 4b kimi3)
@@ -2353,8 +2446,8 @@ async function searchFiles(q: string) {
           v-if="queueItems.length"
           :queued-prompts="queueItems"
           @steer-all="qSteerAll"
-          @edit="(id) => qEdit(Number(id))"
-          @remove="(id) => qRemove(Number(id))"
+          @edit="qEdit"
+          @remove="qRemove"
           @reorder="(from: number, to: number) => void client.reorderQueue(from, to)"
         />
         <Composer

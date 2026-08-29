@@ -125,3 +125,29 @@ Kimi Code 0.33.0 已从公开仓库移除 `apps/kimi-web` 源码，官方脚本�
 **原因**：daemon 0.29 新增 `GET /api/v1/oauth/usage`（REST 额度，替代 PTY 抓取）+ `GET /api/v1/fs:content`（读宿主机文件，替代 readFileContent 的 workspace 限制）
 
 **冲突风险**：低。纯 additive（新方法），不修改现有方法。
+
+---
+
+### `web/src/i18n/locales/{en,zh}/settings.ts`（2026-08-29 · ZCode · 产品更名）
+
+**改动**：系统通知标题 `notifyTitle` / `notifyQuestionTitle` / `notifyApprovalTitle` 六处（en/zh 各三）的 "Kimi Code" 前缀改为 "Kimi Studio"，`·` 后的事件文案保持不变。`web/test/notification-logic.test.ts` 的对应断言同步更新。
+
+**原因**：产品更名为 Kimi Studio（见 CHANGELOG 1.0.17），通知是系统级 surface，继续显示旧名会与托盘/关于页不一致。
+
+**冲突风险**：低。仅通知标题字符串，键结构未动；上游若改通知文案，merge 时按新名保留。
+
+---
+
+### `web/src/api/daemon/{wire,mappers,eventReducer,agentEventProjector,client}.ts`（2026-08-29 · ZCode · 0.34→0.39.1 官方契约同步）
+
+**改动**：协议层五文件跟随官方 Kimi Code 0.34–0.39.1 的 optional 字段与新端点同步（汇总登记，分批落在 dd2698d…f3be9ae 等提交）：
+
+- wire/mappers：0.35 usage 的 `total_cost_usd` / `context_limit` / `turn_count`（未知时省略，normalize 到 0）；0.34 任务存储回传的 spawn-bound `model` / `thinking_effort`；0.39 `session_media` / `path` 零拷贝附件双形态
+- eventReducer：0.36 `event.plugin.changed`（bare fan-out → pluginsChanged）；`event.capability.changed`（capability 安装进度投影）
+- agentEventProjector：0.37 引擎回显的 `promptId`（优先 pre-bound > echoed > synthetic）；0.38 `subagent.spawned` 携带的 `taskId` → `backgroundTaskId`（REST /tasks 绑定，cancel/detach 不再等 task.started）
+- client：0.34 skill 激活附件（`SkillActivationAttachment`）；0.37 `POST /fs/suggest`；0.39 `POST /tasks/{id}:detach`
+
+**原因**：官方 `packages/protocol` 0.34→0.39.1 tag diff 的 optional 字段向后兼容同步（上游注释明确 cross-version tolerance）；均以官方 diff 为准，无自造字段。
+
+**冲突风险**：低-中。全部为 additive optional 字段/新方法，不改既有 wire 语义；后续同步仍以官方 tag diff 为准逐项核对。
+

@@ -18,7 +18,7 @@
  * 契约外补充 props(已报备):builtin / skills / files —— 补全数据源,
  * 原型期由场景传入 mock,轮次 3 由 ZCode 的 composable 接真源。
  */
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import type {
   BuiltinCommand,
   ComposerProps,
@@ -29,6 +29,7 @@ import type {
 import { useComposerDraft } from '../../../composables/useComposerDraft';
 import { useInputHistory } from '../../../composables/useInputHistory';
 import CodexIcon from '../layout/CodexIcon.vue';
+import { useToast } from '../layout/Toast.vue';
 import ComposerModes from './ComposerModes.vue';
 import PermPicker from './PermPicker.vue';
 import ModePicker from './ModePicker.vue';
@@ -58,6 +59,7 @@ const props = withDefaults(
   { builtin: () => [], skills: () => [], files: () => [], sessionTitle: '', placeholder: '' },
 );
 const emit = defineEmits<ComposerEmits>();
+const { toast } = useToast();
 
 // 文本状态 + 按会话草稿持久化(textareaRef/autosize 同时供输入历史用)——见 useComposerDraft
 const { text, textareaRef, autosize, loadForEdit, clearDraft } = useComposerDraft({
@@ -67,10 +69,11 @@ const { text, textareaRef, autosize, loadForEdit, clearDraft } = useComposerDraf
 // shell 式 ↑/↓ 已发消息召回 —— 见 useInputHistory;键位编排留在本组件(见 onKeydown)
 const history = useInputHistory({ text, textareaRef, autosize, sessionId: () => props.sessionId });
 
-/** 补全检测:'/' 开头单 token → slash;最后 token 以 @ 起头 → mention */
+/** 补全检测:'/' 开头单 token → slash;最后 token 以 @ 起头 → mention
+ *  (token 允许连字符,如 /add-dir /export-md,补全不中途消失) */
 const assist = computed(() => {
   const v = text.value;
-  const slash = v.match(/^\/(\w*)$/);
+  const slash = v.match(/^\/([\w-]*)$/);
   if (slash) return { mode: 'slash' as const, query: (slash[1] ?? '').toLowerCase() };
   const at = v.match(/(?:^|\s)@([^\s@]*)$/);
   if (at) return { mode: 'at' as const, query: (at[1] ?? '').toLowerCase(), atStart: v.lastIndexOf('@') };
@@ -98,16 +101,26 @@ function closeAssist() {
 
 function onSlashSelect(cmd: BuiltinCommand | Skill) {
   const name = (cmd as BuiltinCommand).name ?? '';
-  if ((cmd as BuiltinCommand).acceptsInput) {
+  // Skill 一律 acceptsInput(与官方 slashCommands.ts buildSlashItems 的
+  // acceptsInput:true 契约一致):回填输入框留参,由用户补参数后经 send 分发,
+  // 不再选中即执行。
+  const isSkill = (cmd as Skill).source !== undefined;
+  if (isSkill || (cmd as BuiltinCommand).acceptsInput) {
     text.value = '/' + name + ' ';
-  } else {
-    /* 无参命令:emit command 让父级执行(不走 send,避免当普通消息发);
-       与官方一致,命令也进输入历史(↑ 可召回) */
-    history.push('/' + name);
-    emit('command', '/' + name);
-    text.value = '';
-    clearDraft();
+    // 尾随空格天然关闭补全;光标定到末尾并保焦
+    void nextTick(() => {
+      const el = textareaRef.value;
+      if (el) el.setSelectionRange(el.value.length, el.value.length);
+      focus();
+    });
+    return;
   }
+  /* 无参命令:emit command 让父级执行(不走 send,避免当普通消息发);
+     与官方一致,命令也进输入历史(↑ 可召回) */
+  history.push('/' + name);
+  emit('command', '/' + name);
+  text.value = '';
+  clearDraft();
 }
 function onAtSelect(file: FileEntry) {
   const a = assist.value;
@@ -151,7 +164,7 @@ function onKeydown(e: KeyboardEvent) {
   // IME 组词中不拦截任何键(isComposing + keyCode 229 双保险,同官方)
   if (e.isComposing || e.keyCode === 229) return;
 
-  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && !assistVisible.value) {
     e.preventDefault();
     submit();
     return;
@@ -229,6 +242,16 @@ function formatBytes(size?: number): string {
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
+/** chip 悬浮标题:mediaType/size 缺省(零拷贝路径附件)时省略对应段,
+ *  不出现 "undefined · 0 B"。 */
+function chipTitle(att: PendingAttachment): string {
+  return [
+    att.name,
+    att.mediaType,
+    att.size ? formatBytes(att.size) : '',
+  ].filter(Boolean).join(' · ');
+}
+
 async function uploadAttachment(att: PendingAttachment): Promise<void> {
   if (!props.uploadImage || att.blob.size > MAX_ATTACHMENT_BYTES) return;
   att.uploading = true;
@@ -287,12 +310,14 @@ async function handleFiles(files: FileList | File[]) {
 function removeAttachment(localId: string) {
   const idx = attachments.value.findIndex((a) => a.localId === localId);
   if (idx >= 0) {
-    URL.revokeObjectURL(attachments.value[idx]!.url);
+    if (attachments.value[idx]!.url) URL.revokeObjectURL(attachments.value[idx]!.url);
     attachments.value.splice(idx, 1);
   }
 }
 
 function onPaste(e: ClipboardEvent) {
+  // 无上传通道时不 preventDefault:文件粘贴走浏览器默认行为
+  if (!props.uploadImage) return;
   const files = e.clipboardData?.files;
   if (files && files.length > 0) {
     e.preventDefault();
@@ -312,9 +337,19 @@ function onDragOver(e: DragEvent) {
 
 /** Kimi Code 0.39+ zero-copy attach: a Tauri window drop carries absolute
  *  paths, so non-media files skip the upload entirely — the daemon validates
- *  and reads the file in place (fills name/media_type/size from stat). */
-function addPathAttachment(path: string): void {
-  if (attachments.value.length >= MAX_ATTACHMENT_COUNT) return;
+ *  and reads the file in place (fills name/media_type/size from stat).
+ *  Returns whether the path was actually appended (dedupe / cap rejections
+ *  toast the reason). Web 层拿不到路径文件的体积,100MB 上限由 daemon 在
+ *  读取时兜底校验。 */
+function addPathAttachment(path: string): boolean {
+  if (attachments.value.some((a) => a.path === path)) {
+    toast(`文件已在附件列表:${path}`);
+    return false;
+  }
+  if (attachments.value.length >= MAX_ATTACHMENT_COUNT) {
+    toast(`最多同时附加 ${MAX_ATTACHMENT_COUNT} 个文件`);
+    return false;
+  }
   const name = path.split(/[\\/]/).pop() || path;
   attachments.value.push({
     localId: crypto.randomUUID(),
@@ -326,6 +361,7 @@ function addPathAttachment(path: string): void {
     path,
     kind: 'file',
   });
+  return true;
 }
 
 function pickFile() {
@@ -354,9 +390,18 @@ function buildAttachments(): { fileId?: string; path?: string; kind: 'image' | '
 }
 
 function clearAttachments() {
-  for (const a of attachments.value) URL.revokeObjectURL(a.url);
+  for (const a of attachments.value) if (a.url) URL.revokeObjectURL(a.url);
   attachments.value = [];
 }
+
+// 切换会话:附件不属于新会话,清空 chips(revoke 其 blob url)
+watch(() => props.sessionId, () => {
+  clearAttachments();
+});
+// 卸载兜底:逐个 revoke 仍有 url 的附件,防 blob 泄漏
+onUnmounted(() => {
+  clearAttachments();
+});
 
 /** 聚焦输入框(新建任务后调用) */
 function focus() {
@@ -409,8 +454,8 @@ defineExpose({ setText, focus, addPathAttachment });
       >
         <img v-if="att.kind === 'image'" :src="att.url" class="att-thumb" :alt="att.name" />
         <span v-else class="att-thumb att-file-icon"><CodexIcon name="file" /></span>
-        <span class="att-name" :title="`${att.name} · ${att.mediaType} · ${formatBytes(att.size)}`">{{ att.name }}</span>
-        <span class="att-size">{{ formatBytes(att.size) }}</span>
+        <span class="att-name" :title="chipTitle(att)">{{ att.name }}</span>
+        <span v-if="att.size" class="att-size">{{ formatBytes(att.size) }}</span>
         <span v-if="att.uploading" class="att-status">上传中…</span>
         <button v-else-if="att.error && (att.size ?? 0) <= MAX_ATTACHMENT_BYTES" class="att-retry" :title="att.errorMessage" @click="uploadAttachment(att)">重试</button>
         <span v-else-if="att.error" class="att-status err" :title="att.errorMessage">{{ att.errorMessage }}</span>

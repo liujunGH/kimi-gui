@@ -8,13 +8,17 @@
  * - 拖拽或键盘按钮重排 → emit reorder(from, to)
  */
 import { computed, ref, watch } from 'vue';
-import type { QueuePanelProps, QueuePanelEmits } from '../../../types/codex';
+import type { QueuePanelProps, QueuePanelEmits, QueuedPrompt } from '../../../types/codex';
 import CodexIcon from '../layout/CodexIcon.vue';
 
 const props = withDefaults(defineProps<QueuePanelProps & { defaultOpen?: boolean }>(), {
   defaultOpen: false,
 });
 const emit = defineEmits<QueuePanelEmits>();
+
+/** 契约 QueuedPrompt 之外,CodexApp 传入的条目还带附件计数(有附件时行内显示) */
+type QueueRow = QueuedPrompt & { attachmentCount?: number };
+const rows = computed<QueueRow[]>(() => props.queuedPrompts as QueueRow[]);
 
 const open = ref(props.defaultOpen);
 const count = computed(() => props.queuedPrompts.length);
@@ -82,7 +86,7 @@ function onDragEnd() {
         </button>
       </div>
       <div
-        v-for="(q, i) in props.queuedPrompts"
+        v-for="(q, i) in rows"
         :key="q.id"
         class="qp-row"
         :class="{
@@ -98,6 +102,13 @@ function onDragEnd() {
         <span class="qp-grip" title="拖拽重排"><CodexIcon name="grip" /></span>
         <span class="qp-num">{{ i + 1 }}</span>
         <span class="qp-text">{{ q.text }}</span>
+        <span
+          v-if="q.attachmentCount"
+          class="qp-att"
+          :title="`该消息含 ${q.attachmentCount} 个附件,编辑后需重新添加`"
+        >
+          <CodexIcon name="paperclip" size="sm" />{{ q.attachmentCount }}
+        </span>
         <span class="qp-actions">
           <button class="icon-btn qp-move" :disabled="i === 0" title="上移" :aria-label="`上移第 ${i + 1} 条消息`" @click="emit('reorder', i, i - 1)">
             <CodexIcon name="chevron-up" size="sm" />
@@ -131,4 +142,6 @@ function onDragEnd() {
 .qp-row .qp-actions .qp-move { opacity: 0.6; }
 .qp-row .qp-actions .qp-move:hover,
 .qp-row .qp-actions .qp-move:focus-visible { opacity: 1; }
+/* 行内附件计数(仅布局微调,配色仍走 token) */
+.qp-att { flex: none; display: inline-flex; align-items: center; gap: 3px; color: var(--text-3); font-size: var(--text-sm); }
 </style>

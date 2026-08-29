@@ -89,7 +89,15 @@ pub fn save_gui_experiments(enabled: Vec<String>) -> Result<(), String> {
     }
     let text = serde_json::to_string_pretty(&serde_json::Value::Object(object))
         .map_err(|e| e.to_string())?;
-    std::fs::write(gui_experiments_path(), text).map_err(|e| e.to_string())
+    // `<kimi_home>` may not exist yet on a fresh install (daemon never started),
+    // so create it before writing — same precedent as runtime.rs atomic_write.
+    std::fs::create_dir_all(kimi_home()).map_err(|e| e.to_string())?;
+    // Atomic replace: write a sibling temp file, then rename over the target so
+    // a crash mid-write can never leave a truncated experiments file behind.
+    let path = gui_experiments_path();
+    let temporary = path.with_extension("json.tmp");
+    std::fs::write(&temporary, text).map_err(|e| e.to_string())?;
+    std::fs::rename(&temporary, &path).map_err(|e| e.to_string())
 }
 
 /// Inject the GUI-managed experiment env vars into a daemon-launch command.

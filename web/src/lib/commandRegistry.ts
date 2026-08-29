@@ -201,6 +201,9 @@ if (mappingIssues.length > 0) {
 // depending on insertion order in the upstream aliases array.
 const TOKEN_OVERRIDES: Readonly<Record<string, string>> = {
   export: 'export-debug-zip',
+  // Old TUI spelling (underscore) is no longer an upstream alias; route it to
+  // the canonical hyphenated command instead of the skill-activation fallback.
+  secondary_model: 'secondary-model',
 };
 
 const canonicalByToken = new Map<string, string>();

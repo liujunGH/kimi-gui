@@ -12,6 +12,7 @@ import { getKimiWebApi } from '../../api';
 import { i18n } from '../../i18n';
 import { useConfirmDialog } from '../useConfirmDialog';
 import { isDaemonApiError } from '../../api/errors';
+import { useToast } from '../../components/codex/layout/Toast.vue';
 import { SERVER_AUTH_UNAUTHORIZED_CODE } from '../../api/daemon/http';
 import { isPlaceholderSessionUsage } from '../../api/daemon/mappers';
 import type {
@@ -88,6 +89,19 @@ function isTaskAlreadyFinishedError(err: unknown): boolean {
   return isDaemonApiError(err) && err.code === TASK_ALREADY_FINISHED_CODE;
 }
 
+// 40406 — REST /tasks does not know the id we sent. Happens when a subagent
+// row was never registered with the background-task store (swarm subagents and
+// post-refresh snapshot rows carry no backgroundTaskId); detach on such a row
+// can never succeed, so it gets a dedicated explanation instead of a global
+// error toast.
+const TASK_NOT_IN_STORE_CODE = 40406;
+const DETACH_UNREGISTERED_MESSAGE =
+  '该任务未在后台任务库注册,暂不能转后台(swarm 子任务/刷新后的会话暂不支持)';
+
+function isTaskNotInStoreError(err: unknown): boolean {
+  return isDaemonApiError(err) && err.code === TASK_NOT_IN_STORE_CODE;
+}
+
 /**
  * Question ids with an in-flight respond/dismiss, keyed by questionId with the
  * action kind. Drives the card's loading state and guards against a duplicate
@@ -100,6 +114,8 @@ const pendingQuestionActions = reactive<Record<string, 'answer' | 'dismiss'>>({}
 const pendingApprovalActions = reactive<Record<string, true>>({});
 /** Task ids with an in-flight cancel, keyed by taskId. */
 const pendingTaskCancellations = reactive<Record<string, true>>({});
+/** Task ids with an in-flight detach, keyed by taskId. */
+const pendingTaskDetaches = reactive<Record<string, true>>({});
 /**
  * Workspace ids whose empty-session first prompt is currently being created +
  * submitted. The empty-composer path (`startSessionAndSendPrompt`) awaits
@@ -1235,6 +1251,7 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
     workspaceId: string,
     skillName: string,
     args?: string,
+    attachments?: PromptAttachment[],
   ): Promise<void> {
     // Same reentry window as startSessionAndSendPrompt (see the guard there):
     // draft-session creation selects the new session before the activation,
@@ -1277,7 +1294,7 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
       // The persist surfaces its own failure; activating at a stale profile
       // effort is worse than not activating (the finally still re-arms below).
       if (!persisted) return;
-      await modelProvider.activateSkill(skillName, args, sid);
+      await modelProvider.activateSkill(skillName, args, sid, attachments);
     } catch (err) {
       pushOperationFailure('startSessionAndActivateSkill', err);
     } finally {
@@ -2153,12 +2170,17 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
       const task = (rawState.tasksBySession[sid] ?? []).find((t) => t.id === taskId);
       if (task?.kind === 'subagent' && task.backgroundTaskId === undefined) return;
       await api.cancelTask(sid, task?.backgroundTaskId ?? taskId);
-      // Update task status locally
+      // Update task status locally. The subagent view (swarm groups / Agent
+      // panel) derives its phase from `subagentPhase` over `status`, so flip
+      // it too — otherwise a cancelled row lingers in the active list until
+      // the event stream / poller confirms the terminal state.
       const list = rawState.tasksBySession[sid] ?? [];
       rawState.tasksBySession = {
         ...rawState.tasksBySession,
         [sid]: list.map((t) =>
-          t.id === taskId ? { ...t, status: 'cancelled' as const } : t,
+          t.id === taskId
+            ? { ...t, status: 'cancelled' as const, subagentPhase: 'failed' as const }
+            : t,
         ),
       };
     } catch (err) {
@@ -2182,9 +2204,23 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
   async function detachTask(taskId: string): Promise<void> {
     const sid = rawState.activeSessionId;
     if (!sid) return;
-    const api = getKimiWebApi();
+    // Guard against a second click while the first detach is in flight.
+    if (pendingTaskDetaches[taskId]) return;
+    pendingTaskDetaches[taskId] = true;
     try {
-      const result = await api.detachTask(sid, taskId);
+      const api = getKimiWebApi();
+      // WS keys the agent by agent id while REST /tasks keys it by its
+      // background-task id (same binding cancelTask uses). Kimi Code 0.38+
+      // subagent.spawned carries that taskId, so foreground rows know it too —
+      // but swarm subagents and post-refresh snapshot rows never do (the
+      // registration event is volatile), and sending their agent id to REST
+      // would 40406. Explain instead of erroring (same defense as cancelTask).
+      const task = (rawState.tasksBySession[sid] ?? []).find((t) => t.id === taskId);
+      if (task?.kind === 'subagent' && task.backgroundTaskId === undefined) {
+        useToast().toast(DETACH_UNREGISTERED_MESSAGE);
+        return;
+      }
+      const result = await api.detachTask(sid, task?.backgroundTaskId ?? taskId);
       if (!result.detached) return;
       const list = rawState.tasksBySession[sid] ?? [];
       rawState.tasksBySession = {
@@ -2194,7 +2230,16 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
         ),
       };
     } catch (err) {
-      pushOperationFailure('detachTask', err, { sessionId: sid });
+      if (isTaskNotInStoreError(err)) {
+        // REST does not know this id — the row was never registered with the
+        // background-task store (swarm subagent / refreshed session); same
+        // explanation as the pre-check instead of a global error.
+        useToast().toast(DETACH_UNREGISTERED_MESSAGE);
+      } else {
+        pushOperationFailure('detachTask', err, { sessionId: sid });
+      }
+    } finally {
+      delete pendingTaskDetaches[taskId];
     }
   }
 

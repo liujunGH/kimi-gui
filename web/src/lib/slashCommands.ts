@@ -57,19 +57,23 @@ export const SLASH_COMMANDS: SlashCommand[] = executableCommandMappings()
  * Examples:
  *   "/help"         -> { cmd: "/help", arg: "" }
  *   "/new session"  -> { cmd: "/new", arg: "session" }
+ *   "/goal\n目标"   -> { cmd: "/goal", arg: "目标" }
  *   "hello /help"   -> null (slash not at line start)
  *   "  /help"       -> null (leading whitespace)
  */
 export function parseSlash(input: string): { cmd: string; arg: string } | null {
   if (!input.startsWith('/')) return null;
-  // Must start exactly at position 0 (no leading spaces)
-  const spaceIdx = input.indexOf(' ');
-  if (spaceIdx === -1) {
+  // Must start exactly at position 0 (no leading spaces). Split on the FIRST
+  // whitespace of any kind (space, tab, newline) so multi-line arguments like
+  // "/goal\n目标" still parse instead of swallowing the whole input as the
+  // command token.
+  const ws = /\s/.exec(input);
+  if (ws === null) {
     return { cmd: input, arg: '' };
   }
   return {
-    cmd: input.slice(0, spaceIdx),
-    arg: input.slice(spaceIdx + 1),
+    cmd: input.slice(0, ws.index),
+    arg: input.slice(ws.index + 1),
   };
 }
 

@@ -99,6 +99,9 @@ export function toAppSession(wire: WireSession): AppSession {
     pendingInteraction: wire.pending_interaction,
     lastTurnReason: wire.last_turn_reason,
     archived: wire.archived ?? false,
+    // 0.35+ field; absent for sessions archived before it existed — fall back
+    // to updated_at so the archive tree always has a sortable timestamp.
+    archivedAt: wire.archived_at ?? wire.updated_at,
     currentPromptId: wire.current_prompt_id,
     lastPrompt: wire.last_prompt,
     cwd: wire.metadata.cwd,
@@ -136,14 +139,24 @@ function toAppImageSource(src: WireImageSource): ImageSource {
     return { kind: 'file', fileId: src.file_id };
   }
   // Kimi Code 0.39+: stored projections address the session-owned canonical
-  // media copy — same App shape as an uploaded file reference.
+  // media copy. Keep its own kind — the render endpoint is
+  // GET /sessions/{sid}/media/{file_id} (session-persistent), not the
+  // prunable GET /files/{id} upload store, so folding it into 'file' broke
+  // images once the upload expired.
   if (src.kind === 'session_media') {
-    return { kind: 'file', fileId: src.file_id };
+    return { kind: 'session_media', fileId: src.file_id };
   }
   if (src.kind === 'path') {
     return { kind: 'path', path: src.path };
   }
-  return { kind: 'url', url: src.url, id: src.id };
+  if (src.kind === 'url') {
+    return { kind: 'url', url: src.url, id: src.id };
+  }
+  // Unknown kind from a newer/older daemon (the wire union is closed but the
+  // live frame may not be). Fabricating a url variant would produce
+  // `url: undefined`; an empty file id keeps the App shape total and renders
+  // as a broken-image placeholder instead.
+  return { kind: 'file', fileId: '' };
 }
 
 export function toAppMessageContent(wire: WireMessageContent): AppMessageContent {
@@ -249,6 +262,8 @@ function toWireMessageContent(app: AppMessageContent): WireMessageContent {
         wireSrc = { kind: 'base64', media_type: src.mediaType, data: src.data };
       } else if (src.kind === 'file') {
         wireSrc = { kind: 'file', file_id: src.fileId };
+      } else if (src.kind === 'session_media') {
+        wireSrc = { kind: 'session_media', file_id: src.fileId };
       } else if (src.kind === 'path') {
         wireSrc = { kind: 'path', path: src.path };
       } else {
@@ -750,16 +765,34 @@ export function toAppEvent(wire: WireEvent): AppEvent {
       // Kimi Code 0.36+: bare fan-out — consumers re-read the plugins surface.
       return { type: 'pluginsChanged' };
 
-    case 'event.capability.changed':
+    case 'event.capability.changed': {
+      // Kimi Code 0.36+ live-only install progress fan-out. Guard the payload
+      // shape (same defensive pattern as configWarningsChanged above): a
+      // malformed frame must surface as an unknown event, not throw on
+      // `install.running`.
+      const install =
+        w.payload.install && typeof w.payload.install === 'object'
+          ? (w.payload.install as {
+              running?: unknown;
+              step?: unknown;
+              percent?: unknown;
+              error?: unknown;
+              note?: unknown;
+            })
+          : null;
+      if (install === null || typeof install.running !== 'boolean') {
+        return { type: 'unknown', raw: wire };
+      }
       return {
         type: 'capabilityInstallChanged',
         capabilityId: w.payload.capability_id,
-        running: w.payload.install.running,
-        step: w.payload.install.step,
-        percent: w.payload.install.percent,
-        error: w.payload.install.error,
-        note: w.payload.install.note,
+        running: install.running,
+        step: typeof install.step === 'string' ? install.step : undefined,
+        percent: typeof install.percent === 'number' ? install.percent : undefined,
+        error: typeof install.error === 'string' ? install.error : undefined,
+        note: typeof install.note === 'string' ? install.note : undefined,
       };
+    }
 
     case 'event.model_catalog.changed':
       return {

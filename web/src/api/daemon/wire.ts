@@ -252,8 +252,10 @@ export interface WirePromptSubmission {
 export interface WirePromptSubmitResult {
   prompt_id: string;
   user_message_id: string;
-  /** 'running' = started immediately; 'queued' = parked behind the active prompt. */
-  status?: 'running' | 'queued';
+  /** 'running' = started immediately; 'queued' = parked behind the active
+   *  prompt; 'blocked' = rejected by a pre-submit hook (no turn, no user
+   *  message persisted — the prompt.completed(reason 'blocked') follows). */
+  status?: 'running' | 'queued' | 'blocked';
 }
 
 export interface WirePromptSteerResult {

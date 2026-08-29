@@ -819,7 +819,7 @@ describe('useWorkspaceState — startSessionAndActivateSkill', () => {
     expect(apiMock.createSession).toHaveBeenCalledOnce();
     // The activation targets the freshly created session, so a concurrent
     // session switch can't redirect it.
-    expect(activateSkill).toHaveBeenCalledWith('pre-changelog', undefined, 'sess_new');
+    expect(activateSkill).toHaveBeenCalledWith('pre-changelog', undefined, 'sess_new', undefined);
     expect(deps.pushOperationFailure).not.toHaveBeenCalled();
   });
 
@@ -871,7 +871,7 @@ describe('useWorkspaceState — startSessionAndActivateSkill', () => {
 
     await ws.startSessionAndActivateSkill('wd_1', 'write-goal', 'ship it');
 
-    expect(activateSkill).toHaveBeenCalledWith('write-goal', 'ship it', 'sess_new');
+    expect(activateSkill).toHaveBeenCalledWith('write-goal', 'ship it', 'sess_new', undefined);
   });
 
   it('awaits the profile POST before activating, so draft controls apply first', async () => {
@@ -910,7 +910,7 @@ describe('useWorkspaceState — startSessionAndActivateSkill', () => {
     resolveProfile(true);
     await pending;
 
-    expect(activateSkill).toHaveBeenCalledWith('pre-changelog', undefined, 'sess_new');
+    expect(activateSkill).toHaveBeenCalledWith('pre-changelog', undefined, 'sess_new', undefined);
   });
 
   it('does not write thinking in the draft profile patch — activateSkill persists it once', async () => {
@@ -940,7 +940,7 @@ describe('useWorkspaceState — startSessionAndActivateSkill', () => {
     const patch = persistSessionProfile2.mock.calls[0]![0] as Record<string, unknown>;
     expect(patch).toMatchObject({ model: 'kimi-code', planMode: true, swarmMode: false });
     expect('thinking' in patch).toBe(false);
-    expect(activateSkill2).toHaveBeenCalledWith('pre-changelog', undefined, 'sess_new');
+    expect(activateSkill2).toHaveBeenCalledWith('pre-changelog', undefined, 'sess_new', undefined);
   });
 
   it('is a no-op for an unknown workspace', async () => {

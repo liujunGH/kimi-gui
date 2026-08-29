@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, ref } from 'vue';
 import type { AppSession } from '../../../api/types';
 import { getKimiWebApi } from '../../../api';
 import { useKimiClient } from '../../../composables/codex/useKimiClient';
@@ -35,6 +35,8 @@ const selectedRows = computed(() => sessions.value.filter((s) => selected.value.
 const allVisibleSelected = computed(() => rows.value.length > 0 && rows.value.every((s) => selected.value.includes(s.id)));
 
 async function load(): Promise<void> {
+  // Guard against a concurrent drain (refresh click while a load is running).
+  if (loading.value) return;
   loading.value = true;
   try {
     const merged = new Map<string, AppSession>();
@@ -171,7 +173,9 @@ async function permanentlyDelete(): Promise<void> {
   }
 }
 
-onMounted(load);
+// The parent triggers the load when this section becomes ACTIVE — mounting
+// the (always-rendered) settings page must not drain /sessions on its own.
+defineExpose({ load });
 </script>
 
 <template>

@@ -14,12 +14,25 @@
  *
  * 0.33 契约可返回创建/开始/完成时间和运行时模型；缺字段时仍保持渐进展示。
  */
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, inject, onMounted, onUnmounted, ref } from 'vue';
 import type { AgentPanelProps, AgentPanelEmits, Subagent } from '../../../types/codex';
+import { KIMI_CLIENT_KEY } from '../../../composables/codex/useKimiClient';
+import { compareKimiVersions } from '../../../lib/kimiVersion';
 import CodexIcon from '../layout/CodexIcon.vue';
 
 const props = withDefaults(defineProps<AgentPanelProps & { open?: boolean }>(), { open: false });
 const emit = defineEmits<AgentPanelEmits & { (e: 'close'): void }>();
+
+/** 深组件直接 inject client(架构规则:3 层以上不走 emit 链)。「移到后台」
+ * 依赖 Kimi Code 0.39+ 的 task:detach;inject 失败(沙箱)或版本不可解析时
+ * 退化为按钮照常显示(保持现状,不因拿不到版本而藏掉入口)。 */
+const client = inject(KIMI_CLIENT_KEY, null);
+const detachSupported = computed(() => {
+  const version = client?.serverVersion.value;
+  if (!version) return true;
+  const relation = compareKimiVersions(version, '0.39.0');
+  return relation === null || relation >= 0;
+});
 
 /** 完成组分页:默认 10 条 */
 const shown = ref(10);
@@ -136,7 +149,7 @@ onUnmounted(() => document.removeEventListener('keydown', onDocKeydown));
           </span>
         </button>
         <button
-          v-if="a.status === 'working' && !a.background"
+          v-if="detachSupported && a.status === 'working' && !a.background"
           class="aph-cancel"
           title="移到后台继续运行"
           @click.stop="emit('detach', a.id)"

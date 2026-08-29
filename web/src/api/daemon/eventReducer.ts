@@ -383,6 +383,10 @@ export function reduceAppEvent(
       delete next.questionsBySession[id];
       delete next.lastSeqBySession[id];
       delete next.turnActiveBySession[id];
+      // Per-session derived maps leak with the session too (cloneState already
+      // copied them, so deleting here never mutates the previous state).
+      delete next.compactionBySession[id];
+      delete next.goalVersionBySession[id];
       if (next.activeSessionId === id) {
         next.activeSessionId = undefined;
       }
@@ -696,6 +700,9 @@ export function reduceAppEvent(
           backgroundTaskId: event.task.backgroundTaskId ?? previous.backgroundTaskId,
           model: event.task.model ?? previous.model,
           modelSource: event.task.modelSource ?? previous.modelSource,
+          // Skeleton re-projections (post-refresh lifecycle events, resync)
+          // omit spawn-bound metadata — preserve the learned value like model.
+          thinkingEffort: event.task.thinkingEffort ?? previous.thinkingEffort,
         };
         next.tasksBySession[sid] = patched;
       }

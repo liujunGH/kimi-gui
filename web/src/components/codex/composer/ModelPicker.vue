@@ -81,7 +81,7 @@ onUnmounted(() => {
       @click="pickModel(m.id)"
     >
       <CodexIcon name="check" class="mp-check" />
-      <span class="mp-name">{{ m.name }}</span>
+      <span class="mp-name">{{ m.name }}<em v-if="m.provider" class="mp-provider">{{ m.provider }}</em></span>
     </button>
     <div class="mp-sep"></div>
     <div class="mp-row">

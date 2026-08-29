@@ -11,6 +11,7 @@
 
 import type { AppMessage, AppApprovalRequest, AppTask, CompactionMarkerMetadata } from '../api/types';
 import { COMPACTION_MARKER_METADATA_KEY } from '../api/types';
+import { getKimiWebApi } from '../api';
 import type { AgentMember, ApprovalBlock, ChatTurn, CronTurnData, DiffLine, ToolCall, ToolMedia, TurnAttachment, TurnBlock } from '../types';
 
 const READ_MEDIA_TOOL_RE = /^read[_-]?media(?:file)?$/i;
@@ -588,6 +589,12 @@ export function messagesToTurns(
   /** Preserved `plan_review` displays keyed by toolCallId — used to link the
    *  ExitPlanMode tool card back to the plan file after the approval resolves. */
   planReviewByToolCallId: Record<string, { plan: string; path?: string }> = {},
+  /**
+   * Resolve a Kimi Code 0.39+ `session_media` source to its render URL
+   * (GET /sessions/{sid}/media/{fileId}). Optional: when omitted the api
+   * singleton builds the same URL, so existing callers need no change.
+   */
+  getSessionMediaUrl?: (sessionId: string, fileId: string) => string,
 ): ChatTurn[] {
   const turns: ChatTurn[] = [];
   let no = 1;
@@ -724,8 +731,21 @@ export function messagesToTurns(
     }
   }
 
+  /** session_media 渲染 URL:显式 resolver 优先;调用方未传时用 api 单例构造
+   *  同一端点(GET /sessions/{sid}/media/{fileId}),构造失败返回 undefined
+   *  (上层留作无预览的 chip),不让纯映射函数因网络配置抛错。 */
+  function sessionMediaUrl(sid: string, fileId: string): string | undefined {
+    if (getSessionMediaUrl) return getSessionMediaUrl(sid, fileId);
+    try {
+      return getKimiWebApi().getSessionMediaUrl(sid, fileId);
+    } catch {
+      return undefined;
+    }
+  }
+
   function resolveMediaUrl(
     c: AppMessage['content'][number],
+    sid: string,
   ): { url: string; kind: 'image' | 'video'; fileId?: string } | undefined {
     if (c.type === 'image' || c.type === 'video') {
       const kind = c.type;
@@ -733,6 +753,13 @@ export function messagesToTurns(
       if (src.kind === 'url') return { url: src.url, kind };
       if (src.kind === 'base64') return { url: `data:${src.mediaType};base64,${src.data}`, kind };
       if (src.kind === 'file' && getFileUrl) return { url: getFileUrl(src.fileId), kind, fileId: src.fileId };
+      // Kimi Code 0.39+: session-owned canonical copy — the render endpoint is
+      // per-session, NOT the transient /files store (folding the two broke
+      // images after the upload expired).
+      if (src.kind === 'session_media') {
+        const url = sessionMediaUrl(sid, src.fileId);
+        return url === undefined ? undefined : { url, kind, fileId: src.fileId };
+      }
     }
     if (c.type === 'file' && getFileUrl) {
       // Zero-copy path attachments (Kimi Code 0.39+) have no session file id —
@@ -850,13 +877,25 @@ export function messagesToTurns(
             textParts.push(stripped);
           }
         }
-        const media = resolveMediaUrl(c);
+        const media = resolveMediaUrl(c, msg.sessionId);
         if (media) {
           attachments.push({
             url: media.url,
             kind: media.kind,
             name: c.type === 'file' ? c.name : undefined,
             fileId: media.fileId,
+          });
+          continue;
+        }
+        // Kimi Code 0.39+ zero-copy path media (image/video): no remote URL
+        // exists — fall back to a file chip so the attachment stays visible
+        // instead of silently vanishing from the turn.
+        if ((c.type === 'image' || c.type === 'video') && c.source.kind === 'path') {
+          const p = c.source.path;
+          attachments.push({
+            kind: 'file',
+            url: '',
+            name: p.split(/[\\/]/).pop() || p,
           });
           continue;
         }

@@ -1181,14 +1181,20 @@ export function createAgentProjector(): AgentProjector {
           subagentPhase: 'queued',
           subagentType: typeof p?.subagentName === 'string' ? p.subagentName : undefined,
           parentToolCallId: typeof p?.parentToolCallId === 'string' ? p.parentToolCallId : undefined,
-          swarmIndex: typeof p?.swarmIndex === 'number' ? p.swarmIndex : undefined,
+          swarmIndex:
+            typeof p?.swarmIndex === 'number' && Number.isFinite(p.swarmIndex)
+              ? p.swarmIndex
+              : undefined,
           runInBackground: p?.runInBackground === true,
           // Kimi Code 0.34+: spawn-bound model / thinking effort; 0.38: the
           // background-task id the run registered under, so cancel/status can
           // bind to the task store without waiting for `task.started`.
           model: spawnModel,
           modelSource: spawnModel !== undefined ? 'runtime' : undefined,
-          thinkingEffort: typeof p?.thinkingEffort === 'string' ? p.thinkingEffort : undefined,
+          thinkingEffort:
+            typeof p?.thinkingEffort === 'string' && p.thinkingEffort.length > 0
+              ? p.thinkingEffort
+              : undefined,
           backgroundTaskId: typeof p?.taskId === 'string' && p.taskId.length > 0 ? p.taskId : undefined,
         };
         s.subagentMeta.set(task.id, task);

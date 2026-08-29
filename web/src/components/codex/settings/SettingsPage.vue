@@ -5,7 +5,7 @@
  * 轮次 4e:接通 client 配置(权限/模型/字号/通知/归档)
  * 替代原型期的本地 ref 占位。
  */
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, nextTick, reactive, ref, watch } from 'vue';
 import type { PermissionMode, WorkspaceView } from '../../../types';
 import type { AppSession, AppConfig, AppMcpServer, AppToolDescriptor } from '../../../api/types';
 import { getKimiWebApi } from '../../../api';
@@ -89,6 +89,9 @@ const NAV: Array<{ label: string; items: Array<{ id: SettingsSectionId; label: s
 ];
 
 const active = ref<SettingsSectionId>(props.initialSection);
+/** TaskCenter is mounted eagerly with the page but only drains /sessions when
+ *  its section becomes active (opening Settings must not drain the endpoint). */
+const taskCenterRef = ref<InstanceType<typeof TaskCenter> | null>(null);
 
 /* ---------- 通用 ---------- */
 // 权限默认值:读 daemon 全局配置,写 client.updateConfig
@@ -104,6 +107,7 @@ const modelOptions = computed(() =>
   (client.models.value ?? []).map((m) => ({
     id: m.id,
     name: m.displayName ?? m.model ?? m.id,
+    provider: m.provider,
   })),
 );
 const defaultModelId = computed<string>({
@@ -126,6 +130,15 @@ const defaultPlanMode = computed<boolean>({
 });
 const secondaryEffort = ref(
   (client.config.value as AppConfig | null)?.secondaryModel?.defaultEffort ?? 'low',
+);
+// Effort is a local ref (select state); keep it in sync whenever the daemon
+// config changes elsewhere (updateConfig responses, WS configChanged, backup
+// restore) — otherwise the select keeps showing a stale value forever.
+watch(
+  () => (client.config.value as AppConfig | null)?.secondaryModel?.defaultEffort,
+  (value) => {
+    if (value) secondaryEffort.value = value;
+  },
 );
 const secondaryModelExperimentEnabled = computed(
   () => client.experimentalFlags.value['secondary-model'] === true,
@@ -188,6 +201,9 @@ const ENGINE_ENV_EXPERIMENTS = [
 const engineEnvEnabled = ref<string[]>([]);
 const engineEnvSaving = ref(false);
 const engineEnvDirty = ref(false);
+/** Snapshot of the env set as last LOADED from the shell — the baseline for
+ *  deciding whether the dirty banner still applies after a save. */
+const initialEngineEnv = ref<string[]>([]);
 const engineEnvExperiments = computed(() =>
   ENGINE_ENV_EXPERIMENTS.map((feature) => ({ ...feature, enabled: engineEnvEnabled.value.includes(feature.id) })),
 );
@@ -198,6 +214,7 @@ async function loadEngineEnvExperiments(): Promise<void> {
   } catch {
     engineEnvEnabled.value = [];
   }
+  initialEngineEnv.value = [...engineEnvEnabled.value].sort();
 }
 async function setEngineEnvExperiment(id: string, enabled: boolean): Promise<void> {
   engineEnvSaving.value = true;
@@ -207,8 +224,10 @@ async function setEngineEnvExperiment(id: string, enabled: boolean): Promise<voi
       : engineEnvEnabled.value.filter((item) => item !== id);
     await kimiRuntime.setExperimentalEnv(next);
     engineEnvEnabled.value = next;
-    engineEnvDirty.value = true;
-    toast(`${ENGINE_ENV_EXPERIMENTS.find((feature) => feature.id === id)?.label ?? id}已${enabled ? '开启' : '关闭'}，重启 Engine 后生效`);
+    // Toggling an experiment back to its loaded state needs no restart —
+    // drop the banner instead of latching it forever.
+    engineEnvDirty.value = [...next].sort().join('\n') !== initialEngineEnv.value.join('\n');
+    toast(`${ENGINE_ENV_EXPERIMENTS.find((feature) => feature.id === id)?.label ?? id}已${enabled ? '开启' : '关闭'}${engineEnvDirty.value ? '，重启 Engine 后生效' : ''}`);
   } catch (error) {
     toast(error instanceof Error ? error.message : '环境实验保存失败');
   } finally {
@@ -216,67 +235,137 @@ async function setEngineEnvExperiment(id: string, enabled: boolean): Promise<voi
   }
 }
 const secondaryModelId = computed<string>({
-  get: () => (client.config.value as AppConfig | null)?.secondaryModel?.model ?? '',
+  // `.model` is the legacy single-model key; a pool-less `default_model` is the
+  // official shape for an implicit single-entry pool — display it as-is so a
+  // defaultModel-only config is still recognized instead of showing "inherit".
+  get: () =>
+    (client.config.value as AppConfig | null)?.secondaryModel?.model
+    ?? (client.config.value as AppConfig | null)?.secondaryModel?.defaultModel
+    ?? '',
   set: (model) => {
-    // Merge into the current section so the pool / force details survive a
-    // default-model change (they live in the same [secondary_model] object).
+    // The single-model select IS single-model mode: writing it drops the pool
+    // (official schema: model / models are two different shapes). Effort is
+    // preserved; force only applies without a pool and is kept when present.
+    // defaultModel is spread along so a defaultModel-only config is not
+    // evicted by a single-model write.
     const current = (client.config.value as AppConfig | null)?.secondaryModel ?? {};
     void client.updateConfig({
       secondaryModel: model
-        ? { ...current, model, defaultEffort: secondaryEffort.value || current.defaultEffort }
-        : {},
+        ? { model, defaultModel: current.defaultModel, defaultEffort: secondaryEffort.value || current.defaultEffort, force: current.force }
+        : { defaultModel: current.defaultModel },
     });
   },
 });
 function saveSecondaryEffort(): void {
-  const model = secondaryModelId.value;
-  if (!model) return;
+  // Effort is mode-independent (default_effort applies to pools too); merge
+  // into the current section so whichever mode is active survives untouched.
   const current = (client.config.value as AppConfig | null)?.secondaryModel ?? {};
   void client.updateConfig({
-    secondaryModel: { ...current, model, defaultEffort: secondaryEffort.value || undefined },
+    secondaryModel: { ...current, defaultEffort: secondaryEffort.value || undefined },
   });
 }
 
-// Kimi Code 0.36+ secondary-model details: named pool (alias → model) the main
-// agent picks from per spawn, plus the force-routing switch. Persisted through
-// the same [secondary_model] config section; entries without a daemon ≥0.36
-// are ignored by older engines and take effect after upgrade.
+// Kimi Code 0.36+ secondary-model details, aligned with the official schema:
+// - pool mode: `models` = alias → model; `default_model` = the default ALIAS
+//   (a key of models, NOT a model id); aliases are the main agent's selection
+//   cue — the official schema has no per-entry description field.
+// - single-model mode: legacy `model` key (+ optional `force`).
+// - `force` is mutually exclusive with `models` (the pool exists to give the
+//   main agent a choice; force removes it) and `primary` is a reserved alias.
 const secondaryPool = ref<Array<{ alias: string; model: string }>>([]);
 const secondaryPoolSaving = ref(false);
 const secondaryForce = computed(
   () => (client.config.value as AppConfig | null)?.secondaryModel?.force === true,
 );
-function syncSecondaryPoolFromConfig(): void {
-  const models = (client.config.value as AppConfig | null)?.secondaryModel?.models ?? {};
+/** Pool mode is active in the daemon config (models table present). While it
+ *  is, the single-model select is intentionally inert: writing it would drop
+ *  the pool (see secondaryModelId's setter). */
+const secondaryPoolConfigured = computed(() => {
+  const models = (client.config.value as AppConfig | null)?.secondaryModel?.models;
+  return models !== undefined && Object.keys(models).length > 0;
+});
+function syncSecondaryPoolFromConfig(modelsOverride?: Record<string, string>): void {
+  const models = modelsOverride ?? (client.config.value as AppConfig | null)?.secondaryModel?.models ?? {};
   secondaryPool.value = Object.entries(models).map(([alias, model]) => ({ alias, model }));
 }
-watch(() => (client.config.value as AppConfig | null)?.secondaryModel, syncSecondaryPoolFromConfig, { immediate: true });
+// Watch the pool VALUE (stringified), not the section reference: effort /
+// force writes replace the whole config object and would otherwise reset
+// in-progress, unsaved pool edits.
+watch(() => JSON.stringify((client.config.value as AppConfig | null)?.secondaryModel?.models ?? {}), () => syncSecondaryPoolFromConfig(), { immediate: true });
 async function saveSecondaryPool(): Promise<void> {
+  const models: Record<string, string> = {};
+  for (const entry of secondaryPool.value) {
+    const alias = entry.alias.trim();
+    if (!alias || !entry.model) continue;
+    if (alias === 'primary') {
+      toast('别名 "primary" 是保留字（始终绑定主模型），请换一个');
+      return;
+    }
+    if (models[alias]) {
+      toast(`别名 "${alias}" 重复，请修改`);
+      return;
+    }
+    models[alias] = entry.model;
+  }
+  const current = (client.config.value as AppConfig | null)?.secondaryModel ?? {};
+  const hasPool = Object.keys(models).length > 0;
+  // In pool mode the single-model select is disabled, so secondaryModelId is
+  // often empty even for an already-saved pool whose defaultModel (a pool
+  // alias) carries the fallback. Only block when BOTH sources are missing.
+  if (hasPool && !secondaryModelId.value && !current.defaultModel) {
+    toast('配置模型池需要先选择默认模型或池默认别名（池的兜底）');
+    return;
+  }
   secondaryPoolSaving.value = true;
   try {
-    const models: Record<string, string> = {};
-    for (const entry of secondaryPool.value) {
-      const alias = entry.alias.trim();
-      if (alias && entry.model) models[alias] = entry.model;
-    }
-    const current = (client.config.value as AppConfig | null)?.secondaryModel ?? {};
     const ok = await client.updateConfig({
-      secondaryModel: {
-        model: secondaryModelId.value || current.model,
-        defaultEffort: secondaryEffort.value || current.defaultEffort,
-        models: Object.keys(models).length ? models : undefined,
-        force: current.force,
-      },
+      secondaryModel: hasPool
+        ? {
+            // Pool mode: default_model must be a pool ALIAS — keep the stored
+            // default when it is still in the pool, else default to the first.
+            models,
+            defaultModel: current.defaultModel && models[current.defaultModel]
+              ? current.defaultModel
+              : Object.keys(models)[0],
+            defaultEffort: secondaryEffort.value || current.defaultEffort,
+            // force is mutually exclusive with models — dropped intentionally.
+          }
+        : {
+            model: secondaryModelId.value || current.model,
+            // Keep defaultModel when no model key is written — a pool-less
+            // default_model is a valid official shape and must survive the
+            // "clear pool" save.
+            defaultModel: current.defaultModel,
+            defaultEffort: secondaryEffort.value || current.defaultEffort,
+            force: current.force,
+          },
     });
-    toast(ok ? '模型池已保存；新的子任务派发生效' : '模型池保存失败');
+    toast(ok ? (hasPool ? '模型池已保存；主 Agent 将按别名挑选' : '已切回单模型模式') : '模型池保存失败');
   } finally {
     secondaryPoolSaving.value = false;
   }
 }
 async function setSecondaryForce(force: boolean): Promise<void> {
+  // Guard against the PERSISTED pool (secondaryPoolConfigured), not unsaved
+  // editor drafts: unsaved entries are not a config yet and must not block
+  // the toggle.
+  if (force && secondaryPoolConfigured.value) {
+    toast('强制路由与模型池互斥：请先清空并保存模型池，再开启强制路由');
+    return;
+  }
   const current = (client.config.value as AppConfig | null)?.secondaryModel ?? {};
+  if (force && !current.model && !current.defaultModel) {
+    // Official rule: default_model is required when force is set.
+    toast('开启强制路由前请先选择默认模型');
+    return;
+  }
+  // Keep the key the config actually uses: `model` for the legacy
+  // single-model shape, `default_model` otherwise (official force requires
+  // default_model).
   const ok = await client.updateConfig({
-    secondaryModel: { model: secondaryModelId.value || current.model, defaultEffort: current.defaultEffort, force },
+    secondaryModel: current.model
+      ? { model: current.model, defaultEffort: current.defaultEffort, force }
+      : { defaultModel: current.defaultModel, defaultEffort: current.defaultEffort, force },
   });
   if (!ok) toast('强制路由保存失败');
 }
@@ -491,8 +580,12 @@ const hooks = ref<HookRule[]>([]);
 const toolGatingEnabled = ref('');
 const toolGatingDisabled = ref('');
 const toolGatingSaving = ref(false);
+/** Global config must be loaded before gating can be saved — writing tools
+ *  with a null config base would silently clobber the daemon-side merge. */
+const controlConfigReady = computed(() => (client.config.value as AppConfig | null) !== null);
 function splitToolList(value: string): string[] {
-  return value.split(',').map((item) => item.trim()).filter(Boolean);
+  // Accept the full-width comma too — it is easy to type on a CNY keyboard.
+  return value.replace(/，/g, ',').split(',').map((item) => item.trim()).filter(Boolean);
 }
 
 // Kimi Code 0.34+ extra_agent_dirs: scan Markdown agent files from additional
@@ -510,6 +603,10 @@ async function saveExtraAgentDirs(): Promise<void> {
   }
 }
 async function saveToolGating(): Promise<void> {
+  if (!controlConfigReady.value) {
+    toast('尚未取得全局配置，无法保存工具门控；请稍后重试');
+    return;
+  }
   toolGatingSaving.value = true;
   try {
     const enabled = splitToolList(toolGatingEnabled.value);
@@ -522,8 +619,8 @@ async function saveToolGating(): Promise<void> {
     toolGatingSaving.value = false;
   }
 }
-function loadControlConfig(): void {
-  const config = client.config.value as AppConfig | null;
+function loadControlConfig(configOverride?: AppConfig): void {
+  const config = configOverride ?? (client.config.value as AppConfig | null);
   toolGatingEnabled.value = (config?.tools?.enabled ?? []).join(', ');
   toolGatingDisabled.value = (config?.tools?.disabled ?? []).join(', ');
   const sourceRules = (config?.permission as { rules?: unknown[] } | undefined)?.rules ?? [];
@@ -550,15 +647,15 @@ async function savePermissionRules(): Promise<void> {
   const rules = permissionRules.value
     .filter((rule) => rule.pattern.trim())
     .map((rule) => ({ decision: rule.decision, ...(rule.scope.trim() ? { scope: rule.scope.trim() } : {}), pattern: rule.pattern.trim(), ...(rule.reason.trim() ? { reason: rule.reason.trim() } : {}) }));
-  await client.updateConfig({ permission: { rules } });
-  toast('权限规则已保存');
+  const ok = await client.updateConfig({ permission: { rules } });
+  toast(ok ? '权限规则已保存' : '权限规则保存失败');
 }
 async function saveHooks(): Promise<void> {
   const value = hooks.value
     .filter((hook) => hook.event.trim() && hook.command.trim())
     .map((hook) => ({ event: hook.event.trim(), ...(hook.matcher.trim() ? { matcher: hook.matcher.trim() } : {}), command: hook.command.trim(), timeout: Math.min(600, Math.max(1, Number(hook.timeout) || 30)) }));
-  await client.updateConfig({ hooks: value });
-  toast('Hooks 已保存；后续事件将使用新配置');
+  const ok = await client.updateConfig({ hooks: value });
+  toast(ok ? 'Hooks 已保存；后续事件将使用新配置' : 'Hooks 保存失败');
 }
 
 /* ---------- 工作区附加目录 ---------- */
@@ -993,6 +1090,30 @@ async function inspectSettingsBackup(): Promise<void> {
     backupBusy.value = false;
   }
 }
+/** 恢复备份覆盖了磁盘上的 config.toml:重新拉取全局配置,让表单与后续
+ *  保存都基于新值(client 自身的 config 可能仍是 daemon 内存里的旧快照)。 */
+async function refreshConfigAfterRestore(): Promise<void> {
+  // The official client does not expose workspaceState.loadConfig (grep
+  // verified) — prefer it when a future version does, else pull GET /config.
+  const loader = (client as unknown as { loadConfig?: () => Promise<void> }).loadConfig;
+  if (typeof loader === 'function') {
+    // Preferred: a real loadConfig updates client.config, after which the
+    // secondaryEffort / secondaryPool watchers resync on their own.
+    await loader.call(client);
+    loadControlConfig();
+    return;
+  }
+  // Fallback (client does not expose loadConfig): pull GET /config directly
+  // and sync the local form refs from the fresh value.
+  try {
+    const fresh = await getKimiWebApi().getConfig();
+    loadControlConfig(fresh);
+    if (fresh.secondaryModel?.defaultEffort) secondaryEffort.value = fresh.secondaryModel.defaultEffort;
+    syncSecondaryPoolFromConfig(fresh.secondaryModel?.models);
+  } catch {
+    // Daemon may not expose /config yet; the next Engine restart refreshes it.
+  }
+}
 async function restoreSettingsBackup(): Promise<void> {
   if (!backupInfo.value) return;
   if (!restoreArmed.value) {
@@ -1005,6 +1126,7 @@ async function restoreSettingsBackup(): Promise<void> {
     backupInfo.value = restored;
     restoreArmed.value = false;
     toast(`已恢复 ${restored.files} 个文件；原设置已保存安全快照`);
+    await refreshConfigAfterRestore();
   } catch (error) {
     restoreArmed.value = false;
     toast(error instanceof Error ? error.message : '设置恢复失败');
@@ -1022,23 +1144,27 @@ watch(active, (section) => {
   else if (section === 'permissions') { loadControlConfig(); void loadTools(); }
   else if (section === 'hooks') loadControlConfig();
   else if (section === 'directories') void loadWorkspaceContext();
+  // nextTick: with `immediate: true` the watch fires during setup, before the
+  // (always-rendered) TaskCenter instance has mounted and its ref populated.
+  else if (section === 'tasks') void nextTick(() => taskCenterRef.value?.load());
 }, { immediate: true });
 
 // Kimi Code 0.36+: any client mutating the plugin set (or a capability install
 // settling) bumps pluginsRevision — refresh the tool/skill listing live while
 // a consuming section is open, so installs made in the embedded /plugins TUI
 // or another client show up without a manual reload.
-watch(() => client.pluginsRevision.value, () => {
+// Optional-chained: the sandbox demo client does not expose these refs.
+watch(() => client.pluginsRevision?.value ?? 0, () => {
   if (['plugins-skills', 'permissions', 'capabilities'].includes(active.value)) void loadTools();
 });
 // Capability install finished (running turned false) — surface the outcome.
-watch(() => client.capabilityInstall.value, (frame, previous) => {
+watch(() => client.capabilityInstall?.value, (frame, previous) => {
   if (!frame || frame.running || previous === undefined) return;
   toast(frame.error ? `能力 ${frame.capabilityId} 安装失败：${frame.error}` : `能力 ${frame.capabilityId} 安装完成`);
 });
-const capabilityInstallRunning = computed(() => client.capabilityInstall.value?.running === true);
+const capabilityInstallRunning = computed(() => client.capabilityInstall?.value?.running === true);
 const capabilityInstallPercent = computed(() => {
-  const percent = client.capabilityInstall.value?.percent;
+  const percent = client.capabilityInstall?.value?.percent;
   return percent !== undefined && percent >= 0 ? `${Math.round(percent)}%` : '';
 });
 
@@ -1091,7 +1217,7 @@ watch(() => props.initialSection, (section) => { active.value = section; });
               </div>
               <div class="setting-control">
                 <select v-model="defaultModelId" class="control" aria-label="默认模型">
-                  <option v-for="m in modelOptions" :key="m.id" :value="m.id">{{ m.name }}</option>
+                  <option v-for="m in modelOptions" :key="m.id" :value="m.id">{{ m.name }}<template v-if="m.provider">（{{ m.provider }}）</template></option>
                 </select>
               </div>
             </div>
@@ -1192,7 +1318,7 @@ watch(() => props.initialSection, (section) => { active.value = section; });
               </div>
               <div class="setting-control">
                 <select v-model="defaultModelId" class="control">
-                  <option v-for="m in modelOptions" :key="m.id" :value="m.id">{{ m.name }}</option>
+                  <option v-for="m in modelOptions" :key="m.id" :value="m.id">{{ m.name }}<template v-if="m.provider">（{{ m.provider }}）</template></option>
                 </select>
               </div>
             </div>
@@ -1212,11 +1338,11 @@ watch(() => props.initialSection, (section) => { active.value = section; });
                 <div class="setting-desc">Agent / Swarm 子任务优先使用；未设置时继承主模型。只影响新创建的子任务。</div>
               </div>
               <div class="setting-control settings-inline-controls">
-                <select v-model="secondaryModelId" class="control" aria-label="次级模型" :disabled="!secondaryModelExperimentEnabled">
-                  <option value="">继承主模型</option>
-                  <option v-for="m in modelOptions" :key="m.id" :value="m.id">{{ m.name }}</option>
+                <select v-model="secondaryModelId" class="control" aria-label="次级模型" :disabled="!secondaryModelExperimentEnabled || secondaryPoolConfigured">
+                  <option value="">{{ secondaryPoolConfigured ? '使用模型池（主 Agent 按别名挑选）' : '继承主模型' }}</option>
+                  <option v-for="m in modelOptions" :key="m.id" :value="m.id">{{ m.name }}<template v-if="m.provider">（{{ m.provider }}）</template></option>
                 </select>
-                <select v-model="secondaryEffort" class="control compact" aria-label="次级模型思考强度" :disabled="!secondaryModelExperimentEnabled || !secondaryModelId" @change="saveSecondaryEffort">
+                <select v-model="secondaryEffort" class="control compact" aria-label="次级模型思考强度" :disabled="!secondaryModelExperimentEnabled || (!secondaryModelId && !secondaryPoolConfigured)" @change="saveSecondaryEffort">
                   <option value="low">Low</option>
                   <option value="high">High</option>
                   <option value="max">Max</option>
@@ -1226,31 +1352,31 @@ watch(() => props.initialSection, (section) => { active.value = section; });
             <div class="setting-row">
               <div class="setting-info">
                 <div class="setting-label">强制路由</div>
-                <div class="setting-desc">所有子任务一律走次级模型，忽略各 Agent 配置里的主/次偏好（Kimi Code 0.36+）。</div>
+                <div class="setting-desc">所有子任务一律走次级模型，忽略各 Agent 配置里的主/次偏好（Kimi Code 0.36+）。<strong>与模型池互斥</strong>：池的意义是让主 Agent 自己挑，强制路由移除了这个选择。</div>
               </div>
               <div class="setting-control">
-                <input type="checkbox" :checked="secondaryForce" :disabled="!secondaryModelExperimentEnabled || secondaryPoolSaving" @change="setSecondaryForce(($event.target as HTMLInputElement).checked)" />
+                <input type="checkbox" :checked="secondaryForce" :disabled="!secondaryModelExperimentEnabled || secondaryPoolSaving || secondaryPoolConfigured" @change="setSecondaryForce(($event.target as HTMLInputElement).checked)" />
               </div>
             </div>
             <div class="setting-row top-aligned">
               <div class="setting-info">
                 <div class="setting-label">模型池</div>
-                <div class="setting-desc">Kimi Code 0.36+：别名 → 模型的候选池，主 Agent 派发子任务时按需挑选；为空时只用上面的默认次级模型。</div>
+                <div class="setting-desc">Kimi Code 0.36+：别名 → 模型的候选池，主 Agent 派发子任务时按别名挑选——<strong>别名就是给主 Agent 的描述线索</strong>（官方配置没有单独的描述字段，起名要表意，如 fast、deep、cheap）；保存后默认使用第一个别名，与强制路由互斥。清空保存即切回单模型模式。</div>
               </div>
               <div class="setting-control wide-control">
                 <div v-if="secondaryPool.length" class="rule-list">
                   <div v-for="(entry, index) in secondaryPool" :key="index" class="rule-row">
-                    <input v-model="entry.alias" class="control compact" placeholder="别名，如 fast" />
+                    <input v-model="entry.alias" class="control compact" placeholder="别名（给主 Agent 的挑选线索）" />
                     <select v-model="entry.model" class="control">
                       <option value="">选择模型</option>
-                      <option v-for="m in modelOptions" :key="m.id" :value="m.id">{{ m.name }}</option>
+                      <option v-for="m in modelOptions" :key="m.id" :value="m.id">{{ m.name }}<template v-if="m.provider">（{{ m.provider }}）</template></option>
                     </select>
                     <button class="icon-btn" aria-label="删除池成员" @click="secondaryPool.splice(index, 1)"><CodexIcon name="trash" /></button>
                   </div>
                 </div>
                 <div v-else class="archive-empty">未配置模型池</div>
                 <div class="settings-button-row">
-                  <button class="btn" :disabled="!secondaryModelExperimentEnabled" @click="secondaryPool.push({ alias: '', model: '' })"><CodexIcon name="plus" /> 添加池成员</button>
+                  <button class="btn" :disabled="!secondaryModelExperimentEnabled || secondaryForce" @click="secondaryPool.push({ alias: '', model: '' })"><CodexIcon name="plus" /> 添加池成员</button>
                   <button class="btn primary" :disabled="!secondaryModelExperimentEnabled || secondaryPoolSaving" @click="saveSecondaryPool">{{ secondaryPoolSaving ? '保存中…' : '保存模型池' }}</button>
                 </div>
               </div>
@@ -1317,7 +1443,7 @@ watch(() => props.initialSection, (section) => { active.value = section; });
                   <label>描述<input v-model="agentForm.description" class="control" placeholder="严格审查代码并按严重度输出问题" /></label>
                   <label>适用场景<input v-model="agentForm.whenToUse" class="control" placeholder="代码审查、PR 检查" /></label>
                   <div class="agent-form-split">
-                    <label>模型偏好<select v-model="agentForm.modelPreference" class="control"><option value="primary">主模型</option><option value="secondary">次级模型</option></select></label>
+                    <label>模型偏好<select v-model="agentForm.modelPreference" class="control"><option value="primary">主模型</option><option value="secondary">次级模型</option></select><small v-if="secondaryForce" class="setting-desc" style="margin-top:4px">强制路由已开启：所有子任务都会走次级模型，此偏好暂时被忽略。</small></label>
                     <label>允许工具<input v-model="agentForm.tools" class="control" placeholder="Read, Grep, Glob" /></label>
                   </div>
                   <label>禁用工具<input v-model="agentForm.disallowedTools" class="control" placeholder="Bash" /></label>
@@ -1387,8 +1513,8 @@ watch(() => props.initialSection, (section) => { active.value = section; });
           <section class="settings-section" :class="{ active: active === 'capabilities' }" id="capabilities">
             <h2>Capabilities</h2>
             <div v-if="capabilityInstallRunning" class="settings-callout">
-              正在安装能力 <code>{{ client.capabilityInstall.value?.capabilityId }}</code>
-              <template v-if="client.capabilityInstall.value?.step"> · {{ client.capabilityInstall.value.step }}</template>
+              正在安装能力 <code>{{ client.capabilityInstall?.value?.capabilityId }}</code>
+              <template v-if="client.capabilityInstall?.value?.step"> · {{ client.capabilityInstall?.value?.step }}</template>
               <span v-if="capabilityInstallPercent" class="aph-bar" style="display:inline-block;width:120px;vertical-align:middle"><span class="aph-bar-fill" :style="{ width: capabilityInstallPercent }"></span></span>
             </div>
             <CapabilitiesSettings :runtime-version="client.serverVersion.value || undefined" @manage="emit('open-plugin-manager')" />
@@ -1543,7 +1669,7 @@ watch(() => props.initialSection, (section) => { active.value = section; });
                 <span class="pill" style="align-self:center">禁用</span>
                 <input v-model="toolGatingDisabled" class="control rule-pattern" placeholder="disabled，例如 Bash, Write；留空 = 不禁用" />
               </div>
-              <div class="settings-button-row"><span class="setting-desc">工具名见下方「当前会话工具」列表。</span><button class="btn primary" :disabled="toolGatingSaving" @click="saveToolGating">{{ toolGatingSaving ? '保存中…' : '保存工具门控' }}</button></div>
+              <div class="settings-button-row"><span class="setting-desc">{{ controlConfigReady ? '工具名见下方「当前会话工具」列表。' : '正在等待全局配置加载，暂不能保存。' }}</span><button class="btn primary" :disabled="toolGatingSaving || !controlConfigReady" @click="saveToolGating">{{ toolGatingSaving ? '保存中…' : '保存工具门控' }}</button></div>
             </div>
             <div class="settings-subhead"><div><strong>当前会话工具</strong><span>{{ tools.length }} 个工具；禁用状态由会话配置和规则共同决定。</span></div><button class="btn" @click="loadTools">刷新</button></div>
             <div v-if="tools.length" class="tool-list">
@@ -1634,7 +1760,7 @@ watch(() => props.initialSection, (section) => { active.value = section; });
           <section class="settings-section" :class="{ active: active === 'tasks' }" id="tasks">
             <h2>任务中心</h2>
             <div class="settings-callout subtle">集中搜索、筛选、归档、恢复、导出和永久删除任务。结果按批次渲染，不会扩展侧栏 DOM。</div>
-            <TaskCenter @open-session="emit('open-session', $event)" />
+            <TaskCenter ref="taskCenterRef" @open-session="emit('open-session', $event)" />
           </section>
 
           <!-- 工作区目录 -->
@@ -1849,7 +1975,7 @@ watch(() => props.initialSection, (section) => { active.value = section; });
                 </span>
               </label>
             </div>
-            <div v-if="engineEnvDirty" class="settings-callout">环境实验已保存，重启 Engine 后生效：<button class="btn-primary" :disabled="maintenanceBusy === 'restart'" @click="restartDaemon">{{ maintenanceBusy === 'restart' ? '正在重启…' : '立即重启 Engine' }}</button></div>
+            <div v-if="engineEnvDirty" class="settings-callout">环境实验已保存，重启 Engine 后生效：<button class="btn primary" :disabled="Boolean(maintenanceBusy) || !engine?.installed || (engineVersionRelation !== null && engineVersionRelation < 0)" @click="requestDaemonRestart('manual')">{{ maintenanceBusy === 'restart' ? '正在重启…' : '立即重启 Engine' }}</button></div>
           </section>
 
           <!-- 关于 -->
