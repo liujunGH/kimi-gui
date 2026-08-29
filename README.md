@@ -1,11 +1,11 @@
-# Kimi Code(kimi-gui)
+# Kimi Studio(kimi-gui)
 
-Kimi Code 的桌面客户端:把 Kimi Code CLI 的能力装进一个原生桌面壳。
+Kimi Studio —— Kimi Code CLI 的原生桌面客户端,把 CLI 的全部能力装进一个 Codex 形态的原生桌面壳。
 Tauri 2(Rust 壳)+ Vue 3(codex UI,fork 自官方 kimi-web)+ 本地 daemon(REST + WebSocket)。
 
 **前置条件**:安装 **Kimi Code CLI 0.33.0+** 并 `kimi login`——本应用只使用 agent-core-v2 契约，不再连接旧版或 legacy backend。检测到旧 daemon 时会停止加载聊天，并提供“更新 CLI → 迁移 0.33 配置 → 重启 daemon”的桌面升级入口。
 
-当前版本:**1.0.16**
+当前版本:**1.0.17**
 
 ## 主要能力
 
@@ -62,10 +62,10 @@ pnpm build            # web build → postbuild → Rust release → .app + DMG
 ```
 
 产物:
-- `src-tauri/target/release/bundle/macos/Kimi Code.app`
-- `src-tauri/target/release/bundle/dmg/Kimi Code_<version>_aarch64.dmg`
+- `src-tauri/target/release/bundle/macos/Kimi Studio.app`
+- `src-tauri/target/release/bundle/dmg/Kimi Studio_<version>_aarch64.dmg`
 
-**版本规则**:单一版本源是 `src-tauri/tauri.conf.json` 的 `version`,发版时同步根 `package.json` / `web/package.json` / `Cargo.toml` 保持一致。当前版本:**1.0.16**。
+**版本规则**:单一版本源是 `src-tauri/tauri.conf.json` 的 `version`,发版时同步根 `package.json` / `web/package.json` / `Cargo.toml` 保持一致。当前版本:**1.0.17**。
 
 **完整发版流程**(tag 触发 → CI 四阶段:质量门禁 / 创建 Release / 双平台构建 / 签名入仓)与签名约定见 [`AGENTS.md`](./AGENTS.md) 第 4 节。
 
@@ -73,7 +73,7 @@ pnpm build            # web build → postbuild → Rust release → .app + DMG
 1. 对方先装 Kimi Code CLI 并 `kimi login`
 2. 拖入「应用程序」
 3. 首次打开若提示"无法验证开发者":右键 app →「打开」;仍不行执行
-   `xattr -dr com.apple.quarantine /Applications/Kimi\ Code.app`
+   `xattr -dr com.apple.quarantine /Applications/Kimi\ Studio.app`
 
 正式对外发行需 Apple 开发者账号签名 + 公证(`tauri build` 支持配置后自动完成),未配置。
 

@@ -6,6 +6,29 @@
 
 ## [未发布]
 
+## [1.0.17] - 2026-08-29
+
+### 新增
+
+- **Kimi Code 0.39 契约整合**：协议层同步至官方 0.39.1——子智能体 spawn 权威模型/思考档位/后台任务绑定、`/auth` 跨版本兼容（`models_ready` 双读）、MCP `removed` 状态、会话用量字段容错（context limit 未知不再出错）、prompt_id 提交回显、plugin/capability 全局事件、`/tower` 与 `/remote-control`（别名 `/rc`）命令基线（42 条）
+- **Engine 环境实验**：设置 → Kimi Engine 新增环境变量实验开关（tower 多智能体编排、Remote Control 远程访问）；选择持久化于 `~/.kimi-code/kimi-gui-experiments.json`，GUI 拉起的 daemon 自动注入，重启 Engine 生效
+- **任务转后台**：Agent 面板运行中的前台子任务可一键"移到后台"（0.39 `task:detach`），转入后台任务存储继续运行
+- **插件与能力实时刷新**：订阅 0.36+ `plugin.changed` / `capability.changed` 全局事件——设置页工具列表在插件集变更后自动刷新，能力安装显示实时进度条与完成/失败通知
+- **附件链路**：skill 命令携带附件不再被丢弃（修复带附件时命令被降级为普通 prompt 的问题）；拖入窗口的文件以本地路径零拷贝直传（0.39 `path` 源，免上传，daemon 原地读取），排队/插话/子任务链路全通
+- **工具门控**：设置 → 权限与工具新增 0.34+ 全局 `[tools]` 允许/禁用列表编辑
+- **自定义 Agent 目录**：设置 → Agents 新增 `extra_agent_dirs` 编辑（0.34+ Markdown Agent 扫描目录）
+- **次级模型详细配置**：0.36+ 模型池（别名 → 模型，主 Agent 派发时挑选）与强制路由开关；切换默认模型不再覆盖丢失池配置
+
+### 改进
+
+- **命令基线**：`/secondary_model` 更名为 `/secondary-model`（官方 0.38，别名 `subagent-model`），GUI 导航同步；`commands:check` 基线升至 0.39.1
+- **模型选择器**过滤 secondary 实验运行时合成的 `__` 前缀内部派生条目（官方 0.36 要求）
+- **项目文档重构**：删除前期协作流水（HANDOFF.md），新增 `AGENTS.md` 开发规范（含上游同步例行流程）、ROADMAP 改为真实迭代待办；发版流程与签名约定完整化
+
+### 变更
+
+- **产品更名为 Kimi Studio**：打包名/托盘/关于页/DMG 更名为 Kimi Studio（`Kimi.Studio_*`），避免与官方桌面壳（kimi-ui，承载官方 Kimi Code web bundle）的安装名冲突；identifier 不变，登录态与本地数据保留。**老版本自动更新到本版后，`/Applications` 中旧的 Kimi Code.app 需手动删除一次**
+
 ## [1.0.16] - 2026-08-06
 
 ### 新增
