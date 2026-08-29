@@ -1,7 +1,6 @@
 # Kimi Code 官方能力整合矩阵
 
-> 基线：`@moonshot-ai/kimi-code@0.33.0` 与 2026-08-06 的
-> `origin/main`（commit `3c75a27d`，含 cache-expiry hint）。正式版能力才作为最低兼容承诺；main 中尚未发布的能力标为 🧪。
+> 上游最新版:`@moonshot-ai/kimi-code@0.39.1`(2026-08-28);GUI 契约实现基线仍为 **0.33.0**,0.34→0.39 的 optional 契约同步批次见 `ROADMAP.md` P0。官方自 0.33 起移除 `apps/kimi-web` 源码(独立 `code-app` 仓库、回传预编译 bundle),官方 web 交互仅作行为参考。正式版能力才作为最低兼容承诺；main 中尚未发布的能力标为 🧪。例行同步方法见 `AGENTS.md` 3.5。
 
 这份文档是功能治理清单，不是一次性的竞品笔记。每次 Kimi Code 发布后，应先更新基线和本表，再决定 GUI 入口、契约与验收用例，避免只按命令名称追功能。
 
@@ -66,14 +65,14 @@
 
 | 官方能力 | 来源 | 当前状态 | GUI 位置 / 决策 |
 |---|---|---:|---|
-| 文本、图片、文件附件 | TUI / Web / daemon | ✅ | 输入框 |
-| 模型、推理强度、主/次模型 | TUI / Web / daemon | ✅ | 输入框快捷选择 + 设置 |
+| 文本、图片、文件附件 | TUI / Web / daemon | ✅ | 输入框；拖入文件走 0.39 零拷贝路径直传(免上传) |
+| 模型、推理强度、主/次模型 | TUI / Web / daemon | ✅ | 输入框快捷选择 + 设置；含 0.36+ 次级模型池(别名→模型)与强制路由 |
 | Manual / Auto / YOLO 权限模式 | TUI / Web / daemon | ✅ | 输入框模式条 |
 | Plan、Swarm | TUI / daemon | ✅ | 输入框模式条与状态展示 |
 | 提示词排队、编辑、删除、插话 steer | TUI / daemon | ✅ | 输入框上方队列 |
 | BTW 侧聊 | TUI / daemon | ✅ | 侧边任务面板 |
-| Skills 与斜杠命令补全 | TUI / daemon | ✅ | 输入框补全与 `/help` |
-| 40 个 0.33 内置命令的分类映射 | TUI 源码 | ✅ | `docs/commands.md`；构建时完整性校验 |
+| Skills 与斜杠命令补全 | TUI / daemon | ✅ | 输入框补全与 `/help`；skill 激活支持附件(0.34+) |
+| 42 个 0.39 内置命令的分类映射 | TUI 源码 | ✅ | `docs/commands.md`；构建时完整性校验；tower/remote-control 实验命令归 TUI-only |
 | `/reload` 会话重载 | TUI / SDK 内部 RPC | 🟡 | GUI 显示契约限制；公开 REST 出现后直接接入 |
 | Goal 创建、暂停、恢复、取消 | TUI / daemon | ✅ | 对话目标条与 `/goal` |
 | Goal 后续队列 | TUI / SDK 内部 RPC | 🟡 | 不维护影子队列；等待公开契约 |
@@ -94,13 +93,13 @@
 | 文件预览、打开、Reveal、外部应用 | Web / daemon | ✅ | 右侧详情面板 |
 | Git 状态、Diff、Review | Web / daemon | ✅ | 顶部 Review 与详情面板 |
 | 集成终端 | Web / daemon | ✅ | 顶部终端按钮打开底部抽屉；复用运行中终端、支持适配/结束/新建/收起 |
-| UTF-16 文件读取 | main | 🧪 | daemon 正式发布后随契约自动获得，补回归用例 |
+| UTF-16 文件读取 | 0.34+ | ⬜ | 官方已发布；GUI 文件预览接入转码显示(见 ROADMAP P0) |
 
 ## 6. 后台任务与子智能体
 
 | 官方能力 | 来源 | 当前状态 | GUI 位置 / 决策 |
 |---|---|---:|---|
-| 后台任务列表、状态、取消 | TUI / Web / daemon | ✅ | 顶部全局任务面板，跨会话聚合；面板关闭即停止轮询 |
+| 后台任务列表、状态、取消 | TUI / Web / daemon | ✅ | 顶部全局任务面板，跨会话聚合；面板关闭即停止轮询；前台任务可一键转后台(0.39 `task:detach`) |
 | 子智能体完整活动、回复、时间线 | TUI / Web / daemon | ✅ | 子智能体详情 |
 | 子智能体实际模型 | daemon 运行时 | ✅ | 详情头部优先显示运行时模型 |
 | 搜索、状态筛选、长输出展开 | GUI 扩展 | ✅ | 子智能体面板 |
@@ -133,7 +132,9 @@
 | MCP OAuth 授权 | daemon | ✅ | 校验 HTTP(S) 后打开系统浏览器 |
 | Agent 配置与固定 Agent | TUI / config | ✅ | 设置 → Agents，输入框显示当前 Agent |
 | Hooks 查看与编辑 | TUI / config | ✅ | 设置 → Hooks |
-| 权限规则与工具控制 | TUI / config | ✅ | 设置 → 权限与工具 |
+| 权限规则与工具控制 | TUI / config | ✅ | 设置 → 权限与工具；含 0.34+ 全局工具门控(`[tools]` enabled/disabled) |
+| 自定义 Markdown Agent 目录 | config 0.5.0 | ✅ | 设置 → Agents → 自定义 Agent 目录(`extra_agent_dirs`) |
+| Engine 环境实验(tower / remote-control) | env 0.39 | ✅ | 设置 → 引擎 → Engine 环境实验;持久化于 `~/.kimi-code/kimi-gui-experiments.json`,daemon 启动注入,重启生效 |
 
 ## 9. 状态、性能与桌面能力
 
@@ -160,10 +161,8 @@
 
 ## 下一批实施顺序
 
-1. **P0 已完成**：Provider 目录/Registry 直连 REST、无重启导入、会话复制全部/最终总结。
-2. **P1 已完成**：工作区 emoji/pin/排序；工作区信任状态；应用内终端入口与恢复。
-3. **P2 已完成**：子智能体父调用导航、跨会话后台任务面板与主任务产物视图。
-4. **本轮已完成**：`/api/v1/sessions` 任务中心、cache-expiry 提示、运行性能配置与 Capabilities 应用内入口。
-5. **随上游发布**：UTF-16 文件读取、Capability 公共 REST、agent 级文件归因与 activity restore 修复。
+1. **P0(进行中)**：0.33→0.38 契约同步批次(子智能体模型权威字段、plugin/capability 事件、skill 附件、MCP removed、命令基线 `/secondary-model` 等,全清单见 `ROADMAP.md`)。
+2. **已完成**：Provider 目录/Registry 直连 REST、无重启导入、会话复制全部/最终总结;工作区 emoji/pin/排序与信任状态;应用内终端;子智能体父调用导航与后台任务面板;`/api/v1/sessions` 任务中心、cache-expiry 提示、运行性能配置与 Capabilities 应用内入口。
+3. **随上游发布**：Capability/MCP 管理公共 REST(0.37 已实现 legacy 引擎内立即生效,REST 仍在 main 演进)、agent 级文件归因、activity restore 修复。
 
 每一阶段都按“契约测试 → 类型/单测 → 浏览器交互 → 桌面包验收”通过后再进入下一阶段。

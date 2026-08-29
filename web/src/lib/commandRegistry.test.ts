@@ -9,7 +9,8 @@ import {
 
 describe('GUI slash-command registry', () => {
   it('classifies every upstream command exactly once', () => {
-    expect(UPSTREAM_COMMANDS).toHaveLength(40);
+    // Kimi Code 0.39 baseline: 40 → 42 (/tower, /remote-control).
+    expect(UPSTREAM_COMMANDS).toHaveLength(42);
     expect(commandMappingIssues()).toEqual([]);
     expect(Object.keys(GUI_COMMAND_MAPPINGS)).toHaveLength(UPSTREAM_COMMANDS.length);
   });

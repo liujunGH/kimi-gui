@@ -132,7 +132,7 @@ const displayModelName = computed(() => {
     : props.currentModel;
 });
 
-const canSend = computed(() => text.value.trim().length > 0 || attachments.value.some((a) => a.fileId && !a.uploading && !a.error));
+const canSend = computed(() => text.value.trim().length > 0 || attachments.value.some((a) => (a.fileId || a.path) && !a.uploading && !a.error));
 
 function submit() {
   if (attachments.value.some((a) => a.uploading)) return;
@@ -210,6 +210,9 @@ interface PendingAttachment {
   errorMessage?: string;
   blob: Blob;
   fileId?: string;
+  /** Kimi Code 0.39+ zero-copy attach (Tauri drop): server-local absolute
+   *  path the daemon reads in place — no upload, no fileId. */
+  path?: string;
   mediaType?: string;
   size?: number;
   kind: 'image' | 'video' | 'file';
@@ -307,6 +310,24 @@ function onDragOver(e: DragEvent) {
   if (e.dataTransfer?.types?.includes('Files')) e.preventDefault();
 }
 
+/** Kimi Code 0.39+ zero-copy attach: a Tauri window drop carries absolute
+ *  paths, so non-media files skip the upload entirely — the daemon validates
+ *  and reads the file in place (fills name/media_type/size from stat). */
+function addPathAttachment(path: string): void {
+  if (attachments.value.length >= MAX_ATTACHMENT_COUNT) return;
+  const name = path.split(/[\\/]/).pop() || path;
+  attachments.value.push({
+    localId: crypto.randomUUID(),
+    name,
+    url: '',
+    uploading: false,
+    error: false,
+    blob: new Blob(),
+    path,
+    kind: 'file',
+  });
+}
+
 function pickFile() {
   fileInputEl.value?.click();
 }
@@ -318,11 +339,12 @@ function onFileInputChange(e: Event) {
 }
 
 // 发送时携带附件(构建 PromptAttachment[])
-function buildAttachments(): { fileId: string; kind: 'image' | 'video' | 'file'; url: string; name?: string }[] {
+function buildAttachments(): { fileId?: string; path?: string; kind: 'image' | 'video' | 'file'; url: string; name?: string; mediaType?: string; size?: number }[] {
   return attachments.value
-    .filter((a) => a.fileId && !a.uploading && !a.error)
+    .filter((a) => ((a.fileId || a.path) && !a.uploading && !a.error))
     .map((a) => ({
-      fileId: a.fileId!,
+      fileId: a.fileId,
+      path: a.path,
       kind: a.kind,
       url: a.url,
       name: a.name,
@@ -346,7 +368,7 @@ onMounted(() => {
   if (text.value) void nextTick(autosize);
 });
 
-defineExpose({ setText, focus });
+defineExpose({ setText, focus, addPathAttachment });
 </script>
 
 <template>

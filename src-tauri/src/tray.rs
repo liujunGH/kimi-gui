@@ -14,7 +14,7 @@ use tauri::{
 
 /// 装配系统托盘。在 setup 钩子里调一次。
 pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
-    let show_item = MenuItem::with_id(app, "show", "显示 Kimi Code", true, None::<&str>)?;
+    let show_item = MenuItem::with_id(app, "show", "显示 Kimi Studio", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
 
@@ -26,7 +26,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let _tray = TrayIconBuilder::with_id("main-tray")
         .icon(icon)
         .menu(&menu)
-        .tooltip("Kimi Code")
+        .tooltip("Kimi Studio")
         // 右键弹菜单(显示/退出),左键交给我们自己的事件显示主窗(Windows 惯例)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {

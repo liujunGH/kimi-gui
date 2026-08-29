@@ -14,7 +14,7 @@ VERSION="$(node -p "JSON.parse(require('fs').readFileSync('src-tauri/tauri.conf.
 ARCH="$(uname -m)"
 [ "$ARCH" = "arm64" ] && ARCH="aarch64"
 
-[ -d "$SRC_DIR/Kimi Code.app" ] || { echo "✗ .app 不存在,先跑 tauri build"; exit 1; }
+[ -d "$SRC_DIR/Kimi Studio.app" ] || { echo "✗ .app 不存在,先跑 tauri build"; exit 1; }
 
 # 1. 防毒:清掉 bundler 历史残留 + 顺手清理已挂载的残留卷
 rm -f "$SRC_DIR"/rw.*.dmg "$SRC_DIR/.DS_Store" 2>/dev/null || true
@@ -25,24 +25,24 @@ done
 # 2. 先完整签名构建目录中的 App，再复制到干净 staging。
 # Tauri 的 ad-hoc 结果只绑定主二进制；如果只在 staging 中重签，DMG
 # 虽然有效，但 bundle/macos 下供本地体验的 App 会继续校验失败。
-codesign --deep --force --sign - "$SRC_DIR/Kimi Code.app"
+codesign --deep --force --sign - "$SRC_DIR/Kimi Studio.app"
 
 # 2.1 干净 staging
 STAGE="$(mktemp -d /tmp/kimi-dmg-stage.XXXXXX)"
 trap 'rm -rf "$STAGE"' EXIT
-cp -R "$SRC_DIR/Kimi Code.app" "$STAGE/"
+cp -R "$SRC_DIR/Kimi Studio.app" "$STAGE/"
 
 # 2.5 再签 staging，避免复制工具或文件系统丢失 bundle seal。
-codesign --deep --force --sign - "$STAGE/Kimi Code.app"
+codesign --deep --force --sign - "$STAGE/Kimi Studio.app"
 
 # 3. 打包
 mkdir -p "$OUT_DIR"
 TMP="$(mktemp /tmp/kimi-dmg-rw.XXXXXX.dmg)"
 trap 'rm -rf "$STAGE"; rm -f "$TMP"' EXIT
-OUT="$OUT_DIR/Kimi Code_${VERSION}_${ARCH}.dmg"
+OUT="$OUT_DIR/Kimi Studio_${VERSION}_${ARCH}.dmg"
 rm -f "$OUT"
 
-hdiutil create -srcfolder "$STAGE" -volname "Kimi Code" -fs "HFS+" -format UDRW -ov "$TMP" >/dev/null
+hdiutil create -srcfolder "$STAGE" -volname "Kimi Studio" -fs "HFS+" -format UDRW -ov "$TMP" >/dev/null
 hdiutil convert "$TMP" -format UDZO -imagekey zlib-level=9 -ov -o "$OUT" >/dev/null
 rm -f "$TMP"
 echo "✓ $OUT"

@@ -76,6 +76,20 @@ export interface KimiClientState {
   compactionBySession: Record<string, CompactionStatus>;
   config?: AppConfig | null;
   warnings: AppWarning[];
+  /** Kimi Code 0.36+: bumped on every `event.plugin.changed` — a bare global
+   *  fan-out telling clients to re-read the plugins REST surface. Consumers
+   *  watch this counter and refresh their tool/skill listings. */
+  pluginsRevision: number;
+  /** Kimi Code 0.36+: last `event.capability.changed` (live-only, never
+   *  journaled by the daemon — null until the first install progress frame). */
+  capabilityInstall: {
+    capabilityId: string;
+    running: boolean;
+    step?: string;
+    percent?: number;
+    error?: string;
+    note?: string;
+  } | null;
 }
 
 export function createInitialState(): KimiClientState {
@@ -93,6 +107,8 @@ export function createInitialState(): KimiClientState {
     turnActiveBySession: {},
     compactionBySession: {},
     warnings: [],
+    pluginsRevision: 0,
+    capabilityInstall: null,
   };
 }
 
@@ -121,6 +137,8 @@ function cloneState(s: KimiClientState): KimiClientState {
     turnActiveBySession: { ...s.turnActiveBySession },
     compactionBySession: { ...s.compactionBySession },
     warnings: [...s.warnings],
+    pluginsRevision: s.pluginsRevision,
+    capabilityInstall: s.capabilityInstall,
   };
 }
 
@@ -768,6 +786,30 @@ export function reduceAppEvent(
     // new catalog; the web picks it up on the next explicit model/provider load
     // (model picker, session switch). Advance seq silently.
     case 'modelCatalogChanged':
+      break;
+
+    // -------------------------------------------------------------------------
+    // Kimi Code 0.36+: bare global fan-out — plugin set mutated from any
+    // client. No payload state to keep; consumers (settings capability list,
+    // slash-menu skills) watch `pluginsRevision` and re-read their listings.
+    case 'pluginsChanged':
+      next.pluginsRevision = state.pluginsRevision + 1;
+      break;
+
+    // -------------------------------------------------------------------------
+    // Kimi Code 0.36+: capability install progress transition. Live-only and
+    // volatile (never replayed on resume); `running: false` means the install
+    // settled — re-read the capability REST for the final state.
+    case 'capabilityInstallChanged':
+      next.capabilityInstall = {
+        capabilityId: event.capabilityId,
+        running: event.running,
+        step: event.step,
+        percent: event.percent,
+        error: event.error,
+        note: event.note,
+      };
+      if (!event.running) next.pluginsRevision = state.pluginsRevision + 1;
       break;
 
     // -------------------------------------------------------------------------

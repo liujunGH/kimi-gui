@@ -771,7 +771,10 @@ export function createAgentProjector(): AgentProjector {
         // transition); projecting a second busy flip per turn from the raw
         // stream made every turn-end consumer fire twice.
         const turnId: number = p?.turnId;
-        const existingPromptId = s.currentPromptId ?? ulid('pr_');
+        // Kimi Code 0.37+: the engine echoes a client-chosen `promptId` here.
+        // Prefer the pre-bound id (bindNextPromptId) > the echoed one > synthetic.
+        const echoedPromptId = typeof p?.promptId === 'string' && p.promptId.length > 0 ? p.promptId : undefined;
+        const existingPromptId = s.currentPromptId ?? echoedPromptId ?? ulid('pr_');
         s.currentPromptId = existingPromptId;
         if (turnId !== undefined) {
           s.turnPromptId.set(turnId, existingPromptId);
@@ -1167,6 +1170,7 @@ export function createAgentProjector(): AgentProjector {
       // -----------------------------------------------------------------------
       case 'subagent.spawned': {
         const taskId = typeof p?.subagentId === 'string' && p.subagentId.length > 0 ? p.subagentId : ulid('task_');
+        const spawnModel = typeof p?.model === 'string' && p.model.length > 0 ? p.model : undefined;
         const task: AppTask = {
           id: taskId,
           sessionId,
@@ -1179,6 +1183,13 @@ export function createAgentProjector(): AgentProjector {
           parentToolCallId: typeof p?.parentToolCallId === 'string' ? p.parentToolCallId : undefined,
           swarmIndex: typeof p?.swarmIndex === 'number' ? p.swarmIndex : undefined,
           runInBackground: p?.runInBackground === true,
+          // Kimi Code 0.34+: spawn-bound model / thinking effort; 0.38: the
+          // background-task id the run registered under, so cancel/status can
+          // bind to the task store without waiting for `task.started`.
+          model: spawnModel,
+          modelSource: spawnModel !== undefined ? 'runtime' : undefined,
+          thinkingEffort: typeof p?.thinkingEffort === 'string' ? p.thinkingEffort : undefined,
+          backgroundTaskId: typeof p?.taskId === 'string' && p.taskId.length > 0 ? p.taskId : undefined,
         };
         s.subagentMeta.set(task.id, task);
         out.push({

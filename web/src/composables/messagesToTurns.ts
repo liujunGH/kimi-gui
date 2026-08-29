@@ -735,6 +735,9 @@ export function messagesToTurns(
       if (src.kind === 'file' && getFileUrl) return { url: getFileUrl(src.fileId), kind, fileId: src.fileId };
     }
     if (c.type === 'file' && getFileUrl) {
+      // Zero-copy path attachments (Kimi Code 0.39+) have no session file id —
+      // no preview URL; the file chip itself renders in the message flow.
+      if (!('fileId' in c)) return undefined;
       if (c.mediaType.startsWith('image/')) return { url: getFileUrl(c.fileId), kind: 'image', fileId: c.fileId };
       if (c.mediaType.startsWith('video/')) return { url: getFileUrl(c.fileId), kind: 'video', fileId: c.fileId };
     }
@@ -858,8 +861,17 @@ export function messagesToTurns(
           continue;
         }
         // Non-media files (pdf/zip/yaml/…) carry no playable URL, but the chip
-        // still renders them with name/size and a download action.
-        if (c.type === 'file' && getFileUrl) {
+        // still renders them with name/size and a download action. Zero-copy
+        // path attachments (no fileId) render as a plain path chip.
+        if (c.type === 'file' && 'path' in c) {
+          attachments.push({
+            kind: 'file',
+            url: '',
+            name: c.name || c.path,
+            mediaType: c.mediaType || undefined,
+            size: c.size,
+          });
+        } else if (c.type === 'file' && getFileUrl) {
           attachments.push({
             kind: 'file',
             url: getFileUrl(c.fileId),

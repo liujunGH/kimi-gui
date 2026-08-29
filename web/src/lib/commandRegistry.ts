@@ -85,8 +85,11 @@ export const GUI_COMMAND_MAPPINGS: Readonly<Record<string, CommandMapping>> = {
   settings: command('gui', 'always', 'settings', ['settings'], 'commands.settings.desc'),
   plan: command('shared', 'contextual', 'plan', ['plan'], 'commands.plan.desc'),
   swarm: command('shared', 'idle-only', 'swarm', ['swarm'], 'commands.swarm.desc', true),
+  // Kimi Code 0.39+: experimental tower mode (`/tower on|<objective>`) gated by
+  // KIMI_CODE_EXPERIMENTAL_TOWER — no GUI surface yet, keep it TUI-only.
+  tower: tuiOnly('always'),
   model: nativeUi('gui', 'always', 'commands.locations.model'),
-  secondary_model: nativeUi('gui', 'always', 'commands.locations.secondaryModel'),
+  'secondary-model': nativeUi('gui', 'always', 'commands.locations.secondaryModel'),
   effort: command('shared', 'always', 'thinking', ['thinking'], 'commands.thinking.desc'),
   provider: nativeUi('gui', 'always', 'commands.locations.provider'),
   btw: command('shared', 'always', 'btw', ['btw'], 'commands.btw.desc', true),
@@ -126,6 +129,9 @@ export const GUI_COMMAND_MAPPINGS: Readonly<Record<string, CommandMapping>> = {
   ),
   copy: command('shared', 'always', 'copy', ['copy'], 'commands.copy.desc'),
   web: tuiOnly('always'),
+  // Kimi Code 0.39+: experimental remote web-session access (`kimi rc`,
+  // `/remote-control`, alias `/rc`) gated by KIMI_CODE_EXPERIMENTAL_REMOTE_CONTROL.
+  'remote-control': tuiOnly('always'),
   exit: nativeUi('gui', 'idle-only', 'commands.locations.exit'),
   version: nativeUi('gui', 'always', 'commands.locations.about'),
 };

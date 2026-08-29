@@ -1,7 +1,7 @@
 {
   "source": {
     "repository": "MoonshotAI/kimi-code",
-    "ref": "@moonshot-ai/kimi-code@0.33.0",
+    "ref": "@moonshot-ai/kimi-code@0.39.1",
     "path": "apps/kimi-code/src/tui/commands/registry.ts"
   },
   "commands": [
@@ -11,8 +11,9 @@
     { "name": "settings", "aliases": ["config"] },
     { "name": "plan", "aliases": [] },
     { "name": "swarm", "aliases": [] },
+    { "name": "tower", "aliases": [] },
     { "name": "model", "aliases": [] },
-    { "name": "secondary_model", "aliases": [] },
+    { "name": "secondary-model", "aliases": ["subagent-model"] },
     { "name": "effort", "aliases": ["thinking"] },
     { "name": "provider", "aliases": ["providers"] },
     { "name": "btw", "aliases": [] },
@@ -43,6 +44,7 @@
     { "name": "export-debug-zip", "aliases": [] },
     { "name": "copy", "aliases": [] },
     { "name": "web", "aliases": [] },
+    { "name": "remote-control", "aliases": ["rc"] },
     { "name": "exit", "aliases": ["quit", "q"] },
     { "name": "version", "aliases": [] }
   ]

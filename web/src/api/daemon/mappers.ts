@@ -61,10 +61,12 @@ export function toAppSessionUsage(wire: WireSessionUsage): AppSessionUsage {
     outputTokens: wire.output_tokens,
     cacheReadTokens: wire.cache_read_tokens,
     cacheCreationTokens: wire.cache_creation_tokens,
-    totalCostUsd: wire.total_cost_usd,
+    // Kimi Code 0.35+: omitted when unknown — normalise to 0, the existing
+    // placeholder semantics downstream already treat 0 as "not reported".
+    totalCostUsd: wire.total_cost_usd ?? 0,
     contextTokens: wire.context_tokens,
-    contextLimit: wire.context_limit,
-    turnCount: wire.turn_count,
+    contextLimit: wire.context_limit ?? 0,
+    turnCount: wire.turn_count ?? 0,
   };
 }
 
@@ -133,6 +135,14 @@ function toAppImageSource(src: WireImageSource): ImageSource {
   if (src.kind === 'file') {
     return { kind: 'file', fileId: src.file_id };
   }
+  // Kimi Code 0.39+: stored projections address the session-owned canonical
+  // media copy — same App shape as an uploaded file reference.
+  if (src.kind === 'session_media') {
+    return { kind: 'file', fileId: src.file_id };
+  }
+  if (src.kind === 'path') {
+    return { kind: 'path', path: src.path };
+  }
   return { kind: 'url', url: src.url, id: src.id };
 }
 
@@ -165,6 +175,17 @@ export function toAppMessageContent(wire: WireMessageContent): AppMessageContent
         source: toAppImageSource(wire.source),
       };
     case 'file':
+      // Kimi Code 0.39+: either an uploaded file_id (metadata required) or a
+      // server-local zero-copy path (metadata filled by the daemon).
+      if ('path' in wire) {
+        return {
+          type: 'file',
+          path: wire.path,
+          name: wire.name,
+          mediaType: wire.media_type,
+          size: wire.size,
+        };
+      }
       return {
         type: 'file',
         fileId: wire.file_id,
@@ -228,12 +249,23 @@ function toWireMessageContent(app: AppMessageContent): WireMessageContent {
         wireSrc = { kind: 'base64', media_type: src.mediaType, data: src.data };
       } else if (src.kind === 'file') {
         wireSrc = { kind: 'file', file_id: src.fileId };
+      } else if (src.kind === 'path') {
+        wireSrc = { kind: 'path', path: src.path };
       } else {
         wireSrc = { kind: 'url', url: src.url, id: src.id };
       }
       return { type: app.type, source: wireSrc };
     }
     case 'file':
+      if ('path' in app) {
+        return {
+          type: 'file',
+          path: app.path,
+          name: app.name,
+          media_type: app.mediaType,
+          size: app.size,
+        };
+      }
       return {
         type: 'file',
         file_id: app.fileId,
@@ -384,6 +416,9 @@ export function toAppTask(wire: WireTask): AppTask {
     // subagent it returns is a background subagent (foreground ones never
     // persist there) — hence the `?? true` fallback for that path.
     runInBackground: wire.run_in_background ?? (wire.kind === 'subagent' ? true : undefined),
+    // Kimi Code 0.34+: spawn-bound model / thinking effort reported by the task store.
+    model: wire.model,
+    thinkingEffort: wire.thinking_effort,
     // outputLines starts undefined; populated by eventReducer via task.progress events
   };
 }
@@ -711,6 +746,21 @@ export function toAppEvent(wire: WireEvent): AppEvent {
           : [],
       };
 
+    case 'event.plugin.changed':
+      // Kimi Code 0.36+: bare fan-out — consumers re-read the plugins surface.
+      return { type: 'pluginsChanged' };
+
+    case 'event.capability.changed':
+      return {
+        type: 'capabilityInstallChanged',
+        capabilityId: w.payload.capability_id,
+        running: w.payload.install.running,
+        step: w.payload.install.step,
+        percent: w.payload.install.percent,
+        error: w.payload.install.error,
+        note: w.payload.install.note,
+      };
+
     case 'event.model_catalog.changed':
       return {
         type: 'modelCatalogChanged',
@@ -790,6 +840,7 @@ export function toAppConfig(wire: WireConfig): AppConfig {
     mergeAllAvailableSkills: wire.merge_all_available_skills,
     extraSkillDirs: wire.extra_skill_dirs,
     extraAgentDirs: wire.extra_agent_dirs,
+    tools: wire.tools,
     loopControl: wire.loop_control,
     background: wire.background,
     experimental: wire.experimental,

@@ -126,6 +126,11 @@ export const kimiRuntime = {
   engineStatus: () => nativeInvoke<KimiEngineStatus>('kimi_engine_status'),
   migrate033Config: () => nativeInvoke<Kimi033MigrationResult>('migrate_kimi_033_config'),
   restartDaemon: () => nativeInvoke<KimiDaemonInfo>('restart_kimi_daemon'),
+  /** Env-gated daemon experiments (tower / remote-control). Persisted by the
+   *  shell and injected into every daemon start; takes effect on restart. */
+  experimentalEnv: () => nativeInvoke<string[]>('kimi_experimental_env'),
+  setExperimentalEnv: (enabled: string[]) =>
+    nativeInvoke<void>('set_kimi_experimental_env', { enabled }),
   listAgents: (workspaceRoot?: string) =>
     nativeInvoke<KimiAgentProfile[]>('list_kimi_agents', { workspaceRoot }),
   saveAgent: (agent: {

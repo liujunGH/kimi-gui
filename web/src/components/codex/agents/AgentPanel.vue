@@ -136,6 +136,14 @@ onUnmounted(() => document.removeEventListener('keydown', onDocKeydown));
           </span>
         </button>
         <button
+          v-if="a.status === 'working' && !a.background"
+          class="aph-cancel"
+          title="移到后台继续运行"
+          @click.stop="emit('detach', a.id)"
+        >
+          <CodexIcon name="move-down" size="sm" />
+        </button>
+        <button
           v-if="a.status === 'working'"
           class="aph-cancel"
           title="取消该子任务"

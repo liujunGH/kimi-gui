@@ -40,7 +40,7 @@ async function bootstrapDesktopDaemon(): Promise<void> {
   localStorage.removeItem('kimi-gui.daemon-base');
   const root = document.querySelector<HTMLElement>('#app');
   if (root) {
-    root.innerHTML = '<main class="boot-status" role="status"><strong>Kimi Code</strong><span>正在连接本地服务…</span></main>';
+    root.innerHTML = '<main class="boot-status" role="status"><strong>Kimi Studio</strong><span>正在连接本地服务…</span></main>';
   }
   const { invoke } = await import('@tauri-apps/api/core');
   for (let i = 0; i < 40; i++) {

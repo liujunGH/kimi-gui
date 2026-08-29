@@ -8,7 +8,7 @@ mod shortcut;
 mod tray;
 mod usage;
 
-use daemon::{connect_daemon, restart_daemon, Launch};
+use daemon::{connect_daemon, read_gui_experiments, restart_daemon, save_gui_experiments, Launch};
 use std::sync::Mutex;
 use tauri::{Manager, State, WindowEvent};
 
@@ -26,6 +26,19 @@ fn daemon_info(state: State<'_, SharedDaemon>) -> Result<Launch, String> {
         .map_err(|e| format!("lock error: {e}"))?
         .clone()
         .ok_or_else(|| "daemon 未连接(可能仍在启动中,稍后重试)".to_string())
+}
+
+/// Env-gated daemon experiments (tower / remote-control). Persisted on disk so
+/// both the auto-connect and restart paths inject them; takes effect on the
+/// next daemon start.
+#[tauri::command]
+fn kimi_experimental_env() -> Vec<String> {
+    read_gui_experiments()
+}
+
+#[tauri::command]
+fn set_kimi_experimental_env(enabled: Vec<String>) -> Result<(), String> {
+    save_gui_experiments(enabled)
 }
 
 /// 使用当前已安装的 Kimi CLI，原端口原凭证重启 GUI 正在连接的 daemon。
@@ -76,6 +89,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             daemon_info,
             restart_kimi_daemon,
+            kimi_experimental_env,
+            set_kimi_experimental_env,
             quit_app,
             path_is_directory,
             dock_badge::set_dock_badge,

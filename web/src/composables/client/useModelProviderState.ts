@@ -9,6 +9,7 @@ import { ref, watch, type ComputedRef } from 'vue';
 import { getKimiWebApi } from '../../api';
 import type {
   AppMessage,
+  AppMessageContent,
   AppModel,
   AppProvider,
   AppProviderFormInput,
@@ -17,6 +18,8 @@ import type {
   OAuthLoginStartResult,
   ThinkingLevel,
 } from '../../api/types';
+import type { SkillActivationAttachment } from '../../api/types';
+import type { PromptAttachment } from '../useKimiWebClient';
 import { safeGetString, safeSetString, STORAGE_KEYS } from '../../lib/storage';
 import {
   defaultThinkingLevelFor,
@@ -409,11 +412,51 @@ export function useModelProviderState(
    * creating a session, so a concurrent session switch can't redirect the
    * activation to the wrong session. No session at all is a no-op.
    */
-  async function activateSkill(skillName: string, args?: string, sessionId?: string): Promise<void> {
+  async function activateSkill(
+    skillName: string,
+    args?: string,
+    sessionId?: string,
+    /** Kimi Code 0.34+: media/file attachments carried into the skill turn's
+     *  user message. Mirrors the prompt submission's attachment assembly. */
+    attachments?: PromptAttachment[],
+  ): Promise<void> {
     const sid = sessionId ?? rawState.activeSessionId;
     if (!sid) return;
     const guarded = activity.value === 'idle' && !rawState.inFlightBySession[sid];
     const tempId = `msg_skill_opt_${Date.now().toString(36)}`;
+
+    // Same assembly as submitPromptInternal, so the optimistic bubble and the
+    // wire body agree on the attachment shapes.
+    const attachmentContent: AppMessageContent[] = [];
+    const wireAttachments: SkillActivationAttachment[] = [];
+    for (const att of attachments ?? []) {
+      if (att.kind === 'video' && att.fileId) {
+        attachmentContent.push({ type: 'video', source: { kind: 'file', fileId: att.fileId } });
+        wireAttachments.push({ type: 'video', source: { kind: 'file', file_id: att.fileId } });
+      } else if (att.kind === 'file' && att.path && !att.fileId) {
+        // Zero-copy path attach (0.39+): daemon fills metadata from stat.
+        attachmentContent.push({ type: 'file', path: att.path, name: att.name, mediaType: att.mediaType, size: att.size });
+        wireAttachments.push({ type: 'file', path: att.path, name: att.name, media_type: att.mediaType, size: att.size });
+      } else if (att.kind === 'file') {
+        const file = {
+          fileId: att.fileId ?? '',
+          name: att.name ?? att.fileId ?? '',
+          mediaType: att.mediaType ?? 'application/octet-stream',
+          size: att.size ?? 0,
+        };
+        attachmentContent.push({ type: 'file', ...file });
+        wireAttachments.push({
+          type: 'file',
+          file_id: file.fileId,
+          name: file.name,
+          media_type: file.mediaType,
+          size: file.size,
+        });
+      } else if (att.fileId) {
+        attachmentContent.push({ type: 'image', source: { kind: 'file', fileId: att.fileId } });
+        wireAttachments.push({ type: 'image', source: { kind: 'file', file_id: att.fileId } });
+      }
+    }
 
     const localTurnToken = guarded ? beginLocalTurn(sid) : undefined;
     if (guarded) {
@@ -424,7 +467,10 @@ export function useModelProviderState(
         id: tempId,
         sessionId: sid,
         role: 'user',
-        content: [{ type: 'text', text: `/${skillName}${args ? ` ${args}` : ''}` }],
+        content: [
+          { type: 'text', text: `/${skillName}${args ? ` ${args}` : ''}` },
+          ...attachmentContent,
+        ],
         createdAt: new Date().toISOString(),
         metadata: {
           'kimiWeb.optimisticUserMessage': true,
@@ -457,7 +503,12 @@ export function useModelProviderState(
         sid,
       );
       if (!persisted) throw PROFILE_PERSIST_FAILED;
-      await getKimiWebApi().activateSkill(sid, skillName, args);
+      await getKimiWebApi().activateSkill(
+        sid,
+        skillName,
+        args,
+        wireAttachments.length ? wireAttachments : undefined,
+      );
     } catch (err) {
       if (guarded) {
         rawState.inFlightBySession = { ...rawState.inFlightBySession, [sid]: false };

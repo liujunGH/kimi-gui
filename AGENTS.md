@@ -8,7 +8,7 @@
 
 ## 1. 项目定位
 
-Kimi Code(Moonshot CLI agent)的**原生桌面客户端**,体验对齐 Codex 桌面 App。
+**Kimi Studio**(打包产品名;仓库 kimi-gui)—— Kimi Code(Moonshot CLI agent)的**原生桌面客户端**,体验对齐 Codex 桌面 App。改名背景:与官方桌面壳(kimi-ui,承载官方 "Kimi Code" web bundle)的打包名冲突,2026-08-29 起产品名改为 Kimi Studio(identifier `com.moonshot.kimigui` 不变)。
 公式:**Kimi 功能集(全保留)+ Codex 交互形态**。fork 官方 `apps/kimi-web`,UI 按 Codex 风格重做。
 
 - 栈:Tauri 2(Rust 壳)+ Vue 3 + Vite + TypeScript + 本地 daemon(REST + WebSocket)
@@ -21,13 +21,14 @@ Kimi Code(Moonshot CLI agent)的**原生桌面客户端**,体验对齐 Codex 桌
 
 完整架构见 `ARCHITECTURE.md`,这里只列**不可逾越的约束**:
 
-1. **🔒 协议层绝不改** —— 这些目录是 fork 官方源码,git merge 命脉,改了就再也合不回上游:
+1. **🔒 协议层不自造** —— 这些目录源自官方快照,语义以官方 `packages/protocol` 为准,**不许自己加字段/改语义**(自造 = 与真实 daemon 漂移):
    - `web/src/api/daemon/*`(8 文件,纯 TS,零 Vue)
    - `web/src/lib/slashCommands.ts`、`commandRegistry.ts`(命令 surface/执行器)
    - `web/src/types.ts`(官方 App 类型)
    - `web/src/composables/useKimiWebClient.ts` 及 `composables/client/*`(fork 官方状态层)
    - `web/src/i18n/`、`web/src/debug/`
    - 需要新 daemon 能力 → 在 `composables/codex/` 包一层调用,**不在协议层目录加东西**
+   - 唯一合法改动:**跟随上游新版本同步官方 protocol 变更**(见 3.5,以官方 diff 为准)
 
 2. **数据单向流** —— daemon → `api/*` → `useKimiWebClient` → 组件。组件**不能**直接 import `api/*`,只能调 client 暴露的 action 或读 props/inject
 
@@ -71,6 +72,36 @@ Kimi Code(Moonshot CLI agent)的**原生桌面客户端**,体验对齐 Codex 桌
 - composable 文件只暴露 `use` 函数,不直接 export ref(防绕过 action 改)
 - 全局快捷键注册表在 `composables/codex/useHotkeys.ts`,组件级键位处理函数在组件里写并注册进去
 - `useKimiWebClient` 在 `App.vue` 顶层调一次,`provide('client', client)` 注入;优先 props 传,跨 3 层以上用 inject
+
+### 3.5 同步上游新版本(例行,每 1-2 个月)
+
+**背景(2026-08 核实)**:官方自 0.33 起**移除了 `apps/kimi-web` 源码**(PR #2599,Web UI 改由独立 `code-app` 仓库构建、只回传预编译 bundle)。本仓库 `web/` 自此是独立代码库,**不存在机械 merge 上游**;能持续跟的只有 daemon 契约与 CLI 行为,官方 web 交互按发布说明**选择性移植**。`.upstream/sync.sh` 的 `merge` 已无对象,`.upstream/kimi-code-src` 仅作历史参考。
+
+**例行流程(约 30-60 分钟)**,上游源码仓在 `/Users/liujun/project/kimi-code`(origin = MoonshotAI 官方):
+
+```bash
+cd /Users/liujun/project/kimi-code
+git fetch origin --tags
+
+# 1. 看新版本:每个 release tag(命名 @moonshot-ai/kimi-code@X.Y.Z)
+git tag | sort -V | tail
+
+# 2. 还原版本功能:release commit 会消费掉 changesets,读 tag 的 parent
+git diff --name-status <tag>^ <tag> -- '.changeset/*.md' | grep '^D'   # 列出该版消费的功能
+git show <tag>^:.changeset/<name>.md                                  # 读单个功能说明
+
+# 3. 契约变更(必看):GUI 协议层 fork 自这里
+git diff <旧tag> <新tag> -- packages/protocol/src --stat
+
+# 4. 命令基线:对比后更新 web/src/lib/upstreamSlashCommands.json + GUI 映射
+git diff <旧tag> <新tag> -- apps/kimi-code/src/tui/commands/registry.ts
+```
+
+**判断原则**:
+- 官方契约变更一直是 **optional 字段向后兼容**(diff 注释明确写 cross-version tolerance),不跟不会坏,只是吃不到新能力——按需挑
+- 只接**发布版**契约;main 上未发布的(`/api/v2`、未合的管理 REST)不提前接
+- 破坏性大版本(通常伴随引擎大重构,如 agent-core-v2 迁移落地)提前 1-2 版会有苗头;GUI 的最低版本门槛(0.33+)会兜住不兼容 daemon,到时再决策
+- 契约有改动 → 同步进 `web/src/api/daemon/*`(协议层只读原则的**唯一例外**:跟随上游更新协议层,以官方 diff 为准,不自造)
 
 ---
 

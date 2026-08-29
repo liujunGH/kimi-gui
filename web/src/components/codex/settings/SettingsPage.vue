@@ -177,15 +177,108 @@ async function setExperiment(id: string, enabled: boolean): Promise<void> {
     experimentSaving.value = '';
   }
 }
+
+// Engine env experiments (Kimi Code 0.39+): env-gated (tower / remote-control),
+// persisted by the shell and injected into every daemon start — config.toml
+// cannot express them, so they live outside `experimentRows` above.
+const ENGINE_ENV_EXPERIMENTS = [
+  { id: 'tower', env: 'KIMI_CODE_EXPERIMENTAL_TOWER', label: 'Tower 多智能体编排', description: '实验性 tower 模式（/tower on 开启、/tower <目标> 启动编排）。' },
+  { id: 'remote_control', env: 'KIMI_CODE_EXPERIMENTAL_REMOTE_CONTROL', label: '远程访问会话', description: 'Remote Control：通过浏览器远程访问本地会话（/remote-control，别名 /rc）。' },
+] as const;
+const engineEnvEnabled = ref<string[]>([]);
+const engineEnvSaving = ref(false);
+const engineEnvDirty = ref(false);
+const engineEnvExperiments = computed(() =>
+  ENGINE_ENV_EXPERIMENTS.map((feature) => ({ ...feature, enabled: engineEnvEnabled.value.includes(feature.id) })),
+);
+async function loadEngineEnvExperiments(): Promise<void> {
+  if (!nativeAvailable) return;
+  try {
+    engineEnvEnabled.value = await kimiRuntime.experimentalEnv();
+  } catch {
+    engineEnvEnabled.value = [];
+  }
+}
+async function setEngineEnvExperiment(id: string, enabled: boolean): Promise<void> {
+  engineEnvSaving.value = true;
+  try {
+    const next = enabled
+      ? [...new Set([...engineEnvEnabled.value, id])]
+      : engineEnvEnabled.value.filter((item) => item !== id);
+    await kimiRuntime.setExperimentalEnv(next);
+    engineEnvEnabled.value = next;
+    engineEnvDirty.value = true;
+    toast(`${ENGINE_ENV_EXPERIMENTS.find((feature) => feature.id === id)?.label ?? id}已${enabled ? '开启' : '关闭'}，重启 Engine 后生效`);
+  } catch (error) {
+    toast(error instanceof Error ? error.message : '环境实验保存失败');
+  } finally {
+    engineEnvSaving.value = false;
+  }
+}
 const secondaryModelId = computed<string>({
   get: () => (client.config.value as AppConfig | null)?.secondaryModel?.model ?? '',
-  set: (model) => void client.updateConfig({
-    secondaryModel: model ? { model, defaultEffort: secondaryEffort.value || undefined } : {},
-  }),
+  set: (model) => {
+    // Merge into the current section so the pool / force details survive a
+    // default-model change (they live in the same [secondary_model] object).
+    const current = (client.config.value as AppConfig | null)?.secondaryModel ?? {};
+    void client.updateConfig({
+      secondaryModel: model
+        ? { ...current, model, defaultEffort: secondaryEffort.value || current.defaultEffort }
+        : {},
+    });
+  },
 });
 function saveSecondaryEffort(): void {
   const model = secondaryModelId.value;
-  if (model) void client.updateConfig({ secondaryModel: { model, defaultEffort: secondaryEffort.value || undefined } });
+  if (!model) return;
+  const current = (client.config.value as AppConfig | null)?.secondaryModel ?? {};
+  void client.updateConfig({
+    secondaryModel: { ...current, model, defaultEffort: secondaryEffort.value || undefined },
+  });
+}
+
+// Kimi Code 0.36+ secondary-model details: named pool (alias → model) the main
+// agent picks from per spawn, plus the force-routing switch. Persisted through
+// the same [secondary_model] config section; entries without a daemon ≥0.36
+// are ignored by older engines and take effect after upgrade.
+const secondaryPool = ref<Array<{ alias: string; model: string }>>([]);
+const secondaryPoolSaving = ref(false);
+const secondaryForce = computed(
+  () => (client.config.value as AppConfig | null)?.secondaryModel?.force === true,
+);
+function syncSecondaryPoolFromConfig(): void {
+  const models = (client.config.value as AppConfig | null)?.secondaryModel?.models ?? {};
+  secondaryPool.value = Object.entries(models).map(([alias, model]) => ({ alias, model }));
+}
+watch(() => (client.config.value as AppConfig | null)?.secondaryModel, syncSecondaryPoolFromConfig, { immediate: true });
+async function saveSecondaryPool(): Promise<void> {
+  secondaryPoolSaving.value = true;
+  try {
+    const models: Record<string, string> = {};
+    for (const entry of secondaryPool.value) {
+      const alias = entry.alias.trim();
+      if (alias && entry.model) models[alias] = entry.model;
+    }
+    const current = (client.config.value as AppConfig | null)?.secondaryModel ?? {};
+    const ok = await client.updateConfig({
+      secondaryModel: {
+        model: secondaryModelId.value || current.model,
+        defaultEffort: secondaryEffort.value || current.defaultEffort,
+        models: Object.keys(models).length ? models : undefined,
+        force: current.force,
+      },
+    });
+    toast(ok ? '模型池已保存；新的子任务派发生效' : '模型池保存失败');
+  } finally {
+    secondaryPoolSaving.value = false;
+  }
+}
+async function setSecondaryForce(force: boolean): Promise<void> {
+  const current = (client.config.value as AppConfig | null)?.secondaryModel ?? {};
+  const ok = await client.updateConfig({
+    secondaryModel: { model: secondaryModelId.value || current.model, defaultEffort: current.defaultEffort, force },
+  });
+  if (!ok) toast('强制路由保存失败');
 }
 
 /* ---------- Agent 中心 ---------- */
@@ -225,6 +318,7 @@ function csv(value: string): string[] {
   return value.split(',').map((item) => item.trim()).filter(Boolean);
 }
 async function loadAgentCenter(): Promise<void> {
+  extraAgentDirs.value = ((client.config.value as AppConfig | null)?.extraAgentDirs ?? []).join(', ');
   if (!nativeAvailable) return;
   agentsLoading.value = true;
   try {
@@ -392,8 +486,46 @@ const HOOK_EVENT_TYPES = [
 ] as const;
 const permissionRules = ref<PermissionRule[]>([]);
 const hooks = ref<HookRule[]>([]);
+// Kimi Code 0.34+ global tool gating (`[tools]`, protocol 0.5.0) — comma-
+// separated tool-name lists, edited as plain text and persisted via updateConfig.
+const toolGatingEnabled = ref('');
+const toolGatingDisabled = ref('');
+const toolGatingSaving = ref(false);
+function splitToolList(value: string): string[] {
+  return value.split(',').map((item) => item.trim()).filter(Boolean);
+}
+
+// Kimi Code 0.34+ extra_agent_dirs: scan Markdown agent files from additional
+// absolute directories.
+const extraAgentDirs = ref('');
+const extraAgentDirsSaving = ref(false);
+async function saveExtraAgentDirs(): Promise<void> {
+  extraAgentDirsSaving.value = true;
+  try {
+    const dirs = splitToolList(extraAgentDirs.value);
+    const ok = await client.updateConfig({ extraAgentDirs: dirs });
+    toast(ok ? `自定义 Agent 目录已保存（${dirs.length} 个）` : '自定义 Agent 目录保存失败');
+  } finally {
+    extraAgentDirsSaving.value = false;
+  }
+}
+async function saveToolGating(): Promise<void> {
+  toolGatingSaving.value = true;
+  try {
+    const enabled = splitToolList(toolGatingEnabled.value);
+    const disabled = splitToolList(toolGatingDisabled.value);
+    const ok = await client.updateConfig({
+      tools: { enabled: enabled.length ? enabled : undefined, disabled: disabled.length ? disabled : undefined },
+    });
+    toast(ok ? '工具门控已保存；新会话生效' : '工具门控保存失败');
+  } finally {
+    toolGatingSaving.value = false;
+  }
+}
 function loadControlConfig(): void {
   const config = client.config.value as AppConfig | null;
+  toolGatingEnabled.value = (config?.tools?.enabled ?? []).join(', ');
+  toolGatingDisabled.value = (config?.tools?.disabled ?? []).join(', ');
   const sourceRules = (config?.permission as { rules?: unknown[] } | undefined)?.rules ?? [];
   permissionRules.value = sourceRules.map((raw) => {
     const rule = raw as Record<string, unknown>;
@@ -538,6 +670,7 @@ function requestDaemonRestart(reason: 'manual' | 'restore'): void {
 async function loadEngine(): Promise<void> {
   if (!nativeAvailable) return;
   try { engine.value = await kimiRuntime.engineStatus(); } catch { engine.value = null; }
+  void loadEngineEnvExperiments();
 }
 async function restartDaemon(): Promise<void> {
   restartConfirmOpen.value = false;
@@ -891,6 +1024,24 @@ watch(active, (section) => {
   else if (section === 'directories') void loadWorkspaceContext();
 }, { immediate: true });
 
+// Kimi Code 0.36+: any client mutating the plugin set (or a capability install
+// settling) bumps pluginsRevision — refresh the tool/skill listing live while
+// a consuming section is open, so installs made in the embedded /plugins TUI
+// or another client show up without a manual reload.
+watch(() => client.pluginsRevision.value, () => {
+  if (['plugins-skills', 'permissions', 'capabilities'].includes(active.value)) void loadTools();
+});
+// Capability install finished (running turned false) — surface the outcome.
+watch(() => client.capabilityInstall.value, (frame, previous) => {
+  if (!frame || frame.running || previous === undefined) return;
+  toast(frame.error ? `能力 ${frame.capabilityId} 安装失败：${frame.error}` : `能力 ${frame.capabilityId} 安装完成`);
+});
+const capabilityInstallRunning = computed(() => client.capabilityInstall.value?.running === true);
+const capabilityInstallPercent = computed(() => {
+  const percent = client.capabilityInstall.value?.percent;
+  return percent !== undefined && percent >= 0 ? `${Math.round(percent)}%` : '';
+});
+
 watch(() => props.initialSection, (section) => { active.value = section; });
 
 
@@ -1072,6 +1223,38 @@ watch(() => props.initialSection, (section) => { active.value = section; });
                 </select>
               </div>
             </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">强制路由</div>
+                <div class="setting-desc">所有子任务一律走次级模型，忽略各 Agent 配置里的主/次偏好（Kimi Code 0.36+）。</div>
+              </div>
+              <div class="setting-control">
+                <input type="checkbox" :checked="secondaryForce" :disabled="!secondaryModelExperimentEnabled || secondaryPoolSaving" @change="setSecondaryForce(($event.target as HTMLInputElement).checked)" />
+              </div>
+            </div>
+            <div class="setting-row top-aligned">
+              <div class="setting-info">
+                <div class="setting-label">模型池</div>
+                <div class="setting-desc">Kimi Code 0.36+：别名 → 模型的候选池，主 Agent 派发子任务时按需挑选；为空时只用上面的默认次级模型。</div>
+              </div>
+              <div class="setting-control wide-control">
+                <div v-if="secondaryPool.length" class="rule-list">
+                  <div v-for="(entry, index) in secondaryPool" :key="index" class="rule-row">
+                    <input v-model="entry.alias" class="control compact" placeholder="别名，如 fast" />
+                    <select v-model="entry.model" class="control">
+                      <option value="">选择模型</option>
+                      <option v-for="m in modelOptions" :key="m.id" :value="m.id">{{ m.name }}</option>
+                    </select>
+                    <button class="icon-btn" aria-label="删除池成员" @click="secondaryPool.splice(index, 1)"><CodexIcon name="trash" /></button>
+                  </div>
+                </div>
+                <div v-else class="archive-empty">未配置模型池</div>
+                <div class="settings-button-row">
+                  <button class="btn" :disabled="!secondaryModelExperimentEnabled" @click="secondaryPool.push({ alias: '', model: '' })"><CodexIcon name="plus" /> 添加池成员</button>
+                  <button class="btn primary" :disabled="!secondaryModelExperimentEnabled || secondaryPoolSaving" @click="saveSecondaryPool">{{ secondaryPoolSaving ? '保存中…' : '保存模型池' }}</button>
+                </div>
+              </div>
+            </div>
             <div v-if="!secondaryModelExperimentEnabled" class="settings-callout">
               当前 daemon 没有启用 <code>secondary-model</code> 实验，次级模型不会参与 Agent / Swarm 路由。
             </div>
@@ -1092,6 +1275,16 @@ watch(() => props.initialSection, (section) => { active.value = section; });
           <section class="settings-section" :class="{ active: active === 'agents' }" id="agents">
             <h2>Agents</h2>
             <div v-if="!nativeAvailable" class="settings-callout">Agent 文件管理仅在桌面应用中可用；浏览器模式仍可使用 daemon 已发现的 Skills。</div>
+            <div class="setting-row top-aligned">
+              <div class="setting-info">
+                <div class="setting-label">自定义 Agent 目录</div>
+                <div class="setting-desc">Kimi Code 0.34+：扫描带 frontmatter 的 Markdown Agent 文件（可作主 Agent 或子 Agent）；逗号分隔的绝对目录。</div>
+              </div>
+              <div class="setting-control wide-control">
+                <input v-model="extraAgentDirs" class="control" placeholder="例如 /Users/me/agents, /team/shared-agents" />
+                <button class="btn" :disabled="extraAgentDirsSaving" @click="saveExtraAgentDirs">{{ extraAgentDirsSaving ? '保存中…' : '保存目录' }}</button>
+              </div>
+            </div>
             <template v-if="nativeAvailable">
               <div class="setting-row top-aligned">
                 <div class="setting-info">
@@ -1193,6 +1386,11 @@ watch(() => props.initialSection, (section) => { active.value = section; });
 
           <section class="settings-section" :class="{ active: active === 'capabilities' }" id="capabilities">
             <h2>Capabilities</h2>
+            <div v-if="capabilityInstallRunning" class="settings-callout">
+              正在安装能力 <code>{{ client.capabilityInstall.value?.capabilityId }}</code>
+              <template v-if="client.capabilityInstall.value?.step"> · {{ client.capabilityInstall.value.step }}</template>
+              <span v-if="capabilityInstallPercent" class="aph-bar" style="display:inline-block;width:120px;vertical-align:middle"><span class="aph-bar-fill" :style="{ width: capabilityInstallPercent }"></span></span>
+            </div>
             <CapabilitiesSettings :runtime-version="client.serverVersion.value || undefined" @manage="emit('open-plugin-manager')" />
           </section>
 
@@ -1334,7 +1532,19 @@ watch(() => props.initialSection, (section) => { active.value = section; });
               </div>
               <div class="settings-button-row"><button class="btn primary" @click="savePermissionRules">保存权限规则</button></div>
             </div>
-            <div v-else class="archive-empty">未配置细粒度规则</div>
+              <div v-else class="archive-empty">未配置细粒度规则</div>
+            <div class="settings-subhead"><div><strong>工具门控</strong><span>Kimi Code 0.34+ 全局 `[tools]` 配置：限定 agent 可用的工具，会话可覆盖；逗号分隔工具名。</span></div></div>
+            <div class="rule-list">
+              <div class="rule-row">
+                <span class="pill" style="align-self:center">允许</span>
+                <input v-model="toolGatingEnabled" class="control rule-pattern" placeholder="enabled，例如 Read, Grep, Glob；留空 = 不限制" />
+              </div>
+              <div class="rule-row">
+                <span class="pill" style="align-self:center">禁用</span>
+                <input v-model="toolGatingDisabled" class="control rule-pattern" placeholder="disabled，例如 Bash, Write；留空 = 不禁用" />
+              </div>
+              <div class="settings-button-row"><span class="setting-desc">工具名见下方「当前会话工具」列表。</span><button class="btn primary" :disabled="toolGatingSaving" @click="saveToolGating">{{ toolGatingSaving ? '保存中…' : '保存工具门控' }}</button></div>
+            </div>
             <div class="settings-subhead"><div><strong>当前会话工具</strong><span>{{ tools.length }} 个工具；禁用状态由会话配置和规则共同决定。</span></div><button class="btn" @click="loadTools">刷新</button></div>
             <div v-if="tools.length" class="tool-list">
               <div v-for="tool in tools" :key="`${tool.source}:${tool.name}`" class="tool-row">
@@ -1621,6 +1831,25 @@ watch(() => props.initialSection, (section) => { active.value = section; });
               </label>
             </div>
             <div class="settings-callout subtle">GUI 启动的 Kimi Engine 会启用次级模型实验；外部 daemon 的能力以这里显示的运行时开关为准。</div>
+
+            <div class="setting-row top-aligned">
+              <div class="setting-info"><div class="setting-label">Engine 环境实验</div><div class="setting-desc">通过环境变量开启的实验能力（Kimi Code 0.39+），保存后需重启 Engine 生效。</div></div>
+              <div class="setting-control"><span class="pill">{{ engineEnvExperiments.filter((e) => e.enabled).length }}/{{ engineEnvExperiments.length }} 开启</span></div>
+            </div>
+            <div class="experiment-grid">
+              <label v-for="feature in engineEnvExperiments" :key="feature.id" class="experiment-card" :class="{ locked: !nativeAvailable }">
+                <span class="experiment-main"><strong>{{ feature.label }}</strong><code>{{ feature.env }}</code><small>{{ feature.description }}</small></span>
+                <span class="experiment-state">
+                  <input
+                    type="checkbox"
+                    :checked="feature.enabled"
+                    :disabled="!nativeAvailable || engineEnvSaving"
+                    @change="setEngineEnvExperiment(feature.id, ($event.target as HTMLInputElement).checked)"
+                  />
+                </span>
+              </label>
+            </div>
+            <div v-if="engineEnvDirty" class="settings-callout">环境实验已保存，重启 Engine 后生效：<button class="btn-primary" :disabled="maintenanceBusy === 'restart'" @click="restartDaemon">{{ maintenanceBusy === 'restart' ? '正在重启…' : '立即重启 Engine' }}</button></div>
           </section>
 
           <!-- 关于 -->
@@ -1628,7 +1857,7 @@ watch(() => props.initialSection, (section) => { active.value = section; });
             <h2>关于</h2>
             <div class="setting-row">
               <div class="setting-info"><div class="setting-label">版本</div></div>
-              <div class="setting-control"><span>Kimi Code v{{ appVersion }}</span></div>
+              <div class="setting-control"><span>Kimi Studio v{{ appVersion }}</span></div>
             </div>
             <div class="setting-row">
               <div class="setting-info">

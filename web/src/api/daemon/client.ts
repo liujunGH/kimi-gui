@@ -44,6 +44,7 @@ import type {
   PromptSubmission,
   PromptSubmitResult,
   QuestionResponse,
+  SkillActivationAttachment,
 } from '../types';
 import { createAgentProjector } from './agentEventProjector';
 import { DaemonHttpClient } from './http';
@@ -75,6 +76,7 @@ import type {
   WireFsBrowseResult,
   WireFsEntry,
   WireFsHomeResult,
+  WireFsSuggestItem,
   WireGoalSnapshot,
   WireMessage,
   WireModel,
@@ -899,6 +901,19 @@ export class DaemonKimiWebApi implements KimiWebApi {
     return data;
   }
 
+  /** Kimi Code 0.39+: move a running foreground task (Bash / subagent) to the
+   *  background task store. `detached: true` only when the call converted a
+   *  running foreground task; already-background or terminal tasks answer
+   *  `detached: false` with their current status. */
+  async detachTask(
+    sessionId: string,
+    taskId: string,
+  ): Promise<{ detached: boolean; status: AppTaskStatus }> {
+    return this.http.post(
+      `/sessions/${encodeURIComponent(sessionId)}/tasks/${encodeURIComponent(taskId)}:detach`,
+    );
+  }
+
   async listTerminals(sessionId: string): Promise<AppTerminal[]> {
     const data = await this.http.get<{ items: WireTerminal[] }>(
       `/sessions/${encodeURIComponent(sessionId)}/terminals`,
@@ -969,10 +984,16 @@ export class DaemonKimiWebApi implements KimiWebApi {
     sessionId: string,
     skillName: string,
     args?: string,
+    /** Media/file attachments carried into the skill turn's user message
+     *  (Kimi Code 0.34+); text stays in `args`. Same wire shape as prompt content. */
+    attachments?: SkillActivationAttachment[],
   ): Promise<{ activated: true; skillName: string }> {
+    const body: { args?: string; attachments?: SkillActivationAttachment[] } = {};
+    if (args !== undefined && args.length > 0) body.args = args;
+    if (attachments !== undefined && attachments.length > 0) body.attachments = attachments;
     const data = await this.http.post<{ activated: true; skill_name: string }>(
       `/sessions/${encodeURIComponent(sessionId)}/skills/${encodeURIComponent(skillName)}:activate`,
-      args !== undefined && args.length > 0 ? { args } : {},
+      body,
     );
     return { activated: data.activated, skillName: data.skill_name };
   }
@@ -1062,6 +1083,34 @@ export class DaemonKimiWebApi implements KimiWebApi {
     if (input.limit !== undefined) body['limit'] = input.limit;
     const data = await this.http.post<WireSearchFilesResult>(
       `/sessions/${encodeURIComponent(sessionId)}/fs:search`,
+      body,
+    );
+    return {
+      items: data.items.map((item) => ({
+        path: item.path,
+        name: item.name,
+        kind: item.kind,
+        score: item.score,
+        matchPositions: item.match_positions,
+      })),
+      truncated: data.truncated,
+    };
+  }
+
+  /** Kimi Code 0.37+ POST /fs/suggest — fuzzy path suggestion for @-menus.
+   *  Lighter than fs:search (scored fuzzy matching server-side). */
+  async suggestFiles(
+    sessionId: string,
+    input: { query: string; limit?: number; followGitignore?: boolean; showHidden?: boolean; includeGlobs?: string[]; excludeGlobs?: string[] },
+  ): Promise<{ items: Array<{ path: string; name: string; kind: 'file' | 'directory' | 'symlink'; score: number; matchPositions: number[] }>; truncated: boolean }> {
+    const body: Record<string, unknown> = { query: input.query };
+    if (input.limit !== undefined) body['limit'] = input.limit;
+    if (input.followGitignore !== undefined) body['follow_gitignore'] = input.followGitignore;
+    if (input.showHidden !== undefined) body['show_hidden'] = input.showHidden;
+    if (input.includeGlobs !== undefined) body['include_globs'] = input.includeGlobs;
+    if (input.excludeGlobs !== undefined) body['exclude_globs'] = input.excludeGlobs;
+    const data = await this.http.post<{ items: WireFsSuggestItem[]; truncated: boolean }>(
+      `/sessions/${encodeURIComponent(sessionId)}/fs:suggest`,
       body,
     );
     return {
@@ -1424,7 +1473,9 @@ export class DaemonKimiWebApi implements KimiWebApi {
 
   async listModels(): Promise<AppModel[]> {
     const data = await this.http.get<{ items: WireModel[] }>('/models');
-    return data.items.map(toAppModel);
+    // The secondary-model experiment synthesizes derived entries (`__secondary__`)
+    // at runtime; hosts must keep internal `__`-prefixed entries out of pickers.
+    return data.items.filter((m) => !m.model.startsWith('__')).map(toAppModel);
   }
 
   async listProviders(): Promise<AppProvider[]> {
@@ -1540,7 +1591,7 @@ export class DaemonKimiWebApi implements KimiWebApi {
   }
 
   async listMcpServers(): Promise<AppMcpServer[]> {
-    const data = await this.http.get<{ servers: Array<{ id: string; name: string; transport: 'stdio' | 'http' | 'sse'; status: 'connected' | 'connecting' | 'disconnected' | 'error'; last_error?: string; tool_count: number }> }>('/mcp/servers');
+    const data = await this.http.get<{ servers: Array<{ id: string; name: string; transport: 'stdio' | 'http' | 'sse'; status: 'connected' | 'connecting' | 'disconnected' | 'error' | 'removed'; last_error?: string; tool_count: number }> }>('/mcp/servers');
     return data.servers.map((server) => ({
       id: server.id,
       name: server.name,
@@ -1583,6 +1634,7 @@ export class DaemonKimiWebApi implements KimiWebApi {
       mergeAllAvailableSkills: 'merge_all_available_skills',
       extraSkillDirs: 'extra_skill_dirs',
       extraAgentDirs: 'extra_agent_dirs',
+      tools: 'tools',
       loopControl: 'loop_control',
       background: 'background',
       experimental: 'experimental',
@@ -1611,9 +1663,11 @@ export class DaemonKimiWebApi implements KimiWebApi {
   }> {
     const data = await this.http.get<WireAuthResult>('/auth');
     return {
-      ready: data.ready,
+      // Kimi Code 0.39 renamed `ready` → `models_ready` and dropped
+      // `default_model`; read both generations (0.33–0.38 daemons still send the old shape).
+      ready: data.models_ready ?? data.ready ?? false,
       providersCount: data.providers_count,
-      defaultModel: data.default_model,
+      defaultModel: data.default_model ?? null,
       managedProvider: data.managed_provider
         ? { status: data.managed_provider.status }
         : null,

@@ -264,7 +264,11 @@ interface GitStatusEntry {
     name/mediaType/size feed the wire file shape (the server's file-store meta
     stays authoritative, so a chip reloaded from history may omit them). */
 export type PromptAttachment = {
-  fileId: string;
+  /** Uploaded session-media id; absent on zero-copy path attachments. */
+  fileId?: string;
+  /** Kimi Code 0.39+ zero-copy attach (Tauri drop): server-local absolute
+   *  path the daemon reads in place — no upload happened, so no fileId. */
+  path?: string;
   kind: 'image' | 'video' | 'file';
   name?: string;
   mediaType?: string;
@@ -836,6 +840,8 @@ function applyEvent(event: ReturnType<typeof toAppEvent>, sessionId: string, seq
     compactionBySession: rawState.compactionBySession,
     config: rawState.config,
     warnings: rawState.warnings,
+    pluginsRevision: rawState.pluginsRevision,
+    capabilityInstall: rawState.capabilityInstall,
   };
   const next = reduceAppEvent(snapshot, event, { sessionId, seq });
   // Assign back to the reactive proxy
@@ -853,6 +859,8 @@ function applyEvent(event: ReturnType<typeof toAppEvent>, sessionId: string, seq
   rawState.compactionBySession = next.compactionBySession;
   rawState.config = next.config ?? null;
   rawState.warnings = next.warnings;
+  rawState.pluginsRevision = next.pluginsRevision;
+  rawState.capabilityInstall = next.capabilityInstall;
 
   if (event.type === 'configChanged') {
     rawState.defaultModel = event.config.defaultModel ?? null;
@@ -2144,16 +2152,25 @@ const queued = computed<QueuedPromptView[]>(() => {
     text: q.text,
     attachmentCount: q.attachments?.length ?? 0,
     attachments: q.attachments?.map((a) => ({
-      fileId: a.fileId,
+      // Zero-copy path attachments carry no session file id: empty id + no
+      // preview URL — the queue chip falls back to the file-icon rendering.
+      fileId: a.fileId ?? '',
       kind: a.kind,
-      url: api.getFileUrl(a.fileId),
-      name: a.name,
+      url: a.fileId ? api.getFileUrl(a.fileId) : '',
+      name: a.name ?? a.path,
     })),
   }));
 });
 
 /** Pending warnings list */
 const warnings = computed<AppWarning[]>(() => rawState.warnings);
+
+/** Kimi Code 0.36+: bumps on every `event.plugin.changed` — watch to re-read
+ *  tool/skill listings after any client mutates the plugin set. */
+const pluginsRevision = computed<number>(() => rawState.pluginsRevision);
+
+/** Kimi Code 0.36+: last capability install progress frame (live-only). */
+const capabilityInstall = computed(() => rawState.capabilityInstall);
 
 /** Active session's pending questions mapped to UIQuestion[] */
 const questions = computed<UIQuestion[]>(() => {
@@ -2860,6 +2877,8 @@ export function useKimiWebClient() {
     goalMode,
     queued,
     warnings,
+    pluginsRevision,
+    capabilityInstall,
     questions,
     activity,
     turnActive,
@@ -2939,6 +2958,7 @@ export function useKimiWebClient() {
     pendingQuestionActions: workspaceState.pendingQuestionActions,
     pendingApprovalActions: workspaceState.pendingApprovalActions,
     cancelTask: workspaceState.cancelTask,
+    detachTask: workspaceState.detachTask,
 
     // New Phase 1 actions
     setPermission: workspaceState.setPermission,

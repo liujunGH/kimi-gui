@@ -48,6 +48,64 @@ pub fn kimi_home() -> PathBuf {
         .unwrap_or_else(|_| home_dir().join(".kimi-code"))
 }
 
+// ---------------------------------------------------------------------------
+// GUI-managed daemon environment experiments (Kimi Code 0.36+/0.39+).
+// Env-gated experiments (tower, remote-control) cannot be toggled through
+// daemon config, so the GUI persists user choices at
+// `<kimi_home>/kimi-gui-experiments.json` and injects them into every daemon
+// process it starts (auto-connect AND restart). Takes effect on next start.
+// ---------------------------------------------------------------------------
+
+/// (config key, env var) pairs the GUI is willing to inject.
+const EXPERIMENT_ENV_KEYS: &[(&str, &str)] = &[
+    ("tower", "KIMI_CODE_EXPERIMENTAL_TOWER"),
+    ("remote_control", "KIMI_CODE_EXPERIMENTAL_REMOTE_CONTROL"),
+];
+
+fn gui_experiments_path() -> PathBuf {
+    kimi_home().join("kimi-gui-experiments.json")
+}
+
+pub fn read_gui_experiments() -> Vec<String> {
+    std::fs::read_to_string(gui_experiments_path())
+        .ok()
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+        .and_then(|value| value.as_object().cloned())
+        .map(|object| {
+            object
+                .iter()
+                .filter(|(_, flag)| flag.as_bool() == Some(true))
+                .map(|(key, _)| key.clone())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+pub fn save_gui_experiments(enabled: Vec<String>) -> Result<(), String> {
+    let mut object = serde_json::Map::new();
+    for (key, _) in EXPERIMENT_ENV_KEYS {
+        let on = enabled.iter().any(|item| item == key);
+        object.insert((*key).to_string(), serde_json::Value::Bool(on));
+    }
+    let text = serde_json::to_string_pretty(&serde_json::Value::Object(object))
+        .map_err(|e| e.to_string())?;
+    std::fs::write(gui_experiments_path(), text).map_err(|e| e.to_string())
+}
+
+/// Inject the GUI-managed experiment env vars into a daemon-launch command.
+fn apply_daemon_env(command: &mut Command) {
+    // GUI exposes a secondary-model picker for subagents. The feature remains
+    // opt-in in the CLI, so enable only this documented experiment for daemon
+    // processes started by Kimi GUI — always on, not user-toggleable.
+    command.env("KIMI_CODE_EXPERIMENTAL_SECONDARY_MODEL", "1");
+    let enabled = read_gui_experiments();
+    for (key, env_name) in EXPERIMENT_ENV_KEYS {
+        if enabled.iter().any(|item| item == key) {
+            command.env(env_name, "1");
+        }
+    }
+}
+
 /// Locate the `kimi` binary. GUI apps launched from Finder get a minimal PATH,
 /// so fall back to well-known install locations.
 /// Windows:npm 全局安装的可执行文件是 `kimi.cmd`(不是 .exe),必须一并尝试;
@@ -195,7 +253,7 @@ pub fn restart_daemon(current: &Launch) -> Result<Launch, String> {
         port_text.as_str(),
         "--no-open",
     ]);
-    command.env("KIMI_CODE_EXPERIMENTAL_SECONDARY_MODEL", "1");
+    apply_daemon_env(&mut command);
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -334,10 +392,7 @@ pub fn connect_daemon() -> Result<Launch, String> {
         for args in DAEMON_LAUNCH_ATTEMPTS {
             let mut cmd = Command::new(&kimi);
             cmd.args(*args);
-            // GUI exposes a secondary-model picker for subagents. The feature
-            // remains opt-in in the CLI, so enable only this documented
-            // experiment for daemon processes started by Kimi GUI.
-            cmd.env("KIMI_CODE_EXPERIMENTAL_SECONDARY_MODEL", "1");
+            apply_daemon_env(&mut cmd);
             #[cfg(windows)]
             {
                 use std::os::windows::process::CommandExt;

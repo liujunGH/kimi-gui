@@ -145,7 +145,7 @@ function sessionsOf(wsName: string): Session[] {
       @mousedown="startWindowDragging"
     >
       <span class="brand-logo" data-tauri-drag-region>K</span>
-      <span class="brand-name" data-tauri-drag-region>Kimi Code</span>
+      <span class="brand-name" data-tauri-drag-region>Kimi Studio</span>
       <button class="icon-btn brand-collapse" title="折叠侧栏" @click="emit('collapse')">
         <CodexIcon name="panel-left" />
       </button>

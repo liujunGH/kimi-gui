@@ -1530,16 +1530,21 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
       const content: import('../../api/types').AppMessageContent[] = [];
       if (text) content.push({ type: 'text', text });
       for (const att of attachments ?? []) {
-        if (att.kind === 'video') content.push({ type: 'video', source: { kind: 'file', fileId: att.fileId } });
+        if (att.kind === 'video' && att.fileId) content.push({ type: 'video', source: { kind: 'file', fileId: att.fileId } });
+        else if (att.kind === 'file' && att.path) {
+          // Kimi Code 0.39+ zero-copy attach (Tauri drop): the daemon reads the
+          // server-local path in place and fills name/media_type/size from stat.
+          content.push({ type: 'file', path: att.path, name: att.name, mediaType: att.mediaType, size: att.size });
+        }
         else if (att.kind === 'file') {
           content.push({
             type: 'file',
-            fileId: att.fileId,
+            fileId: att.fileId ?? '',
             name: att.name ?? '',
             mediaType: att.mediaType || 'application/octet-stream',
             size: att.size ?? 0,
           });
-        } else content.push({ type: 'image', source: { kind: 'file', fileId: att.fileId } });
+        } else if (att.fileId) content.push({ type: 'image', source: { kind: 'file', fileId: att.fileId } });
       }
       if (content.length === 0) {
         rawState.inFlightBySession = { ...rawState.inFlightBySession, [sid]: false };
@@ -1738,16 +1743,19 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
     const content: import('../../api/types').AppMessageContent[] = [];
     if (merged) content.push({ type: 'text', text: merged });
     for (const att of mergedAttachments) {
-      if (att.kind === 'video') content.push({ type: 'video', source: { kind: 'file', fileId: att.fileId } });
-      else if (att.kind === 'file') {
+      if (att.kind === 'file' && att.path) {
+        content.push({ type: 'file', path: att.path, name: att.name, mediaType: att.mediaType, size: att.size });
+      } else if (att.kind === 'video' && att.fileId) {
+        content.push({ type: 'video', source: { kind: 'file', fileId: att.fileId } });
+      } else if (att.kind === 'file') {
         content.push({
           type: 'file',
-          fileId: att.fileId,
+          fileId: att.fileId ?? '',
           name: att.name ?? '',
           mediaType: att.mediaType || 'application/octet-stream',
           size: att.size ?? 0,
         });
-      } else content.push({ type: 'image', source: { kind: 'file', fileId: att.fileId } });
+      } else if (att.fileId) content.push({ type: 'image', source: { kind: 'file', fileId: att.fileId } });
     }
     const tempId = nextOptimisticMsgId();
     const optimisticMsg: AppMessage = {
@@ -2164,6 +2172,29 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
       }
     } finally {
       delete pendingTaskCancellations[taskId];
+    }
+  }
+
+  /** Kimi Code 0.39+: move a running foreground subagent to the background
+   *  task store ("move to background"). Already-background or terminal tasks
+   *  answer `detached: false` silently. Local row flips to runInBackground so
+   *  it keeps showing in the dock/background lists. */
+  async function detachTask(taskId: string): Promise<void> {
+    const sid = rawState.activeSessionId;
+    if (!sid) return;
+    const api = getKimiWebApi();
+    try {
+      const result = await api.detachTask(sid, taskId);
+      if (!result.detached) return;
+      const list = rawState.tasksBySession[sid] ?? [];
+      rawState.tasksBySession = {
+        ...rawState.tasksBySession,
+        [sid]: list.map((t) =>
+          t.id === taskId ? { ...t, runInBackground: true, status: result.status } : t,
+        ),
+      };
+    } catch (err) {
+      pushOperationFailure('detachTask', err, { sessionId: sid });
     }
   }
 
@@ -2913,6 +2944,7 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
     pendingQuestionActions,
     pendingApprovalActions,
     cancelTask,
+    detachTask,
     setPlanMode,
     togglePlanMode,
     setSwarmMode,

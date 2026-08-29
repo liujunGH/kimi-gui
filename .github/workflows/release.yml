@@ -89,7 +89,7 @@ jobs:
         run: |
           gh release view "v${{ steps.v.outputs.version }}" >/dev/null 2>&1 \
             || gh release create "v${{ steps.v.outputs.version }}" \
-                 --title "Kimi Code v${{ steps.v.outputs.version }}" \
+                 --title "Kimi Studio v${{ steps.v.outputs.version }}" \
                  --notes "构建中,产物稍后自动上传。"
 
   # ---------- 1. 双平台构建 + 上传资产 ----------
@@ -138,7 +138,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: v${{ needs.prepare.outputs.version }}
-          releaseName: 'Kimi Code v${{ needs.prepare.outputs.version }}'
+          releaseName: 'Kimi Studio v${{ needs.prepare.outputs.version }}'
           releaseDraft: false
           prerelease: false
 
@@ -148,14 +148,14 @@ jobs:
       - name: 完整 ad-hoc 签名(macOS)
         if: matrix.os == 'macos-14'
         run: |
-          APP="src-tauri/target/release/bundle/macos/Kimi Code.app"
+          APP="src-tauri/target/release/bundle/macos/Kimi Studio.app"
           if [ -d "$APP" ]; then
             codesign --deep --force --sign - "$APP"
             # 重打 DMG(tauri-action 已上传的旧 DMG 仍是不完整签名)
             bash scripts/make-dmg.sh
             # 用重签后的 DMG 覆盖 Release 资产
             gh release upload "v${{ needs.prepare.outputs.version }}" \
-              "src-tauri/target/release/bundle/dmg/Kimi Code_${{ needs.prepare.outputs.version }}_aarch64.dmg" \
+              "src-tauri/target/release/bundle/dmg/Kimi Studio_${{ needs.prepare.outputs.version }}_aarch64.dmg" \
               --clobber
           fi
         env:
@@ -218,8 +218,8 @@ jobs:
       - name: 更新包入仓(canonical 名,CDN 直链稳定)+ 生成双平台 latest.json
         run: |
           mkdir -p updates
-          cp sigs/*.app.tar.gz updates/Kimi.Code_aarch64.app.tar.gz
-          cp sigs/*x64-setup.exe updates/Kimi.Code_x64-setup.exe
+          cp sigs/*.app.tar.gz updates/Kimi.Studio_aarch64.app.tar.gz
+          cp sigs/*x64-setup.exe updates/Kimi.Studio_x64-setup.exe
           MACSIG=$(cat sigs/*.app.tar.gz.sig)
           WINSIG=$(cat sigs/*x64-setup.exe.sig)
           REPO_RAW="https://raw.githubusercontent.com/${{ github.repository }}/main/updates"
@@ -228,8 +228,8 @@ jobs:
             --rawfile notes release-notes.md \
             --arg macsig "$MACSIG" \
             --arg winsig "$WINSIG" \
-            --arg macurl "$REPO_RAW/Kimi.Code_aarch64.app.tar.gz" \
-            --arg winurl "$REPO_RAW/Kimi.Code_x64-setup.exe" \
+            --arg macurl "$REPO_RAW/Kimi.Studio_aarch64.app.tar.gz" \
+            --arg winurl "$REPO_RAW/Kimi.Studio_x64-setup.exe" \
             --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             '{version:$v, notes:$notes, pub_date:$date, platforms:{
               "darwin-aarch64": {url:$macurl, signature:$macsig},

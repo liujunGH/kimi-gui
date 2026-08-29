@@ -44,10 +44,15 @@ import type { Session, WorkspaceView } from '../types';
 
 /** 附件(prompt attachments,跟官方 useKimiWebClient 一致) */
 export interface PromptAttachment {
-  fileId: string;
+  /** Uploaded session-media id; absent on zero-copy path attachments (0.39+). */
+  fileId?: string;
+  /** Kimi Code 0.39+ zero-copy attach (Tauri drop): server-local absolute path. */
+  path?: string;
   kind: 'image' | 'video' | 'file';
   url: string;
   name?: string;
+  mediaType?: string;
+  size?: number;
 }
 
 export interface SidebarProps {
@@ -411,6 +416,8 @@ export interface AgentPanelEmits {
   (e: 'inspect', id: string): void;
   /** 行内 stop 按钮(仅 working 行显示)→ client.cancelTask(id) */
   (e: 'cancel', id: string): void;
+  /** 行内「转后台」按钮(仅 working 行显示,Kimi Code 0.39+)→ client.detachTask(id) */
+  (e: 'detach', id: string): void;
 }
 
 export interface SubagentCardProps {

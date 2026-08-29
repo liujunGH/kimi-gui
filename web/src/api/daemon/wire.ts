@@ -35,10 +35,12 @@ export interface WireSessionUsage {
   output_tokens: number;
   cache_read_tokens: number;
   cache_creation_tokens: number;
-  total_cost_usd: number;
+  // Kimi Code 0.35+: these are omitted when the daemon cannot know them
+  // (context_limit 0 was the engine's "unknown" marker, never a real limit).
+  total_cost_usd?: number;
   context_tokens: number;
-  context_limit: number;
-  turn_count: number;
+  context_limit?: number;
+  turn_count?: number;
 }
 
 export interface WireSessionUsageDelta {
@@ -71,6 +73,9 @@ export interface WireSession {
   pending_interaction?: 'none' | 'approval' | 'question';
   last_turn_reason?: 'completed' | 'cancelled' | 'failed';
   archived: boolean;
+  /** When the session was archived (ISO 8601); absent for sessions archived
+   *  before the field existed (Kimi Code 0.35+) — fall back to updated_at. */
+  archived_at?: string;
   current_prompt_id?: string;
   /** Text of the most recent user prompt, for search/preview. */
   last_prompt?: string;
@@ -92,6 +97,8 @@ export interface WireSession {
     permission_mode?: string;
     plan_mode?: boolean;
     swarm_mode?: boolean;
+    /** Kimi Code 0.39+: experimental multi-agent tower mode. */
+    tower_mode?: boolean;
     goal_objective?: string;
     goal_control?: 'pause' | 'resume' | 'cancel';
   };
@@ -108,8 +115,12 @@ export interface WireSessionRuntimeStatus {
   permission: string;
   plan_mode: boolean;
   swarm_mode: boolean;
+  /** Kimi Code 0.39+: experimental multi-agent tower mode
+   *  (`KIMI_CODE_EXPERIMENTAL_TOWER=1`, `/tower on`). */
+  tower_mode?: boolean;
   context_tokens: number;
-  max_context_tokens: number;
+  /** Kimi Code 0.34+: omitted when the context limit is unknown. */
+  max_context_tokens?: number;
   context_usage: number;
 }
 
@@ -189,13 +200,22 @@ export type WireMessageContent =
   | { type: 'tool_result'; tool_call_id: string; output: unknown; is_error?: boolean }
   | { type: 'image'; source: WireImageSource }
   | { type: 'video'; source: WireImageSource }
+  /** Kimi Code 0.39+: exactly one of file_id (uploaded, metadata required) or
+   *  path (server-local zero-copy; the daemon fills name/media_type/size). */
   | { type: 'file'; file_id: string; name: string; media_type: string; size: number }
+  | { type: 'file'; path: string; name?: string; media_type?: string; size?: number }
   | { type: 'thinking'; thinking: string; signature?: string };
 
 export type WireImageSource =
   | { kind: 'url'; url: string; id?: string }
   | { kind: 'base64'; media_type: string; data: string }
-  | { kind: 'file'; file_id: string };
+  | { kind: 'file'; file_id: string }
+  /** Kimi Code 0.39+: stored prompt/message projections address the session-owned
+   *  canonical media copy (file upload stays the transient submission form). */
+  | { kind: 'session_media'; file_id: string }
+  /** Kimi Code 0.39+: zero-copy attach of a server-local absolute path (desktop
+   *  clients); the daemon validates and reads the file in place — local runtime only. */
+  | { kind: 'path'; path: string };
 
 export interface WireMessage {
   id: string;
@@ -223,6 +243,10 @@ export interface WirePromptSubmission {
   swarm_mode?: boolean;
   goal_objective?: string;
   goal_control?: 'pause' | 'resume' | 'cancel';
+  /** Client-chosen prompt record id (Kimi Code 0.37+); the engine echoes it
+   *  on the consuming turn's `turn.started` (`promptId`) so the submitter can
+   *  bind its own bookkeeping to that turn. Omit to let the engine assign one. */
+  prompt_id?: string;
 }
 
 export interface WirePromptSubmitResult {
@@ -334,6 +358,10 @@ export interface WireTask {
   suspended_reason?: string;
   swarm_index?: number;
   run_in_background?: boolean;
+  /** Subagent tasks only (Kimi Code 0.34+): display-normalized bound model alias. */
+  model?: string;
+  /** Subagent tasks only (Kimi Code 0.34+): thinking effort at spawn. */
+  thinking_effort?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -355,6 +383,15 @@ export interface WireFsEntry {
   is_symlink_to?: string;
   git_status?: string;
   child_count?: number;
+}
+
+/** POST /fs/suggest hit (Kimi Code 0.37+) — fuzzy path suggestion for @-menus. */
+export interface WireFsSuggestItem {
+  path: string;
+  name: string;
+  kind: WireFsKind;
+  score: number;
+  match_positions: number[];
 }
 
 // ---------------------------------------------------------------------------
@@ -416,6 +453,8 @@ export interface WireConfig {
   merge_all_available_skills?: boolean;
   extra_skill_dirs?: string[];
   extra_agent_dirs?: string[];
+  /** Kimi Code 0.34+ global tool gating (protocol 0.5.0). */
+  tools?: { enabled?: string[]; disabled?: string[] };
   loop_control?: unknown;
   background?: unknown;
   experimental?: Record<string, boolean>;
@@ -433,9 +472,13 @@ export interface WireManagedProvider {
 }
 
 export interface WireAuthResult {
-  ready: boolean;
+  /** Kimi Code ≤0.38 field; 0.39 renamed it to models_ready. Read both. */
+  ready?: boolean;
+  /** Kimi Code 0.39+: replaces `ready`. */
+  models_ready?: boolean;
   providers_count: number;
-  default_model: string | null;
+  /** Kimi Code ≤0.38 field; removed in 0.39 (read the config surface instead). */
+  default_model?: string | null;
   managed_provider: WireManagedProvider | null;
 }
 
@@ -826,6 +869,24 @@ type WireEventModelCatalogChanged = WireEventBase<'event.model_catalog.changed',
   failed: Array<{ provider: string; reason: string }>;
 }>;
 
+// Plugin set mutation (install / enable / disable / remove from any client).
+// Bare global fan-out (Kimi Code 0.36+) — clients re-read the plugins REST surface.
+type WireEventPluginChanged = WireEventBase<'event.plugin.changed', Record<string, never>>;
+
+// Capability install progress transition (Kimi Code 0.36+), fanned out globally.
+// Live-only (volatile, never journaled by the daemon — not replayed on resume):
+// update the row live and re-read the capability REST once `running` turns false.
+type WireEventCapabilityChanged = WireEventBase<'event.capability.changed', {
+  capability_id: string;
+  install: {
+    running: boolean;
+    step?: string;
+    percent?: number;
+    error?: string;
+    note?: string;
+  };
+}>;
+
 /** Catch-all for unrecognised event frames — keeps lastSeq advancing without warnings */
 type WireEventUnknown = { type: string; seq: number; session_id: string; timestamp: string; payload: unknown };
 
@@ -877,5 +938,8 @@ export type WireEvent =
   | WireEventConfigChanged
   | WireEventConfigWarning
   | WireEventModelCatalogChanged
+  // Plugins & capabilities (global)
+  | WireEventPluginChanged
+  | WireEventCapabilityChanged
   // Unknown / future events
   | WireEventUnknown;

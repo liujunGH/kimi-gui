@@ -6,6 +6,15 @@
 // Pagination
 // ---------------------------------------------------------------------------
 
+/** Kimi Code 0.34+: skill-activation attachment — the media/file subset of the
+ *  prompt submission's message content (text stays in `args`). Wire shape. */
+export type SkillActivationAttachment =
+  | { type: 'image'; source: { kind: 'file'; file_id: string } }
+  | { type: 'video'; source: { kind: 'file'; file_id: string } }
+  | { type: 'file'; file_id: string; name: string; media_type: string; size: number }
+  /** 0.39+ zero-copy attach: daemon fills name/media_type/size from stat. */
+  | { type: 'file'; path: string; name?: string; media_type?: string; size?: number };
+
 export interface Page<T> {
   items: T[];
   hasMore: boolean;
@@ -168,13 +177,17 @@ export type AppMessageContent =
   | { type: 'image'; source: ImageSource }
   | { type: 'video'; source: ImageSource }
   | { type: 'file'; fileId: string; name: string; mediaType: string; size: number }
+  /** Kimi Code 0.39+: server-local zero-copy file attach (desktop clients). */
+  | { type: 'file'; path: string; name?: string; mediaType?: string; size?: number }
   | { type: 'thinking'; thinking: string; signature?: string }
   | { type: 'unknown'; raw: unknown };
 
 export type ImageSource =
   | { kind: 'url'; url: string; id?: string }
   | { kind: 'base64'; mediaType: string; data: string }
-  | { kind: 'file'; fileId: string };
+  | { kind: 'file'; fileId: string }
+  /** Kimi Code 0.39+: server-local absolute path, read in place by the daemon. */
+  | { kind: 'path'; path: string };
 
 export interface AppMessage {
   id: string;
@@ -358,6 +371,8 @@ export interface AppTask {
   model?: string;
   /** Runtime means the daemon reported the value; absent falls back to inference. */
   modelSource?: 'runtime';
+  /** Effective thinking effort at spawn (Kimi Code 0.34+ `subagent.spawned`). */
+  thinkingEffort?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -499,6 +514,19 @@ export type AppEvent =
   | { type: 'goalUpdated'; sessionId: string; goal: AppGoal | null }
   | { type: 'configChanged'; changedFields: string[]; config: AppConfig }
   | { type: 'configWarningsChanged'; warnings: Array<{ domain?: string; message: string }> }
+  /** Kimi Code 0.36+: plugin set mutated (install / enable / disable / remove
+   *  from any client) — re-read the plugins REST surface. */
+  | { type: 'pluginsChanged' }
+  /** Kimi Code 0.36+: capability install progress transition (live-only). */
+  | {
+      type: 'capabilityInstallChanged';
+      capabilityId: string;
+      running: boolean;
+      step?: string;
+      percent?: number;
+      error?: string;
+      note?: string;
+    }
   | {
       type: 'modelCatalogChanged';
       changed: { providerId: string; providerName: string; added: number; removed: number }[];
@@ -760,7 +788,17 @@ export interface AppConfig {
   defaultProvider?: string;
   defaultModel?: string;
   models?: Record<string, unknown>;
-  secondaryModel?: { model?: string; defaultEffort?: string; [key: string]: unknown };
+  secondaryModel?: {
+    model?: string;
+    defaultEffort?: string;
+    /** Kimi Code 0.36+ named model pool: alias → model id; the main agent
+     *  picks from the pool per spawn (experimental secondary-model). */
+    models?: Record<string, string>;
+    /** Kimi Code 0.36+: route ALL subagents to the secondary model, ignoring
+     *  per-agent profile preferences. */
+    force?: boolean;
+    [key: string]: unknown;
+  };
   thinking?: { enabled?: boolean; effort?: string };
   planMode?: boolean;
   yolo?: boolean;
@@ -772,6 +810,9 @@ export interface AppConfig {
   mergeAllAvailableSkills?: boolean;
   extraSkillDirs?: string[];
   extraAgentDirs?: string[];
+  /** Kimi Code 0.34+ global tool gating (`[tools]` in config.toml, protocol
+   *  0.5.0): constrain which tools agents may use, per-session overridable. */
+  tools?: { enabled?: string[]; disabled?: string[] };
   loopControl?: unknown;
   background?: unknown;
   experimental?: Record<string, boolean>;
@@ -803,7 +844,10 @@ export interface AppMcpServer {
   id: string;
   name: string;
   transport: 'stdio' | 'http' | 'sse';
-  status: 'connected' | 'connecting' | 'disconnected' | 'error';
+  /** Kimi Code 0.34+: 'removed' — server uninstalled with its plugin or dropped
+   *  from the workspace config; its tools stay registered in open sessions but
+   *  calls fail with a removal notice. Takes effect in new sessions. */
+  status: 'connected' | 'connecting' | 'disconnected' | 'error' | 'removed';
   lastError?: string;
   toolCount: number;
 }
@@ -886,10 +930,14 @@ export interface KimiWebApi {
   listSkills(sessionId: string): Promise<AppSkill[]>;
   /** List skills for a workspace (no session required) — GET /workspaces/{id}/skills. */
   listSkillsForWorkspace(workspaceId: string): Promise<AppSkill[]>;
-  activateSkill(sessionId: string, skillName: string, args?: string): Promise<{ activated: true; skillName: string }>;
+  /** Kimi Code 0.34+: media/file attachments carried into the skill turn's
+   *  user message — the media subset of the prompt content shape. */
+  activateSkill(sessionId: string, skillName: string, args?: string, attachments?: SkillActivationAttachment[]): Promise<{ activated: true; skillName: string }>;
   listTasks(sessionId: string, status?: AppTaskStatus): Promise<AppTask[]>;
   getTask(sessionId: string, taskId: string, input?: { withOutput?: boolean; outputBytes?: number }): Promise<AppTask>;
   cancelTask(sessionId: string, taskId: string): Promise<{ cancelled: true }>;
+  /** Kimi Code 0.39+: move a running foreground task to the background store. */
+  detachTask(sessionId: string, taskId: string): Promise<{ detached: boolean; status: AppTaskStatus }>;
   listTerminals(sessionId: string): Promise<AppTerminal[]>;
   createTerminal(sessionId: string, input?: { cwd?: string; shell?: string; cols?: number; rows?: number }): Promise<AppTerminal>;
   getTerminal(sessionId: string, terminalId: string): Promise<AppTerminal>;

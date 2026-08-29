@@ -136,12 +136,20 @@ onMounted(() => {
       workspaceDropActive.value = false;
       const { invoke } = await import('@tauri-apps/api/core');
       let added = 0;
+      let attached = 0;
       for (const path of event.payload.paths) {
-        if (!await invoke<boolean>('path_is_directory', { path })) continue;
-        await client.addWorkspaceByPath(path);
-        added += 1;
+        if (await invoke<boolean>('path_is_directory', { path })) {
+          await client.addWorkspaceByPath(path);
+          added += 1;
+        } else {
+          // Kimi Code 0.39+ zero-copy attach: dropped files become path
+          // attachments (the daemon reads them in place — no upload).
+          composerRef.value?.addPathAttachment(path);
+          attached += 1;
+        }
       }
       if (added) toast(`已从拖放添加 ${added} 个工作区`);
+      else if (attached) toast(`已附加 ${attached} 个文件(本地路径直传,未上传)`);
     });
   }).catch(() => undefined);
 });
@@ -977,7 +985,7 @@ const sideTaskProps = computed(() => {
   return {
     title: '侧边任务',
     status: { text: conversationRunning.value ? '运行中' : '空闲', kind: 'accent' as const },
-    thread: { name: sidebarCurrentWs.value || 'Kimi Code', ws: sidebarCurrentWs.value, dot: 'running' as const },
+    thread: { name: sidebarCurrentWs.value || 'Kimi Studio', ws: sidebarCurrentWs.value, dot: 'running' as const },
     composerVisible: true,
     draftKey: `thread:${client.activeSessionId.value ?? 'draft'}`,
   };
@@ -991,6 +999,11 @@ function openTranscript(id: string) {
 /** AgentPanel/SubagentCard 行内 stop → 取消子任务 */
 function onCancelTask(id: string) {
   void client.cancelTask(id);
+}
+
+/** AgentPanel 行内「移到后台」(Kimi Code 0.39+)→ 前台子任务转入后台任务存储 */
+function onDetachTask(id: string) {
+  void client.detachTask(id);
 }
 
 /** 用户消息「编辑重发」:撤销该 turn 及之后所有 turn,文本回填输入框 */
@@ -1036,9 +1049,20 @@ function onSend(text: string, mode: ComposerMode, attachments?: PromptAttachment
   // Commands that accept arguments remain in the composer until Enter. Route
   // them through the same registry as menu-selected bare commands; otherwise
   // `/compact ...`, `/goal ...`, `/title ...`, etc. become ordinary prompts.
-  const parsedCommand = attachments?.length ? null : parseSlash(text.trim());
+  const parsedCommand = parseSlash(text.trim());
   if (parsedCommand && resolveBuiltinCommand(parsedCommand.cmd)) {
-    handleCommand(text.trim());
+    // Built-in commands carry their arguments in text and cannot take
+    // attachments — with attachments present, keep the historical fallback
+    // of sending the whole thing as a plain prompt.
+    if (!attachments?.length) {
+      handleCommand(text.trim());
+      return;
+    }
+  } else if (parsedCommand && attachments?.length) {
+    // Skill command with attachments (Kimi Code 0.34+): activate the skill
+    // with the attachments carried into the skill turn instead of silently
+    // dropping them into a plain prompt.
+    handleCommand(text.trim(), attachments);
     return;
   }
   if (client.connection.value !== 'connected') {
@@ -1233,7 +1257,7 @@ function openNativeUiCommand(canonicalName: string, command: string, mapping: Ex
   const sectionByCommand: Partial<Record<string, typeof settingsSection.value>> = {
     permission: 'permissions',
     model: 'models-providers',
-    secondary_model: 'models-providers',
+    'secondary-model': 'models-providers',
     provider: 'models-providers',
     mcp: 'mcp',
     plugins: 'plugins-skills',
@@ -1356,14 +1380,14 @@ function replaceGoal(objective: string): void {
 }
 
 /** Registry-backed slash-command dispatcher for the actual desktop entry. */
-function handleCommand(cmd: string): void {
+function handleCommand(cmd: string, attachments?: PromptAttachment[]): void {
   const space = cmd.indexOf(' ');
   const token = space === -1 ? cmd : cmd.slice(0, space);
   const arg = space === -1 ? '' : cmd.slice(space + 1).trim();
   const resolved = resolveBuiltinCommand(token);
   if (resolved === null) {
     const stripped = token.slice(1);
-    if (stripped) void client.activateSkill(stripped, arg || undefined);
+    if (stripped) void client.activateSkill(stripped, arg || undefined, undefined, attachments);
     return;
   }
 
@@ -1992,7 +2016,7 @@ async function searchFiles(q: string) {
 <template>
   <main v-if="client.unsupportedDaemonVersion.value" class="contract-gate">
     <header class="contract-gate-titlebar" data-tauri-drag-region="deep" @mousedown="tauriDaemon.startWindowDragging">
-      <strong>Kimi Code</strong>
+      <strong>Kimi Studio</strong>
     </header>
     <section class="contract-gate-card">
       <span class="contract-gate-version">需要 Kimi Code {{ MINIMUM_KIMI_CODE_VERSION }}+</span>
@@ -2118,7 +2142,7 @@ async function searchFiles(q: string) {
       @mousedown="tauriDaemon.startWindowDragging"
     >
       <!-- toolbar -->
-      <span class="toolbar-title" data-tauri-drag-region>{{ activeSession?.title || sidebarCurrentWs || 'Kimi Code' }}</span>
+      <span class="toolbar-title" data-tauri-drag-region>{{ activeSession?.title || sidebarCurrentWs || 'Kimi Studio' }}</span>
       <ThreadMenu
         @pin="client.activeSessionId.value && togglePin(client.activeSessionId.value)"
         @open-side-task="ui.openSideTask('thread')"
@@ -2469,6 +2493,7 @@ async function searchFiles(q: string) {
       :open="ui.agentPanelOpen.value"
       @inspect="openTranscript"
       @cancel="onCancelTask"
+      @detach="onDetachTask"
       @close="ui.closeAgentPanel()"
     />
     <GlobalTaskPanel
