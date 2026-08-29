@@ -5,7 +5,7 @@ Tauri 2(Rust 壳)+ Vue 3(codex UI,fork 自官方 kimi-web)+ 本地 daemon(REST +
 
 **前置条件**:安装 **Kimi Code CLI 0.33.0+** 并 `kimi login`——本应用只使用 agent-core-v2 契约，不再连接旧版或 legacy backend。检测到旧 daemon 时会停止加载聊天，并提供“更新 CLI → 迁移 0.33 配置 → 重启 daemon”的桌面升级入口。
 
-当前版本:**1.0.17**
+当前版本:**1.0.18**
 
 ## 主要能力
 
@@ -65,7 +65,7 @@ pnpm build            # web build → postbuild → Rust release → .app + DMG
 - `src-tauri/target/release/bundle/macos/Kimi Studio.app`
 - `src-tauri/target/release/bundle/dmg/Kimi Studio_<version>_aarch64.dmg`
 
-**版本规则**:单一版本源是 `src-tauri/tauri.conf.json` 的 `version`,发版时同步根 `package.json` / `web/package.json` / `Cargo.toml` 保持一致。当前版本:**1.0.17**。
+**版本规则**:单一版本源是 `src-tauri/tauri.conf.json` 的 `version`,发版时同步根 `package.json` / `web/package.json` / `Cargo.toml` 保持一致。当前版本:**1.0.18**。
 
 **完整发版流程**(tag 触发 → CI 四阶段:质量门禁 / 创建 Release / 双平台构建 / 签名入仓)与签名约定见 [`AGENTS.md`](./AGENTS.md) 第 4 节。
 
