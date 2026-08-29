@@ -151,3 +151,33 @@ Kimi Code 0.33.0 已从公开仓库移除 `apps/kimi-web` 源码，官方脚本�
 
 **冲突风险**：低-中。全部为 additive optional 字段/新方法，不改既有 wire 语义；后续同步仍以官方 tag diff 为准逐项核对。
 
+---
+
+### `web/src/lib/toolMeta.ts` + `web/src/api/daemon/{agentEventProjector,eventReducer}.ts`（2026-08-29 · ZCode · 任务系统对齐官方 0.39.1 语义）
+
+**改动**（跟随上游 0.38 新工具 WaitFor 的 GUI 适配 + 0.39 任务库语义核对）：
+
+- `toolMeta.ts`：WaitFor 的 GUI 呈现——`NAME_ALIASES` 加 `wait_for → waitfor`；`TOOL_GLYPH` 加 `waitfor: 'clock'`；`toolSummary` 加 waitfor 分支（`#task_id · Ns`）。**不加** `TOOL_LABEL_KEYS` 条目：i18n 锁层无 `tools.label.wait_for` key，`toolLabel` fallback 显示原名 'WaitFor' 可接受
+- `agentEventProjector.ts`：① `toolProgressOutput` 读取 update.`replace`，置位时给 toolOutput 的 chunk 加 `TOOL_OUTPUT_REPLACE_PREFIX`（'\u0000replace:'）前缀——AppEvent union 是锁层类型无 replace 字段，标记随 chunk 走；② `task.started` 非 agent 分支 `info.kind==='question'` 建 `kind:'tool'` 行（对齐官方 REST 映射）；③ `task.terminated` 补官方 WS 终态词表映射：killed/cancelled→cancelled、timed_out/lost/failed→failed，exitCode≠0 启发式保留但显式 killed 优先于 137/143 退出码
+- `eventReducer.ts`：① `toolOutput` 剥离前缀标记，replace 时**替换**该 toolCall outputLines 末元素而非 append（缺省/无标记行为不变，向后兼容）；② `taskCompleted` 给任务行补 `completedAt`（事件类型无该字段，reducer 侧 `?? new Date().toISOString()` 盖章，已有值优先）
+
+**原因**：官方 WaitFor 每秒发 `kind:'status'、replace:true` 的 ToolUpdate，纯 append 会每秒堆一行；WS `task.terminated` 的 status 词表（killed/timed_out/lost）与 REST 折叠映射（killed→cancelled、timed_out/lost→failed）不一致会导致 WS 行与轮询行状态漂移；question 注册项按官方 REST 映射为 tool 行。
+
+**冲突风险**：低。replace 标记是 NUL 引导的哨兵串，真实输出不可能出现；上游若在 AppEvent 正式加 replace 字段，应删除前缀标记改为消费官方字段。
+
+---
+
+### `web/src/api/daemon/client.ts` + `web/src/api/types.ts`（2026-08-29 · ZCode · 语义核对第二波：tower/suggest/session_media 契约修正）
+
+**改动**（官方语义已核对，均为跟随官方契约，无自造字段）：
+
+- **tower 写入面**：`updateSession` 入参加 `towerMode?`，`agent_config` 组装加 `tower_mode`（与官方 POST /sessions/{id}/profile 已有 `swarm_mode` 同族）；`createSession` 的 `AppAgentConfigInput` 组装同步映射；types.ts `AppAgentConfigInput` / `KimiWebApi.updateSession` 加 `towerMode?`。仅协议写入面——UI（Composer 模式条）留待后续，进入 tower 仍走 `/tower` 命令（commandRegistry 保持 tuiOnly）
+- **suggestFiles 路由修正**：签名 `suggestFiles(sessionId, …)` → `suggestFiles(workspace, …)`，改 POST `/workspace/fs:suggest`（body 加 `workspace` 字段，传工作区 id 或绝对根，官方 spot-register）；删除错误的 session 级 suggest 注释。官方真实路由仅 `POST /workspace/fs:suggest` 与 `POST /fs:suggest`（roots[1-32]+runtime_id），**不存在 session 级 suggest**——旧实现调用的 `/sessions/{id}/fs:suggest` 是自造端点。无调用方受影响（GUI 尚未接线）。`wire.ts` 的 `WireFsSuggestItem` 注释仍写旧路由形态，wire.ts 不在本次改动范围，待后续顺手更正
+- **session_media blob 通道**：client.ts 加 `getSessionMediaBlob(sessionId, fileId)`（GET /sessions/{sid}/media/{fid}，Bearer，参照 getFileBlob 模式），types.ts 同步声明。`GET /files/{id}` 只查临时上传存储、无 session media 回退——两个 id 域不可混用
+
+**⚠ 后续项（session_media UI 接线）**：`messagesToTurns.ts` session_media 分支已补分流注释——它产出的 fileId 是 session 域，而渲染链 `AttachmentChip → AuthMedia → getFileBlob(fileId)` 固定走 `/files/{id}`（404 后 fallback 裸 URL 又 401），session_media 图片在 GUI 实际不可见。修法是消费方按来源分流到 `getSessionMediaBlob(sid, fileId)`，但 `AuthMedia.vue`/`AttachmentChip.vue`/`ChatPane.vue` 均为 `components/chat/` 锁层文件、`TurnAttachment`（需加 session 域标记）在锁层 `web/src/types.ts`，均不在本次允许清单——接线留待后续，届时在 codex/ 侧包一层或按锁层例外流程处理
+
+**冲突风险**：低。tower/suggest/session_media 均为官方 0.39 契约的 additive optional 对齐；suggestFiles 是无调用方的签名纠偏。
+
+---
+

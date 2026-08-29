@@ -125,6 +125,10 @@ async function nativeInvoke<T>(command: string, args?: Record<string, unknown>):
 export const kimiRuntime = {
   engineStatus: () => nativeInvoke<KimiEngineStatus>('kimi_engine_status'),
   migrate033Config: () => nativeInvoke<Kimi033MigrationResult>('migrate_kimi_033_config'),
+  /** Clear the secondary-model pool by rewriting config.toml in the shell —
+   *  the REST POST /config deep-merges, so `models: {}` can never delete the
+   *  pool table (no replace semantics). */
+  clearSecondaryModelPool: () => nativeInvoke<void>('clear_secondary_model_pool'),
   restartDaemon: () => nativeInvoke<KimiDaemonInfo>('restart_kimi_daemon'),
   /** Env-gated daemon experiments (tower / remote-control). Persisted by the
    *  shell and injected into every daemon start; takes effect on restart. */

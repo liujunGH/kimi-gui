@@ -25,6 +25,7 @@ import type {
 } from '../types';
 import { COMPACTION_MARKER_METADATA_KEY } from '../types';
 import { i18n } from '../../i18n';
+import { TOOL_OUTPUT_REPLACE_PREFIX } from './agentEventProjector';
 
 const OPTIMISTIC_USER_MESSAGE_METADATA_KEY = 'kimiWeb.optimisticUserMessage';
 
@@ -233,16 +234,29 @@ function findOptimisticUserEchoIndex(messages: AppMessage[], message: AppMessage
   return -1;
 }
 
-function appendToolOutputToMessages(messages: AppMessage[], toolCallId: string, outputChunk: string): AppMessage[] {
+function appendToolOutputToMessages(
+  messages: AppMessage[],
+  toolCallId: string,
+  outputChunk: string,
+  replaceLast = false,
+): AppMessage[] {
   let changed = false;
   const next = messages.map((message) => {
     let contentChanged = false;
     const content = message.content.map((part) => {
       if (part.type !== 'toolUse' || part.toolCallId !== toolCallId) return part;
       contentChanged = true;
+      const lines = part.outputLines ?? [];
+      // replaceLast swaps the tool call's LAST accumulated line in place
+      // (Kimi Code 0.38+ WaitFor ticks with replace:true every second);
+      // without the flag — or when nothing accumulated yet — plain append.
+      const outputLines =
+        replaceLast && lines.length > 0
+          ? [...lines.slice(0, -1), outputChunk]
+          : [...lines, outputChunk];
       return {
         ...part,
-        outputLines: [...(part.outputLines ?? []), outputChunk],
+        outputLines,
       };
     });
     if (!contentChanged) return message;
@@ -605,8 +619,13 @@ export function reduceAppEvent(
     // -------------------------------------------------------------------------
     case 'toolOutput': {
       const sid = event.sessionId;
+      // The projector flags replace-semantics via a chunk prefix (the locked
+      // AppEvent union has no replace field) — strip it and swap the tool
+      // call's last line instead of appending.
+      const replace = event.outputChunk.startsWith(TOOL_OUTPUT_REPLACE_PREFIX);
+      const chunk = replace ? event.outputChunk.slice(TOOL_OUTPUT_REPLACE_PREFIX.length) : event.outputChunk;
       const msgs = next.messagesBySession[sid] ?? [];
-      next.messagesBySession[sid] = appendToolOutputToMessages(msgs, event.toolCallId, event.outputChunk);
+      next.messagesBySession[sid] = appendToolOutputToMessages(msgs, event.toolCallId, chunk, replace);
       break;
     }
 
@@ -746,6 +765,11 @@ export function reduceAppEvent(
           status: event.status,
           outputPreview: event.outputPreview,
           outputBytes: event.outputBytes,
+          // The locked taskCompleted AppEvent carries no completedAt, so the
+          // reducer stamps it here (e.g. a bash/tool row terminated via WS
+          // task.terminated has no other timestamp source). Keep any earlier
+          // value — subagent lifecycle rows already set it at completion.
+          completedAt: t.completedAt ?? new Date().toISOString(),
         };
       });
       break;

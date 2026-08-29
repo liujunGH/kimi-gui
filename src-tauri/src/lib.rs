@@ -97,6 +97,7 @@ pub fn run() {
             usage::plan_usage,
             runtime::kimi_engine_status,
             runtime::migrate_kimi_033_config,
+            runtime::clear_secondary_model_pool,
             runtime::list_kimi_agents,
             runtime::save_kimi_agent,
             runtime::delete_kimi_agent,

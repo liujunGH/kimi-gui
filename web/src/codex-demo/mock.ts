@@ -4,7 +4,7 @@
  * 轮次 3 由 ZCode 的 composable 接真源(daemon);本文件标注"动态"的字段
  * 届时来自对应端点(见 prototype/README.md 数据来源表)。
  */
-import { ref } from 'vue';
+import { reactive, ref } from 'vue';
 import type { ChatTurn, Session, TodoView, ToolCall, WorkspaceView } from '../types';
 import type { KimiClient } from '../composables/codex/useKimiClient';
 import type {
@@ -495,8 +495,10 @@ export const sideThreadTurns: ChatTurn[] = [
 
 /**
  * 只覆盖 SettingsPage / ApprovalCard(inject 兜底)读取的键:
- * 读的都是 ref,写的都是 setter;respondApproval 空操作(演示不真审批)。
- * DemoApp 顶层 provide(KIMI_CLIENT_KEY, mockKimiClient),沙箱设置页不再崩。
+ * 读的都是 ref,写的都是 setter;respondApproval 空操作返回 true(演示不真审批,
+ * 让审批卡进入「已响应」态而不是报错)。pendingApprovalActions 对齐真 client 的
+ * reactive<Record<string, true>>,保持空对象即可(有它 ApprovalCard 才不会崩)。
+ * DemoApp 顶层 provide(KIMI_CLIENT_KEY, mockKimiClient),沙箱设置页/审批场景不再崩。
  */
 function rw<T>(v: T) {
   const r = ref(v);
@@ -543,5 +545,6 @@ export const mockKimiClient = {
   serverVersion: ref('2.1.0-demo'),
   backend: ref('local(演示)'),
   experimentalFlags: ref({ 'secondary-model': true }),
-  respondApproval: async () => {},
+  respondApproval: async () => true,
+  pendingApprovalActions: reactive<Record<string, true>>({}),
 } as unknown as KimiClient;

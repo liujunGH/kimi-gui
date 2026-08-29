@@ -50,10 +50,13 @@ pub fn kimi_home() -> PathBuf {
 
 // ---------------------------------------------------------------------------
 // GUI-managed daemon environment experiments (Kimi Code 0.36+/0.39+).
-// Env-gated experiments (tower, remote-control) cannot be toggled through
-// daemon config, so the GUI persists user choices at
-// `<kimi_home>/kimi-gui-experiments.json` and injects them into every daemon
-// process it starts (auto-connect AND restart). Takes effect on next start.
+// Env-gated experiments (tower, remote-control): env vars take the HIGHEST
+// precedence and only the GUI controls their injection, so the GUI persists
+// user choices at `<kimi_home>/kimi-gui-experiments.json` and injects them
+// into every daemon process it starts (auto-connect AND restart). config.toml
+// `[experimental]` can also enable these flags — but that path needs a daemon
+// restart and is not toggleable per-process the way env injection is.
+// Takes effect on next start.
 // ---------------------------------------------------------------------------
 
 /// (config key, env var) pairs the GUI is willing to inject.

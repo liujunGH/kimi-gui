@@ -128,8 +128,11 @@ const defaultPlanMode = computed<boolean>({
   get: () => (client.config.value as AppConfig | null)?.defaultPlanMode === true,
   set: (enabled) => void client.updateConfig({ defaultPlanMode: enabled }),
 });
+// Effort 词表 = 'off' | 'on' | 模型 support_efforts 声明档位;'on' = 模型默认
+// 档,'' = 未设置(保持官方默认解析链)。不再兜底 'low' —— 那会在未设置时
+// 冒充一个具体档位。
 const secondaryEffort = ref(
-  (client.config.value as AppConfig | null)?.secondaryModel?.defaultEffort ?? 'low',
+  (client.config.value as AppConfig | null)?.secondaryModel?.defaultEffort ?? '',
 );
 // Effort is a local ref (select state); keep it in sync whenever the daemon
 // config changes elsewhere (updateConfig responses, WS configChanged, backup
@@ -137,9 +140,12 @@ const secondaryEffort = ref(
 watch(
   () => (client.config.value as AppConfig | null)?.secondaryModel?.defaultEffort,
   (value) => {
-    if (value) secondaryEffort.value = value;
+    secondaryEffort.value = value ?? '';
   },
 );
+/** 仅用户显式改过 effort(select @change)才允许写点夹带 default_effort;
+ *  表单同步 / 初始化不算 —— 未触碰时保持官方默认解析链,不把回显值写回 config。 */
+const effortTouched = ref(false);
 const secondaryModelExperimentEnabled = computed(
   () => client.experimentalFlags.value['secondary-model'] === true,
 );
@@ -151,10 +157,6 @@ const enabledExperimentNames = computed(() =>
 );
 const experimentSaving = ref('');
 const EXPERIMENT_COPY: Record<string, { label: string; description: string }> = {
-  micro_compaction: {
-    label: '微压缩',
-    description: '自动清理较旧的大型工具结果，减少上下文占用，同时保留最近对话。',
-  },
   'tool-select': {
     label: '按需加载工具',
     description: '支持的模型只在需要时加载 MCP 工具 schema，可改善 prompt cache 与长会话性能。',
@@ -167,14 +169,16 @@ const EXPERIMENT_COPY: Record<string, { label: string; description: string }> = 
 const experimentRows = computed(() => {
   const configured = (client.config.value as AppConfig | null)?.experimental ?? {};
   const runtime = client.experimentalFlags.value;
-  const ids = new Set(['micro_compaction', 'tool-select', ...Object.keys(configured), ...Object.keys(runtime)]);
+  // 不再播种 micro_compaction：它是 v1 引擎遗留 flag，agent-core-v2 不存在，
+  // 显示出来即误导。仅当旧 config/运行时真的报告它时才作为未知项出现。
+  const ids = new Set(['tool-select', ...Object.keys(configured), ...Object.keys(runtime)]);
   return [...ids].sort().map((id) => ({
     id,
     label: EXPERIMENT_COPY[id]?.label ?? id,
     description: EXPERIMENT_COPY[id]?.description ?? '由当前 Kimi Engine 报告的实验能力。',
     enabled: runtime[id] ?? configured[id] ?? false,
     configured: configured[id],
-    locked: id !== 'micro_compaction' && id !== 'tool-select',
+    locked: id !== 'tool-select',
   }));
 });
 async function setExperiment(id: string, enabled: boolean): Promise<void> {
@@ -191,11 +195,13 @@ async function setExperiment(id: string, enabled: boolean): Promise<void> {
   }
 }
 
-// Engine env experiments (Kimi Code 0.39+): env-gated (tower / remote-control),
-// persisted by the shell and injected into every daemon start — config.toml
-// cannot express them, so they live outside `experimentRows` above.
+// Engine env experiments (Kimi Code 0.39+): env-gated (tower / remote-control).
+// The env vars have the HIGHEST precedence and only the GUI controls their
+// injection, so they live outside `experimentRows` above. config.toml
+// [experimental] can also enable them — but that path needs a daemon restart
+// and is not runtime-reportable the same way.
 const ENGINE_ENV_EXPERIMENTS = [
-  { id: 'tower', env: 'KIMI_CODE_EXPERIMENTAL_TOWER', label: 'Tower 多智能体编排', description: '实验性 tower 模式（/tower on 开启、/tower <目标> 启动编排）。' },
+  { id: 'tower', env: 'KIMI_CODE_EXPERIMENTAL_TOWER', label: 'Tower 多智能体编排', description: '实验性 tower 模式；开启并重启 Engine 后，在会话中用 /tower 命令进入（/tower on 开启、/tower <目标> 启动编排）。' },
   { id: 'remote_control', env: 'KIMI_CODE_EXPERIMENTAL_REMOTE_CONTROL', label: '远程访问会话', description: 'Remote Control：通过浏览器远程访问本地会话（/remote-control，别名 /rc）。' },
 ] as const;
 const engineEnvEnabled = ref<string[]>([]);
@@ -235,30 +241,64 @@ async function setEngineEnvExperiment(id: string, enabled: boolean): Promise<voi
   }
 }
 const secondaryModelId = computed<string>({
-  // `.model` is the legacy single-model key; a pool-less `default_model` is the
-  // official shape for an implicit single-entry pool — display it as-is so a
-  // defaultModel-only config is still recognized instead of showing "inherit".
+  // Official read priority (0.39.1 resolveSubagentModelPool): models pool >
+  // default_model > legacy `model` —— 并存时 default_model 压制 model。
+  // 池模式下 defaultModel 即池默认,select 显示它但被置灰(池归下方编辑器管)。
   get: () =>
-    (client.config.value as AppConfig | null)?.secondaryModel?.model
-    ?? (client.config.value as AppConfig | null)?.secondaryModel?.defaultModel
+    (client.config.value as AppConfig | null)?.secondaryModel?.defaultModel
+    ?? (client.config.value as AppConfig | null)?.secondaryModel?.model
     ?? '',
   set: (model) => {
-    // The single-model select IS single-model mode: writing it drops the pool
-    // (official schema: model / models are two different shapes). Effort is
-    // preserved; force only applies without a pool and is kept when present.
-    // defaultModel is spread along so a defaultModel-only config is not
-    // evicted by a single-model write.
+    // 单模型一律写 default_model 键(不再写 legacy model 键:REST deepMerge
+    // 删不掉旧值,但它被优先级压制,无害)。effort 仅在用户显式选过且非空时
+    // 随行写入;force 对单模型仍有效,原样保留。
     const current = (client.config.value as AppConfig | null)?.secondaryModel ?? {};
     void client.updateConfig({
       secondaryModel: model
-        ? { model, defaultModel: current.defaultModel, defaultEffort: secondaryEffort.value || current.defaultEffort, force: current.force }
+        ? {
+            defaultModel: model,
+            force: current.force,
+            ...(effortTouched.value && secondaryEffort.value
+              ? { defaultEffort: secondaryEffort.value }
+              : {}),
+          }
         : { defaultModel: current.defaultModel },
     });
   },
 });
+/** Effort select 词表:'off'/'on' + 当前绑定模型(secondaryModelId 对应
+ *  AppModel)support_efforts 声明的档位;模型未声明/目录未加载时兜底
+ *  low/high/max。词表跟模型走,不写死。 */
+const SECONDARY_EFFORT_FALLBACK = ['low', 'high', 'max'] as const;
+const secondaryEffortOptions = computed<readonly string[]>(() => {
+  const modelId = secondaryModelId.value;
+  const model = modelId
+    ? (client.models.value ?? []).find((m) => m.id === modelId || m.model === modelId)
+    : undefined;
+  const efforts = model?.supportEfforts?.length ? model.supportEfforts : SECONDARY_EFFORT_FALLBACK;
+  return ['off', 'on', ...efforts].filter((value, index, all) => all.indexOf(value) === index);
+});
+/** config 存量值不在词表内(旧值 / 未知档位)时动态补一个回显 option,防
+ *  select 显示空白;用户改选后即回到词表。 */
+const secondaryEffortSelectOptions = computed<readonly string[]>(() => {
+  const value = secondaryEffort.value;
+  return value && !secondaryEffortOptions.value.includes(value)
+    ? [...secondaryEffortOptions.value, value]
+    : secondaryEffortOptions.value;
+});
+function secondaryEffortLabel(option: string): string {
+  if (option === 'off') return '关闭';
+  if (option === 'on') return '自动（模型默认）';
+  return option.charAt(0).toUpperCase() + option.slice(1);
+}
+function onSecondaryEffortChange(): void {
+  effortTouched.value = true;
+  saveSecondaryEffort();
+}
 function saveSecondaryEffort(): void {
   // Effort is mode-independent (default_effort applies to pools too); merge
   // into the current section so whichever mode is active survives untouched.
+  // 此处是用户显式选择,保持显式写(effortTouched 门控只约束其它写点)。
   const current = (client.config.value as AppConfig | null)?.secondaryModel ?? {};
   void client.updateConfig({
     secondaryModel: { ...current, defaultEffort: secondaryEffort.value || undefined },
@@ -302,7 +342,8 @@ const secondaryRoutingSummary = computed(() => {
     return `强制路由：所有子任务一律走次级模型，主 Agent 不再挑选。`;
   }
   if (entries.length === 0) {
-    const single = section?.model ?? section?.defaultModel;
+    // 与 secondaryModelId getter 同序:defaultModel 压制 legacy model。
+    const single = section?.defaultModel ?? section?.model;
     return single
       ? `单模型路由：子任务默认走 ${single}，主 Agent 无可选池。`
       : '未配置次级模型：子任务继承主模型。';
@@ -332,7 +373,6 @@ async function saveSecondaryPool(): Promise<void> {
     // Empty descriptions are legal — the agent then only sees the model id.
     models[entry.model] = entry.description.trim();
   }
-  const current = (client.config.value as AppConfig | null)?.secondaryModel ?? {};
   const hasPool = Object.keys(models).length > 0;
   if (hasPool && !secondaryPoolDefault.value) {
     toast('请在池中选择一个默认模型（子任务派发未指定时的兜底）');
@@ -344,27 +384,57 @@ async function saveSecondaryPool(): Promise<void> {
   }
   secondaryPoolSaving.value = true;
   try {
+    if (!hasPool) {
+      // 官方 POST /config 是 deepMerge:`models:{}` 删不掉池表(REST 无
+      // replace 语义)。清池必须走 shell 直接重写 config.toml。
+      try {
+        await kimiRuntime.clearSecondaryModelPool();
+        toast('模型池已清除（已切回单模型）');
+        await refreshConfigAfterPoolClear();
+      } catch (error) {
+        // 非 Tauri 环境该 invoke 直接抛错 → 引导手动编辑;桌面端的真实
+        // 失败原因原样透出。
+        toast(
+          nativeAvailable && error instanceof Error && error.message
+            ? error.message
+            : '清空模型池需要桌面应用（浏览器模式请手动编辑 config.toml）',
+        );
+      }
+      return;
+    }
     const ok = await client.updateConfig({
-      secondaryModel: hasPool
-        ? {
-            models,
-            defaultModel: secondaryPoolDefault.value,
-            defaultEffort: secondaryEffort.value || current.defaultEffort,
-            // force is mutually exclusive with models — dropped intentionally.
-          }
-        : {
-            model: secondaryModelId.value || current.model,
-            // Keep defaultModel when no model key is written — a pool-less
-            // default_model is a valid official shape and must survive the
-            // "clear pool" save.
-            defaultModel: current.defaultModel,
-            defaultEffort: secondaryEffort.value || current.defaultEffort,
-            force: current.force,
-          },
+      secondaryModel: {
+        models,
+        defaultModel: secondaryPoolDefault.value,
+        // force 与 models 互斥,且并存会导致会话创建失败(官方文档明言)
+        // —— deepMerge 会保留旧键,必须显式写 false 压掉存活的旧 force。
+        force: false,
+        ...(effortTouched.value && secondaryEffort.value
+          ? { defaultEffort: secondaryEffort.value }
+          : {}),
+      },
     });
-    toast(ok ? (hasPool ? '模型池已保存；描述会作为主 Agent 的路由提示' : '已切回单模型模式') : '模型池保存失败');
+    toast(ok ? '模型池已保存；描述会作为主 Agent 的路由提示' : '模型池保存失败');
   } finally {
     secondaryPoolSaving.value = false;
+  }
+}
+/** 清池命令在 shell 侧重写了 config.toml:重新拉取全局配置,让表单与所有
+ *  读 client.config 的 getter 回到清后的状态。探测模式与 refreshConfigAfterRestore
+ *  一致:优先 client.loadConfig(未来版本暴露即自动生效),fallback 直接
+ *  GET /config 后手动同步表单。 */
+async function refreshConfigAfterPoolClear(): Promise<void> {
+  const loader = (client as unknown as { loadConfig?: () => Promise<void> }).loadConfig;
+  if (typeof loader === 'function') {
+    await loader.call(client);
+    return;
+  }
+  try {
+    const fresh = await getKimiWebApi().getConfig();
+    secondaryEffort.value = fresh.secondaryModel?.defaultEffort ?? '';
+    syncSecondaryPoolFromConfig(fresh.secondaryModel?.models);
+  } catch {
+    // Daemon may not expose /config yet; the next Engine restart refreshes it.
   }
 }
 async function setSecondaryForce(force: boolean): Promise<void> {
@@ -376,18 +446,16 @@ async function setSecondaryForce(force: boolean): Promise<void> {
     return;
   }
   const current = (client.config.value as AppConfig | null)?.secondaryModel ?? {};
-  if (force && !current.model && !current.defaultModel) {
+  // 单模型一律写 default_model 键(与读优先级同序:defaultModel 压制
+  // legacy model;官方 force 本就要求 default_model)。
+  const single = current.defaultModel ?? current.model;
+  if (force && !single) {
     // Official rule: default_model is required when force is set.
     toast('开启强制路由前请先选择默认模型');
     return;
   }
-  // Keep the key the config actually uses: `model` for the legacy
-  // single-model shape, `default_model` otherwise (official force requires
-  // default_model).
   const ok = await client.updateConfig({
-    secondaryModel: current.model
-      ? { model: current.model, defaultEffort: current.defaultEffort, force }
-      : { defaultModel: current.defaultModel, defaultEffort: current.defaultEffort, force },
+    secondaryModel: { defaultModel: single, defaultEffort: current.defaultEffort, force },
   });
   if (!ok) toast('强制路由保存失败');
 }
@@ -633,10 +701,17 @@ async function saveToolGating(): Promise<void> {
   try {
     const enabled = splitToolList(toolGatingEnabled.value);
     const disabled = splitToolList(toolGatingDisabled.value);
+    // 捕获旧值要在写之前：updateConfig 的回包会立刻替换 client.config。
+    const previous = (client.config.value as AppConfig | null)?.tools;
+    const hadGating =
+      (previous?.enabled?.length ?? 0) > 0 || (previous?.disabled?.length ?? 0) > 0;
+    // 官方 POST /config 是 deepMerge：空数组会整体替换（= 官方 evaluate 的
+    // 「不限制」），所以清空列表必须显式发 []，不能省略键 —— 省略会保留旧值。
     const ok = await client.updateConfig({
-      tools: { enabled: enabled.length ? enabled : undefined, disabled: disabled.length ? disabled : undefined },
+      tools: { enabled, disabled },
     });
-    toast(ok ? '工具门控已保存；新会话生效' : '工具门控保存失败');
+    const cleared = enabled.length === 0 && disabled.length === 0 && hadGating;
+    toast(!ok ? '工具门控保存失败' : cleared ? '工具门控已清除（不再限制）；新会话生效' : '工具门控已保存；新会话生效');
   } finally {
     toolGatingSaving.value = false;
   }
@@ -904,6 +979,8 @@ const archiveAllVisibleSelected = computed(() =>
 const backupBusy = ref(false);
 const backupInfo = ref<KimiBackupInfo | null>(null);
 const restoreArmed = ref(false);
+/** 恢复备份后的一站式提示：环境实验文件已随备份恢复，需重启 Engine。 */
+const restoreNotice = ref('');
 const orphanScan = ref<OrphanSessionScanResult | null>(null);
 const orphanDetecting = ref(false);
 const orphanCleaning = ref(false);
@@ -1083,6 +1160,7 @@ async function exportSettingsBackup(): Promise<void> {
     if (!destination) return;
     backupInfo.value = await kimiRuntime.createSettingsBackup(destination);
     restoreArmed.value = false;
+    restoreNotice.value = '';
     toast(`已备份 ${backupInfo.value.files} 个文件`);
   } catch (error) {
     toast(error instanceof Error ? error.message : '设置备份失败');
@@ -1103,6 +1181,7 @@ async function inspectSettingsBackup(): Promise<void> {
     if (typeof selected !== 'string' || !selected) return;
     backupInfo.value = await kimiRuntime.inspectSettingsBackup(selected);
     restoreArmed.value = false;
+    restoreNotice.value = '';
     toast('备份预检通过，请核对内容后恢复');
   } catch (error) {
     backupInfo.value = null;
@@ -1130,7 +1209,7 @@ async function refreshConfigAfterRestore(): Promise<void> {
   try {
     const fresh = await getKimiWebApi().getConfig();
     loadControlConfig(fresh);
-    if (fresh.secondaryModel?.defaultEffort) secondaryEffort.value = fresh.secondaryModel.defaultEffort;
+    secondaryEffort.value = fresh.secondaryModel?.defaultEffort ?? '';
     syncSecondaryPoolFromConfig(fresh.secondaryModel?.models);
   } catch {
     // Daemon may not expose /config yet; the next Engine restart refreshes it.
@@ -1148,6 +1227,12 @@ async function restoreSettingsBackup(): Promise<void> {
     backupInfo.value = restored;
     restoreArmed.value = false;
     toast(`已恢复 ${restored.files} 个文件；原设置已保存安全快照`);
+    // 备份包含 kimi-gui-experiments.json：环境实验开关已随备份落盘，但只影响
+    // GUI 之后启动的 daemon 进程 —— 提示重启，并重读表单以反映恢复后的开关。
+    if (nativeAvailable) {
+      restoreNotice.value = '环境实验开关（kimi-gui-experiments.json）已随备份恢复，重启 Engine 后生效';
+      await loadEngineEnvExperiments();
+    }
     await refreshConfigAfterRestore();
   } catch (error) {
     restoreArmed.value = false;
@@ -1364,10 +1449,9 @@ watch(() => props.initialSection, (section) => { active.value = section; });
                   <option value="">{{ secondaryPoolConfigured ? '使用模型池（主 Agent 按路由描述挑选）' : '继承主模型' }}</option>
                   <option v-for="m in modelOptions" :key="m.id" :value="m.id">{{ m.name }}<template v-if="m.provider">（{{ m.provider }}）</template></option>
                 </select>
-                <select v-model="secondaryEffort" class="control compact" aria-label="次级模型思考强度" :disabled="!secondaryModelExperimentEnabled || (!secondaryModelId && !secondaryPoolConfigured)" @change="saveSecondaryEffort">
-                  <option value="low">Low</option>
-                  <option value="high">High</option>
-                  <option value="max">Max</option>
+                <select v-model="secondaryEffort" class="control compact" aria-label="次级模型思考强度" :disabled="!secondaryModelExperimentEnabled || (!secondaryModelId && !secondaryPoolConfigured)" @change="onSecondaryEffortChange">
+                  <option value="">未设置（跟随模型默认）</option>
+                  <option v-for="opt in secondaryEffortSelectOptions" :key="opt" :value="opt">{{ secondaryEffortLabel(opt) }}</option>
                 </select>
               </div>
             </div>
@@ -1441,10 +1525,10 @@ watch(() => props.initialSection, (section) => { active.value = section; });
             <div class="setting-row top-aligned">
               <div class="setting-info">
                 <div class="setting-label">自定义 Agent 目录</div>
-                <div class="setting-desc">Kimi Code 0.34+：扫描带 frontmatter 的 Markdown Agent 文件（可作主 Agent 或子 Agent）；逗号分隔的绝对目录。</div>
+                <div class="setting-desc">Kimi Code 0.34+：扫描带 frontmatter 的 Markdown Agent 文件（可作主 Agent 或子 Agent）；frontmatter 需含非空 description。</div>
               </div>
               <div class="setting-control wide-control">
-                <input v-model="extraAgentDirs" class="control" placeholder="例如 /Users/me/agents, /team/shared-agents" />
+                <input v-model="extraAgentDirs" class="control" placeholder="绝对目录或 ~/ 路径，逗号分隔；相对路径相对项目根解析；目录递归扫描 .md（深度上限 8）" />
                 <button class="btn" :disabled="extraAgentDirsSaving" @click="saveExtraAgentDirs">{{ extraAgentDirsSaving ? '保存中…' : '保存目录' }}</button>
               </div>
             </div>
@@ -1696,15 +1780,15 @@ watch(() => props.initialSection, (section) => { active.value = section; });
               <div class="settings-button-row"><button class="btn primary" @click="savePermissionRules">保存权限规则</button></div>
             </div>
               <div v-else class="archive-empty">未配置细粒度规则</div>
-            <div class="settings-subhead"><div><strong>工具门控</strong><span>Kimi Code 0.34+ 全局 `[tools]` 配置：限定 agent 可用的工具，会话可覆盖；逗号分隔工具名。</span></div></div>
+            <div class="settings-subhead"><div><strong>工具门控</strong><span>Kimi Code 0.34+ 全局 `[tools]` 配置：限定 agent 可用的工具，会话可覆盖；逗号分隔工具名。通配符仅对 <code>mcp__*</code> 工具生效；同一工具同时命中允许与禁用列表时禁用优先。</span></div></div>
             <div class="rule-list">
               <div class="rule-row">
                 <span class="pill" style="align-self:center">允许</span>
-                <input v-model="toolGatingEnabled" class="control rule-pattern" placeholder="enabled，例如 Read, Grep, Glob；留空 = 不限制" />
+                <input v-model="toolGatingEnabled" class="control rule-pattern" placeholder="enabled，例如 Read, Grep, mcp__github__*；留空并保存 = 清除（不限制）" />
               </div>
               <div class="rule-row">
                 <span class="pill" style="align-self:center">禁用</span>
-                <input v-model="toolGatingDisabled" class="control rule-pattern" placeholder="disabled，例如 Bash, Write；留空 = 不禁用" />
+                <input v-model="toolGatingDisabled" class="control rule-pattern" placeholder="disabled，例如 Bash, Write；留空并保存 = 清除（不禁用）" />
               </div>
               <div class="settings-button-row"><span class="setting-desc">{{ controlConfigReady ? '工具名见下方「当前会话工具」列表。' : '正在等待全局配置加载，暂不能保存。' }}</span><button class="btn primary" :disabled="toolGatingSaving || !controlConfigReady" @click="saveToolGating">{{ toolGatingSaving ? '保存中…' : '保存工具门控' }}</button></div>
             </div>
@@ -1852,6 +1936,7 @@ watch(() => props.initialSection, (section) => { active.value = section; });
                 <summary>查看备份清单</summary>
                 <code v-for="entry in backupInfo.entries" :key="entry">{{ entry }}</code>
               </details>
+              <div v-if="restoreNotice" class="settings-callout">{{ restoreNotice }}</div>
               <div v-if="backupInfo.safetySnapshotPath" class="settings-callout subtle">恢复完成。原设置安全快照：<code>{{ backupInfo.safetySnapshotPath }}</code></div>
               <div v-else class="settings-button-row restore-actions">
                 <button class="btn" @click="backupInfo = null; restoreArmed = false">取消</button>
@@ -1996,7 +2081,7 @@ watch(() => props.initialSection, (section) => { active.value = section; });
             <div class="settings-callout subtle">GUI 启动的 Kimi Engine 会启用次级模型实验；外部 daemon 的能力以这里显示的运行时开关为准。</div>
 
             <div class="setting-row top-aligned">
-              <div class="setting-info"><div class="setting-label">Engine 环境实验</div><div class="setting-desc">通过环境变量开启的实验能力（Kimi Code 0.39+），保存后需重启 Engine 生效。</div></div>
+              <div class="setting-info"><div class="setting-label">Engine 环境实验</div><div class="setting-desc">通过环境变量开启的实验能力（Kimi Code 0.39+）：环境变量优先级最高且仅 GUI 注入可控，config <code>[experimental]</code> 亦可开启但需重启 Engine。</div></div>
               <div class="setting-control"><span class="pill">{{ engineEnvExperiments.filter((e) => e.enabled).length }}/{{ engineEnvExperiments.length }} 开启</span></div>
             </div>
             <div class="experiment-grid">

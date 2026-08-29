@@ -72,6 +72,7 @@ const ICONS: Record<string, IconDef> = {
   spinner: { body: '<path d="M12 3a9 9 0 1 0 9 9"/>', sw: 2.4 },
   user: { body: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/>' },
   'chevron-up': { body: '<path d="M18 15l-6-6-6 6"/>' },
+  'refresh-cw': { body: '<path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>' },
 };
 
 const props = withDefaults(defineProps<{ name: string; size?: 'sm' | 'md' | 'lg' }>(), {

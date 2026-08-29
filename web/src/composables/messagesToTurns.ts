@@ -756,6 +756,17 @@ export function messagesToTurns(
       // Kimi Code 0.39+: session-owned canonical copy — the render endpoint is
       // per-session, NOT the transient /files store (folding the two broke
       // images after the upload expired).
+      //
+      // ⚠ id-domain split (follow-up wiring): the fileId emitted here is
+      // SESSION-domain (GET /sessions/{sid}/media/{fid}), while the render
+      // chain AuthMedia → getFileBlob(fileId) always resolves upload-store
+      // ids against GET /files/{id} — which never falls back to session media
+      // (404). Authenticated playback must call
+      // getKimiWebApi().getSessionMediaBlob(sid, fileId) (client.ts exposes it
+      // since 0.39 sync) instead. AuthMedia/AttachmentChip are locked
+      // official files with no session-scope hook, so UI wiring is deferred;
+      // this branch keeps URL+fileId so the future consumer can split by
+      // source kind. See .upstream/PATCHES.md (session_media blob channel).
       if (src.kind === 'session_media') {
         const url = sessionMediaUrl(sid, src.fileId);
         return url === undefined ? undefined : { url, kind, fileId: src.fileId };

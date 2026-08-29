@@ -731,6 +731,83 @@ pub fn migrate_kimi_033_config() -> Result<Kimi033MigrationResult, String> {
     })
 }
 
+/// 识别 TOML 段头(`[a.b]` / `[[a.b]]`)并返回段路径;非段头行返回 None。
+/// 与本文件既有 TOML 手术(loop_control 迁移)一致,按行做前缀判断。
+fn toml_section_path(line: &str) -> Option<&str> {
+    let trimmed = line.trim();
+    let inner = if let Some(rest) = trimmed.strip_prefix("[[") {
+        rest.strip_suffix("]]")?
+    } else {
+        trimmed.strip_prefix('[')?.strip_suffix(']')?
+    };
+    let inner = inner.trim();
+    (!inner.is_empty()).then_some(inner)
+}
+
+fn is_secondary_models_section(path: &str) -> bool {
+    path == "secondary_model.models" || path.starts_with("secondary_model.models.")
+}
+
+/// 从 config.toml 文本中删除 `[secondary_model.models]` 整个嵌套表(含子表),
+/// `[secondary_model]` 主段与其余内容逐字节保留。
+/// 返回 (新文本, 是否发生了修改);无该段时原样返回(幂等)。
+fn strip_secondary_model_models(content: &str) -> (String, bool) {
+    let mut output = String::with_capacity(content.len());
+    let mut skipping = false;
+    let mut changed = false;
+    for chunk in content.split_inclusive('\n') {
+        let (line, newline) = chunk
+            .strip_suffix('\n')
+            .map(|line| (line, "\n"))
+            .unwrap_or((chunk, ""));
+        if let Some(path) = toml_section_path(line) {
+            skipping = is_secondary_models_section(path);
+            if skipping {
+                changed = true;
+                continue;
+            }
+        }
+        if skipping {
+            continue;
+        }
+        output.push_str(line);
+        output.push_str(newline);
+    }
+    (output, changed)
+}
+
+fn clear_secondary_model_pool_in_home(home: &Path) -> Result<bool, String> {
+    let path = home.join("config.toml");
+    if !path.exists() {
+        return Ok(false);
+    }
+    let content = fs::read_to_string(&path).map_err(|e| format!("读取 config.toml 失败: {e}"))?;
+    if content.len() > 4 * 1024 * 1024 {
+        return Err("config.toml 超过 4 MiB，拒绝自动清理".to_string());
+    }
+    let (output, changed) = strip_secondary_model_models(&content);
+    if !changed {
+        return Ok(false);
+    }
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_secs();
+    let backup = path.with_file_name(format!("config.toml.pre-clear-pool-{stamp}.bak"));
+    fs::copy(&path, &backup).map_err(|e| format!("创建 config 备份失败: {e}"))?;
+    atomic_write(&path, &output)?;
+    Ok(true)
+}
+
+/// 清空副模型池:直接编辑 ~/.kimi-code/config.toml,删除 `[secondary_model.models]`
+/// 嵌套表,保留 `[secondary_model]` 段的 default_model/model/default_effort/force
+/// 等键与文件其余内容。官方 daemon 的 POST /config 是 deepMerge 语义,REST 无法
+/// 删除该键,只能由 GUI 做本地文本手术;写回前同目录留 .bak 备份,幂等可重入。
+#[tauri::command]
+pub fn clear_secondary_model_pool() -> Result<(), String> {
+    clear_secondary_model_pool_in_home(&kimi_home()).map(|_| ())
+}
+
 fn parse_list(value: &str) -> Vec<String> {
     let trimmed = value.trim();
     if trimmed == "[]" || trimmed.is_empty() {
@@ -1880,10 +1957,11 @@ pub async fn run_kimi_maintenance(
 #[cfg(test)]
 mod tests {
     use super::{
-        backup_entry_allowed, cleanup_orphan_session_in_home, delete_archived_session_in_home,
-        detect_orphan_sessions_in_home, migrate_loop_control_config, read_performance_config_from,
-        rename_loop_control_key, save_performance_config_to, valid_http_url, valid_provider_id,
-        validate_performance_config, KimiPerformanceConfig,
+        backup_entry_allowed, cleanup_orphan_session_in_home, clear_secondary_model_pool_in_home,
+        delete_archived_session_in_home, detect_orphan_sessions_in_home,
+        migrate_loop_control_config, read_performance_config_from, rename_loop_control_key,
+        save_performance_config_to, strip_secondary_model_models, valid_http_url,
+        valid_provider_id, validate_performance_config, KimiPerformanceConfig,
     };
     use std::{fs, path::Path, time::SystemTime};
 
@@ -2139,5 +2217,113 @@ mod tests {
         assert!(validate_performance_config(&value)
             .expect_err("must reject")
             .contains("max_running_tasks"));
+    }
+
+    #[test]
+    fn clear_pool_surgery_removes_only_models_table() {
+        let input = "# Kimi Code 配置\n\
+                     theme = \"dark\"\n\
+                     \n\
+                     [secondary_model]\n\
+                     default_model = \"opencode-go/deepseek-v4-flash\"\n\
+                     model = \"volcengine-coding-plan/deepseek-v4-flash\"\n\
+                     default_effort = \"on\"\n\
+                     \n\
+                     [secondary_model.models]\n\
+                     \"opencode-go/deepseek-v4-flash\" = \"日常主力\"\n\
+                     \"kimi-code/k3\" = \"难题攻坚\"\n\
+                     \n\
+                     [secondary_model.models.legacy]\n\
+                     alias = \"nested-entry\"\n\
+                     \n\
+                     [loop_control]\n\
+                     max_attempts_per_step = 8\n";
+        let expected = "# Kimi Code 配置\n\
+                        theme = \"dark\"\n\
+                        \n\
+                        [secondary_model]\n\
+                        default_model = \"opencode-go/deepseek-v4-flash\"\n\
+                        model = \"volcengine-coding-plan/deepseek-v4-flash\"\n\
+                        default_effort = \"on\"\n\
+                        \n\
+                        [loop_control]\n\
+                        max_attempts_per_step = 8\n";
+        let (output, changed) = strip_secondary_model_models(input);
+        assert!(changed);
+        assert_eq!(output, expected);
+    }
+
+    #[test]
+    fn clear_pool_surgery_is_idempotent_and_keeps_similar_names() {
+        let input = "[secondary_model]\ndefault_model = \"a\"\n\n[secondary_model.models_extra]\nkeep = 1 # 注释里的 [secondary_model.models] 不算段头\n";
+        let (output, changed) = strip_secondary_model_models(input);
+        assert!(!changed);
+        assert_eq!(output, input);
+
+        let plain = "[loop_control]\nmax_attempts_per_step = 8\n";
+        let (output, changed) = strip_secondary_model_models(plain);
+        assert!(!changed);
+        assert_eq!(output, plain);
+
+        // [[secondary_model.models]] 数组表同样删除;无尾随换行的最后一行不受影响
+        let array_input = "[[secondary_model.models]]\nalias = \"x\"\n\n[other]\nkey = \"value\"";
+        let (output, changed) = strip_secondary_model_models(array_input);
+        assert!(changed);
+        assert_eq!(output, "[other]\nkey = \"value\"");
+    }
+
+    #[test]
+    fn clear_pool_in_home_creates_backup_and_is_idempotent() {
+        let home = temp_kimi_home("clear-pool");
+        fs::create_dir_all(&home).expect("create home");
+        assert!(!clear_secondary_model_pool_in_home(&home).expect("missing config is ok"));
+
+        let original = "[secondary_model]\ndefault_model = \"kimi-k2\"\nforce = false\n\n[secondary_model.models]\n\"kimi-k2\" = \"主力\"\n\n[mcp]\nstartup_timeout_ms = 30000\n";
+        fs::write(home.join("config.toml"), original).expect("write config");
+
+        assert!(clear_secondary_model_pool_in_home(&home).expect("clear pool"));
+        let after = fs::read_to_string(home.join("config.toml")).expect("read config");
+        assert_eq!(
+            after,
+            "[secondary_model]\ndefault_model = \"kimi-k2\"\nforce = false\n\n[mcp]\nstartup_timeout_ms = 30000\n"
+        );
+        let parsed: toml::Value = after.parse().expect("valid TOML after surgery");
+        let secondary = parsed.get("secondary_model").expect("secondary_model kept");
+        assert!(secondary.get("models").is_none());
+        assert_eq!(
+            secondary.get("default_model").and_then(toml::Value::as_str),
+            Some("kimi-k2")
+        );
+
+        let backups: Vec<_> = fs::read_dir(&home)
+            .expect("read home")
+            .flatten()
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.extension().and_then(|ext| ext.to_str()) == Some("bak")
+                    && path
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .is_some_and(|name| name.starts_with("config.toml.pre-clear-pool-"))
+            })
+            .collect();
+        assert_eq!(
+            backups.len(),
+            1,
+            "exactly one .bak backup next to config.toml"
+        );
+        assert_eq!(
+            fs::read_to_string(&backups[0]).expect("read backup"),
+            original,
+            "backup keeps the pre-surgery content"
+        );
+
+        assert!(!clear_secondary_model_pool_in_home(&home).expect("second clear"));
+        assert_eq!(
+            fs::read_to_string(home.join("config.toml")).expect("read config again"),
+            after
+        );
+
+        fs::remove_dir_all(&home).expect("remove isolated test home");
     }
 }

@@ -23,6 +23,11 @@ interface ResolveSubagentModelInput {
   subagentType?: string;
   profiles?: readonly SubagentModelProfile[];
   primaryModelId?: string;
+  /** The RESOLVED single secondary-model id, following the official read
+   *  priority (0.39.1 resolveSubagentModelPool): pool > default_model >
+   *  legacy `model` — callers pass `defaultModel ?? model`. Pools and `force`
+   *  are not representable here; the caller must classify those before
+   *  dropping to this inference. */
   secondaryModelId?: string;
 }
 
@@ -51,6 +56,12 @@ function parseToolArg(arg: string | undefined): Record<string, unknown> | undefi
  * returns an `inferred` result. The order mirrors the runtime: an explicit
  * Agent/AgentSwarm `model` choice, then the selected agent profile, then the
  * configured secondary model (the runtime default), otherwise the main model.
+ *
+ * `secondaryModelId` carries the officially-resolved id (`default_model` has
+ * priority over the legacy `model` key; a present id means single-model mode
+ * is active). This is the v1 legacy fallback: `force` and pool membership are
+ * classified by the CALLER (CodexApp.subagentModelResolution) before falling
+ * through to this inference.
  */
 export function resolveSubagentModel(input: ResolveSubagentModelInput): SubagentModelResolution {
   const args = parseToolArg(input.parentTool?.arg);

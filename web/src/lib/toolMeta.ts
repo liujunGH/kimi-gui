@@ -29,6 +29,10 @@ const TOOL_LABEL_KEYS: Record<string, string> = {
   getgoal: 'tools.label.goal_get',
   setgoalbudget: 'tools.label.goal_budget',
   updategoal: 'tools.label.goal_update',
+  // NOTE: WaitFor (Kimi Code 0.38+) has NO entry here on purpose — its i18n
+  // key `tools.label.wait_for` does not exist in the locked locale files, and
+  // toolLabel's fallback renders the original name ('WaitFor'), which is
+  // acceptable. Registering a missing key would surface the raw key string.
 };
 
 // ---------------------------------------------------------------------------
@@ -68,6 +72,7 @@ const NAME_ALIASES: Record<string, string> = {
   get_goal: 'getgoal',
   set_goal_budget: 'setgoalbudget',
   update_goal: 'updategoal',
+  wait_for: 'waitfor',
 };
 
 export function normalizeToolName(name: string): string {
@@ -109,6 +114,8 @@ const TOOL_GLYPH: Record<string, IconName> = {
   croncreate: 'calendar-schedule',
   cronlist: 'calendar-todo',
   crondelete: 'calendar-close',
+  // Kimi Code 0.38+ WaitFor blocks on background tasks — a clock reads best.
+  waitfor: 'clock',
 };
 
 export function toolGlyph(name: string): string {
@@ -322,6 +329,16 @@ export function toolSummary(name: string, arg: string, full = false): string {
         if (full) return fallback();
         const status = goalStatusLabel(d.status);
         return status ? c(t('tools.goal.status', { status })) : fallback();
+      }
+      case 'waitfor': {
+        // Kimi Code 0.38+ WaitFor: { task_id?, timeout } (timeout in seconds;
+        // no task_id waits for ANY background task). Locale-neutral on
+        // purpose — no i18n key exists for this tool (locked layer).
+        const taskId = str(d.task_id) ?? str(d.taskId);
+        const timeout = num(d.timeout) ?? num(d.timeout_seconds);
+        if (taskId !== undefined && timeout !== undefined) return c(`#${taskId} · ${timeout}s`);
+        if (taskId !== undefined) return c(`#${taskId}`);
+        return timeout !== undefined ? c(`${timeout}s`) : fallback();
       }
       default:
         return fallback();

@@ -24,6 +24,7 @@ import type {
   AppMessageContent,
   AppSessionUsage,
   AppTask,
+  AppTaskStatus,
 } from '../types';
 import { i18n } from '../../i18n';
 import { toolLabel, toolSummary } from '../../lib/toolMeta';
@@ -441,6 +442,18 @@ function appendToolUse(
   msg.content.push({ type: 'toolUse', toolCallId, toolName, input, outputLines });
 }
 
+/**
+ * Prefix marking a toolOutput AppEvent whose chunk must REPLACE the tool
+ * call's last progress line instead of appending. Kimi Code 0.38+ WaitFor
+ * emits `kind:'status'` + `replace:true` roughly every second — plain
+ * appends would pile up one tick line per second inside the tool card. The
+ * AppEvent union lives in the locked protocol types and has no replace
+ * field, so the flag rides the chunk itself; the reducer strips the marker
+ * and swaps the last line. A NUL-led ASCII word cannot occur in real tool
+ * output. Backwards compatible: chunks without the marker append as before.
+ */
+export const TOOL_OUTPUT_REPLACE_PREFIX = '\u0000replace:';
+
 function toolProgressOutput(payload: Record<string, unknown>): { outputChunk: string; stream: 'stdout' | 'stderr' } | null {
   const update = payload['update'];
   const updateRecord = update && typeof update === 'object' ? update as Record<string, unknown> : null;
@@ -470,7 +483,11 @@ function toolProgressOutput(payload: Record<string, unknown>): { outputChunk: st
     (typeof payload['output'] === 'string' && payload['output']) ||
     (typeof payload['message'] === 'string' && payload['message']) ||
     '';
-  return chunk.length > 0 ? { outputChunk: chunk, stream } : null;
+  if (chunk.length === 0) return null;
+  // WaitFor-style ticks ask to replace the previous status line in place.
+  return updateRecord?.['replace'] === true
+    ? { outputChunk: TOOL_OUTPUT_REPLACE_PREFIX + chunk, stream }
+    : { outputChunk: chunk, stream };
 }
 
 function mcpOAuthAuthorizationRequest(payload: Record<string, unknown>): { url: string; label: string } | null {
@@ -1354,6 +1371,10 @@ export function createAgentProjector(): AgentProjector {
           }
           break;
         }
+        // Official REST maps question-kind registrations to `tool` rows;
+        // mirror that here so the WS row and a later REST poll dedupe on the
+        // same (id, kind) instead of showing the same job twice.
+        const kind: AppTask['kind'] = info.kind === 'question' ? 'tool' : 'bash';
         const command = typeof info.command === 'string' ? info.command : undefined;
         out.push({
           type: 'taskCreated',
@@ -1361,7 +1382,7 @@ export function createAgentProjector(): AgentProjector {
           task: {
             id: taskId,
             sessionId,
-            kind: 'bash',
+            kind,
             description,
             command,
             status: 'running',
@@ -1374,9 +1395,24 @@ export function createAgentProjector(): AgentProjector {
       }
       case 'task.terminated': {
         const info = (p?.info ?? {}) as Record<string, unknown>;
+        // Official 0.39.1 WS terminal vocabulary: completed | failed | killed
+        // | timed_out | lost (the REST layer folds killed→cancelled and
+        // timed_out/lost→failed). Map the same way here so WS-driven rows
+        // agree with polled ones. The exitCode heuristic is preserved for
+        // statusless frames, but an explicit killed/cancelled word wins over
+        // a non-zero exit code (killed processes normally exit 137/143).
+        const rawStatus = typeof info.status === 'string' ? info.status : undefined;
         const failed =
-          info.status === 'failed' ||
+          rawStatus === 'failed' ||
+          rawStatus === 'timed_out' ||
+          rawStatus === 'lost' ||
           (typeof info.exitCode === 'number' && info.exitCode !== 0);
+        const status: AppTaskStatus =
+          rawStatus === 'killed' || rawStatus === 'cancelled'
+            ? 'cancelled'
+            : failed
+              ? 'failed'
+              : 'completed';
         out.push({
           type: 'taskCompleted',
           sessionId,
@@ -1386,7 +1422,7 @@ export function createAgentProjector(): AgentProjector {
               : typeof info.taskId === 'number'
                 ? String(info.taskId)
                 : '',
-          status: failed ? 'failed' : 'completed',
+          status,
           // Do NOT set outputPreview here. The command is already kept on the
           // task as `command`; setting outputPreview to `$ <command>` would
           // clobber any real output captured by polling and prevents the UI

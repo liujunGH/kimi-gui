@@ -812,11 +812,17 @@ onUnmounted(() => {
   clearInterval(planUsageTimer);
 });
 
-// thinking effort 映射:daemon 实际支持('off'|'low'|'high'|'max')
-// → 契约 EffortLevel('Low'|'High'|'Max')
+// thinking effort 映射:daemon 词表 = 'off' | 'on' | 模型 support_efforts 声明
+// 档位;'on' = 模型默认档(不再冒充 Max),显示「自动（模型默认）」;'off' 显
+// 示「关闭」。EffortLevel 联合('Low'|'High'|'Max')尚未收录这两个语义标签,
+// 以展示值直传(Composer/ContextMeter 原样渲染徽标文案,不经档位运算)。
+const AUTO_EFFORT_LABEL = '自动（模型默认）' as unknown as EffortLevel;
+const OFF_EFFORT_LABEL = '关闭' as unknown as EffortLevel;
 const composerEffort = computed<EffortLevel | null>(() => {
   const t = client.thinking.value;
-  if (!t || t === 'off' || t === 'none' || t === 'minimal') return null;
+  if (!t) return null;
+  if (t === 'off' || t === 'none' || t === 'minimal') return OFF_EFFORT_LABEL;
+  if (t === 'on') return AUTO_EFFORT_LABEL;
   if (t === 'low' || t === 'medium') return 'Low';
   if (t === 'high') return 'High';
   return 'Max'; // max
@@ -834,31 +840,43 @@ const parentAgentToolsById = computed<Map<string, ToolCall>>(() => {
   return tools;
 });
 
+/** daemon 上报的模型 id 与 config 存储值可能差一个 provider 前缀,双向容错。 */
+function sameModelId(a?: string, b?: string): boolean {
+  if (!a || !b) return false;
+  return a === b || a.endsWith(`/${b}`) || b.endsWith(`/${a}`);
+}
+
 function subagentModelResolution(task: TaskItem): SubagentModelResolution {
   const config = client.config.value as AppConfig | null;
+  // Official read priority (0.39.1 resolveSubagentModelPool): models pool >
+  // default_model > legacy `model` —— 并存时 default_model 压制 model。
+  const secondaryId = config?.secondaryModel?.defaultModel ?? config?.secondaryModel?.model;
+  const primaryId = client.status.value?.modelId;
+  const infer = (): SubagentModelResolution =>
+    resolveSubagentModel({
+      parentTool: task.parentToolCallId ? parentAgentToolsById.value.get(task.parentToolCallId) : undefined,
+      swarmIndex: task.swarmIndex,
+      subagentType: task.subagentType,
+      profiles: agentProfiles.value,
+      primaryModelId: primaryId || undefined,
+      secondaryModelId: secondaryId,
+    });
   if (task.model && task.modelSource === 'runtime') {
-    const secondaryId = config?.secondaryModel?.model;
-    return {
-      route: secondaryId && (
-        task.model === secondaryId ||
-        task.model.endsWith(`/${secondaryId}`) ||
-        secondaryId.endsWith(`/${task.model}`)
-      )
-        ? 'secondary'
-        : 'primary',
-      modelId: task.model,
-      basis: 'runtime',
-      inferred: false,
-    };
+    // Official routing: force → 一律 secondary;池成员(Object.keys(models))
+    // 或等于次级模型 id → secondary;等于主模型 id → primary;其余(配置在
+    // spawn 后已变更 / 外来 id)无法用当前 config 分类 → 交给推断,但 runtime
+    // 上报的模型 id 仍为准(只推断路由,不覆盖模型)。
+    const poolIds = Object.keys(config?.secondaryModel?.models ?? {});
+    let route: 'primary' | 'secondary' | undefined;
+    if (config?.secondaryModel?.force === true) route = 'secondary';
+    else if (poolIds.includes(task.model) || sameModelId(task.model, secondaryId)) route = 'secondary';
+    else if (sameModelId(task.model, primaryId)) route = 'primary';
+    if (route) {
+      return { route, modelId: task.model, basis: 'runtime', inferred: false };
+    }
+    return { ...infer(), modelId: task.model };
   }
-  return resolveSubagentModel({
-    parentTool: task.parentToolCallId ? parentAgentToolsById.value.get(task.parentToolCallId) : undefined,
-    swarmIndex: task.swarmIndex,
-    subagentType: task.subagentType,
-    profiles: agentProfiles.value,
-    primaryModelId: client.status.value?.modelId || undefined,
-    secondaryModelId: config?.secondaryModel?.model,
-  });
+  return infer();
 }
 
 function subagentModelName(modelId: string | undefined): string {

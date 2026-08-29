@@ -467,6 +467,7 @@ export class DaemonKimiWebApi implements KimiWebApi {
     if (configured?.permissionMode !== undefined) agentConfig['permission_mode'] = configured.permissionMode;
     if (configured?.planMode !== undefined) agentConfig['plan_mode'] = configured.planMode;
     if (configured?.swarmMode !== undefined) agentConfig['swarm_mode'] = configured.swarmMode;
+    if (configured?.towerMode !== undefined) agentConfig['tower_mode'] = configured.towerMode;
     if (Object.keys(agentConfig).length > 0) body['agent_config'] = agentConfig;
     const data = await this.http.post<WireSession>('/sessions', body);
     return toAppSession(data);
@@ -496,6 +497,7 @@ export class DaemonKimiWebApi implements KimiWebApi {
       permissionMode?: string;
       planMode?: boolean;
       swarmMode?: boolean;
+      towerMode?: boolean;
       goalObjective?: string;
       goalControl?: 'pause' | 'resume' | 'cancel';
       thinking?: string;
@@ -509,6 +511,10 @@ export class DaemonKimiWebApi implements KimiWebApi {
     if (input.permissionMode !== undefined) agentConfig['permission_mode'] = input.permissionMode;
     if (input.planMode !== undefined) agentConfig['plan_mode'] = input.planMode;
     if (input.swarmMode !== undefined) agentConfig['swarm_mode'] = input.swarmMode;
+    // Kimi Code 0.39+: same POST /sessions/{id}/profile agent_config family as
+    // swarm_mode — the REST write surface for the experimental tower mode
+    // (entering it is still /tower's job; this only flips the profile flag).
+    if (input.towerMode !== undefined) agentConfig['tower_mode'] = input.towerMode;
     if (input.goalObjective !== undefined) agentConfig['goal_objective'] = input.goalObjective;
     if (input.goalControl !== undefined) agentConfig['goal_control'] = input.goalControl;
     if (input.thinking !== undefined) agentConfig['thinking'] = input.thinking;
@@ -1101,20 +1107,24 @@ export class DaemonKimiWebApi implements KimiWebApi {
     };
   }
 
-  /** Kimi Code 0.37+ POST /fs/suggest — fuzzy path suggestion for @-menus.
-   *  Lighter than fs:search (scored fuzzy matching server-side). */
+  /** Kimi Code 0.37+ fuzzy path suggestion for @-menus — lighter than
+   *  fs:search (scored fuzzy matching server-side). Official routes are
+   *  POST /workspace/fs:suggest (body carries `workspace` — the workspace id
+   *  or absolute root, spot-registering it) and POST /fs:suggest (body carries
+   *  `roots` [1-32 absolute paths] + runtime_id). There is NO session-level
+   *  suggest; the workspace route is the per-project surface the GUI needs. */
   async suggestFiles(
-    sessionId: string,
+    workspace: string,
     input: { query: string; limit?: number; followGitignore?: boolean; showHidden?: boolean; includeGlobs?: string[]; excludeGlobs?: string[] },
   ): Promise<{ items: Array<{ path: string; name: string; kind: 'file' | 'directory' | 'symlink'; score: number; matchPositions: number[] }>; truncated: boolean }> {
-    const body: Record<string, unknown> = { query: input.query };
+    const body: Record<string, unknown> = { workspace, query: input.query };
     if (input.limit !== undefined) body['limit'] = input.limit;
     if (input.followGitignore !== undefined) body['follow_gitignore'] = input.followGitignore;
     if (input.showHidden !== undefined) body['show_hidden'] = input.showHidden;
     if (input.includeGlobs !== undefined) body['include_globs'] = input.includeGlobs;
     if (input.excludeGlobs !== undefined) body['exclude_globs'] = input.excludeGlobs;
     const data = await this.http.post<{ items: WireFsSuggestItem[]; truncated: boolean }>(
-      `/sessions/${encodeURIComponent(sessionId)}/fs:suggest`,
+      '/workspace/fs:suggest',
       body,
     );
     return {
@@ -1754,6 +1764,17 @@ export class DaemonKimiWebApi implements KimiWebApi {
   getSessionMediaUrl(sessionId: string, fileId: string): string {
     return buildRestUrl(
       this.config.serverHttpUrl,
+      `/sessions/${encodeURIComponent(sessionId)}/media/${encodeURIComponent(fileId)}`,
+    );
+  }
+
+  /** Fetch session-owned media bytes with the Bearer credential attached
+   *  (GET /sessions/{sid}/media/{fid}). Same purpose as getFileBlob but for the
+   *  0.39+ `session_media` source — GET /files/{id} only reads the transient
+   *  upload store and has NO fallback to session media, so the two id domains
+   *  must not be mixed. */
+  async getSessionMediaBlob(sessionId: string, fileId: string): Promise<Blob> {
+    return this.http.getBlob(
       `/sessions/${encodeURIComponent(sessionId)}/media/${encodeURIComponent(fileId)}`,
     );
   }

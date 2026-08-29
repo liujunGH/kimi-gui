@@ -134,7 +134,8 @@ function toggleFeedback() {
 /** 已响应标记:防连点/连按 y 对同一 approvalId 重复 respond(daemon 清除前卡仍在) */
 const responded = ref(false);
 const actionError = ref('');
-const responding = computed(() => Boolean(client?.pendingApprovalActions[props.approvalId]));
+// 二级可选链:验收沙箱的 mock client 可能缺 pendingApprovalActions(空 provide 场景)
+const responding = computed(() => Boolean(client?.pendingApprovalActions?.[props.approvalId]));
 const activeAction = ref<Exclude<ApprovalActKey, 'feedback'> | 'feedback-submit' | null>(null);
 
 function act(key: ApprovalActKey) {

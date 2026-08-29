@@ -10,6 +10,17 @@
 
 - **模型池语义修正（对齐官方 0.39 真实结构）**：核实 agent-core-v2 `buildSubagentModelDescriptions` 后确认官方池为「模型 ID → 路由描述」——此前 GUI 误实现为「别名 → 模型」。重做池编辑器：每成员 = 模型选择 + 路由描述（描述会渲染进 Agent 工具说明，作为主 Agent 派发子任务的挑选提示）+ 默认单选（`default_model` 为模型 ID 且须在池内）；新增「当前路由」摘要行（单模型/池/强制三态 + 官方 [default]/primary 语义说明），未配池时也可见当前生效的次级模型。重复模型校验保留，保留字校验随别名概念移除而删除
 
+### 修复（语义核对蜂群第二批：5 代理对照官方 0.39.1 源码逐项核实 + 沙箱实测）
+
+- **次级模型读写切换到官方优先级**：单模型读写一律走 `default_model` 键（官方 `default_model` 压制 legacy `model`，两者并存的旧配置此前显示与改动双失效）；思考档位改为模型驱动词表（off / on / 模型 support_efforts，存量未知值动态回显，不再伪造 low，未显式修改不再夹带写入）；清空模型池改走桌面 shell 直改 config.toml（官方 REST 为 merge 语义无法删键，新增 `clear_secondary_model_pool` 命令：纯文本手术 + 备份 + 原子写）；池保存显式 `force:false` 杜绝合并存活的致命组合；Agent 面板路由标签按池/force/defaultModel 正确区分主次；主模型 effort 'on' 显示「自动(模型默认)」不再冒充 Max
+- **工具门控清空生效**：空列表显式发空数组（官方 deepMerge 空数组=清除，此前空对象合并后旧值保留、清空保存是假的）；说明补通配符仅对 `mcp__*` 生效、禁用优先
+- **移除 micro_compaction**：v1 引擎遗留 flag，v2 不存在，显示即误导
+- **fs suggest 路由修正**：自造的 session 级路由改为官方真实 `POST /workspace/fs:suggest`
+- **任务系统**：全局任务面板的前台运行任务（含 bash）新增「移到后台」入口（官方前台任务本就注册任务库可 detach）；`task.terminated` 的 killed/timed_out/lost 按官方映射；WaitFor 工具卡适配（图标/摘要）+ 周期状态行 replace 替换防堆积；问题类后台任务 kind 修正；取消任务的 40904/40406 错误语义
+- **tower 协议写入面**：`updateSession`/`createSession` 支持 `tower_mode`（官方 profile 写入面，UI 入口后续）
+- **沙箱崩溃修复**：ApprovalCard 可选链补全 + mock 补字段（approval 场景此前整页白屏，y/a/n/p 无法验收）；补注册 refresh-cw 图标
+- **杂项**：自定义 Agent 目录文案补官方扫描规则（~/ 展开、相对项目根、深度 8、frontmatter 需非空 description）；备份恢复后提示环境实验需重启 Engine；实验 env 注释更正（config [experimental] 亦可开启）；session_media 的 blob 获取方法与分流注释就绪（UI 接线涉及官方锁层组件，登记 PATCHES 后续）
+
 ## [1.0.18] - 2026-08-29
 
 ### 修复（全功能域蜂群审查批次）

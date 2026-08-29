@@ -848,6 +848,10 @@ export interface AppAgentConfigInput {
   permissionMode?: 'manual' | 'yolo' | 'auto';
   planMode?: boolean;
   swarmMode?: boolean;
+  /** Kimi Code 0.39+ experimental tower mode (same POST /sessions/{id}/profile
+   *  agent_config family as swarm_mode; entering it is the /tower command's
+   *  job — this is only the REST write surface). */
+  towerMode?: boolean;
 }
 
 export interface AppToolDescriptor {
@@ -916,7 +920,7 @@ export interface KimiWebApi {
   createSession(input: { title?: string; cwd?: string; model?: string; workspaceId?: string; agentConfig?: AppAgentConfigInput }): Promise<AppSession>;
   /** Fetch one session by id (deep links beyond the first listSessions page). */
   getSession(sessionId: string): Promise<AppSession>;
-  updateSession(sessionId: string, input: { title?: string; cwd?: string; model?: string; permissionMode?: string; planMode?: boolean; swarmMode?: boolean; goalObjective?: string; goalControl?: 'pause' | 'resume' | 'cancel'; thinking?: string }): Promise<AppSession>;
+  updateSession(sessionId: string, input: { title?: string; cwd?: string; model?: string; permissionMode?: string; planMode?: boolean; swarmMode?: boolean; towerMode?: boolean; goalObjective?: string; goalControl?: 'pause' | 'resume' | 'cancel'; thinking?: string }): Promise<AppSession>;
   getSessionStatus(sessionId: string): Promise<AppSessionRuntimeStatus>;
   /** Current goal snapshot, or null when the session has no active goal. */
   getSessionGoal(sessionId: string): Promise<AppGoal | null>;
@@ -964,9 +968,11 @@ export interface KimiWebApi {
   listDirectory(sessionId: string, input: { path?: string; depth?: number; includeGitStatus?: boolean }): Promise<{ items: FsEntry[]; childrenByPath?: Record<string, FsEntry[]>; truncated: boolean }>;
   readFile(sessionId: string, input: { path: string; offset?: number; length?: number }): Promise<{ path: string; content: string; encoding: 'utf-8' | 'base64'; size: number; truncated: boolean; etag: string; mime: string; languageId?: string; lineCount?: number; isBinary: boolean }>;
   searchFiles(sessionId: string, input: { query: string; limit?: number }): Promise<{ items: Array<{ path: string; name: string; kind: FsKind; score: number; matchPositions: number[] }>; truncated: boolean }>;
-  /** Kimi Code 0.37+ POST /sessions/{id}/fs:suggest — fuzzy path suggestion for
-   *  @-menus; lighter than searchFiles (scored fuzzy matching server-side). */
-  suggestFiles(sessionId: string, input: { query: string; limit?: number; followGitignore?: boolean; showHidden?: boolean; includeGlobs?: string[]; excludeGlobs?: string[] }): Promise<{ items: Array<{ path: string; name: string; kind: FsKind; score: number; matchPositions: number[] }>; truncated: boolean }>;
+  /** Kimi Code 0.37+ fuzzy path suggestion for @-menus; lighter than
+   *  searchFiles (scored fuzzy matching server-side). Official routes:
+   *  POST /workspace/fs:suggest (body carries `workspace`) and POST /fs:suggest
+   *  (body carries `roots` + runtime_id) — there is NO session-level suggest. */
+  suggestFiles(workspace: string, input: { query: string; limit?: number; followGitignore?: boolean; showHidden?: boolean; includeGlobs?: string[]; excludeGlobs?: string[] }): Promise<{ items: Array<{ path: string; name: string; kind: FsKind; score: number; matchPositions: number[] }>; truncated: boolean }>;
   searchWorkspaceFiles(workspace: string, input: { query: string; limit?: number }): Promise<{ items: Array<{ path: string; name: string; kind: FsKind; score: number; matchPositions: number[] }>; truncated: boolean }>;
   searchAll(input: { query: string; mode?: 'terms' | 'literal'; op?: 'AND' | 'OR'; role?: 'user' | 'assistant' | 'title'; sort?: 'score' | 'time_desc' | 'time_asc'; pageSize?: number; pageToken?: string }): Promise<AppSearchResult>;
   grepFiles(sessionId: string, input: { pattern: string; regex?: boolean; caseSensitive?: boolean }): Promise<{ files: Array<{ path: string; matches: Array<{ line: number; col: number; text: string; before: string[]; after: string[] }> }>; filesScanned: number; truncated: boolean; elapsedMs: number }>;
@@ -1015,6 +1021,10 @@ export interface KimiWebApi {
   /** Kimi Code 0.39+ session-owned canonical media URL
    *  (GET /sessions/{sid}/media/{file_id}) — session-persistent storage. */
   getSessionMediaUrl(sessionId: string, fileId: string): string;
+  /** Fetch session-owned media bytes with auth (GET /sessions/{sid}/media/{fid})
+   *  — the session-domain counterpart of getFileBlob; /files/{id} has no
+   *  fallback to session media, so the id domains must not be mixed. */
+  getSessionMediaBlob(sessionId: string, fileId: string): Promise<Blob>;
   /** Fetch a file's bytes with auth — feed the resulting Blob to a blob URL for <video>/<img> src. */
   getFileBlob(fileId: string): Promise<Blob>;
 
