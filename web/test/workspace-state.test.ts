@@ -74,7 +74,7 @@ function createState(): ExtendedState {
     sessions: [createSession()],
     activeSessionId: 'sess_1',
     connected: true,
-    serverVersion: '0.33.0',
+    serverVersion: '0.40.0',
     experimentalFlags: {},
     dangerousBypassAuth: false,
     backend: 'v2',
@@ -1199,7 +1199,7 @@ describe('useWorkspaceState — first-load auth gate', () => {
     apiMock.getAuth.mockReset();
     apiMock.getHealth.mockReset().mockResolvedValue({ ok: true });
     apiMock.getMeta.mockReset().mockResolvedValue({
-      serverVersion: '0.33.0',
+      serverVersion: '0.40.0',
       openInApps: [],
       dangerousBypassAuth: false,
       backend: 'v2',
@@ -1316,7 +1316,7 @@ describe('useWorkspaceState — session list loading', () => {
     });
     apiMock.getHealth.mockReset().mockResolvedValue({ ok: true });
     apiMock.getMeta.mockReset().mockResolvedValue({
-      serverVersion: '0.33.0',
+      serverVersion: '0.40.0',
       openInApps: [],
       dangerousBypassAuth: false,
       backend: 'v2',
@@ -1350,9 +1350,9 @@ describe('useWorkspaceState — session list loading', () => {
     return { state, deps, workspaceState: useWorkspaceState(state, deps) };
   }
 
-  it('blocks workspace APIs when the daemon is older than 0.33', async () => {
+  it('blocks workspace APIs when the daemon is older than the minimum', async () => {
     apiMock.getMeta.mockResolvedValueOnce({
-      serverVersion: '0.32.0',
+      serverVersion: '0.39.0',
       openInApps: [],
       dangerousBypassAuth: false,
       backend: 'v2',
@@ -1362,7 +1362,7 @@ describe('useWorkspaceState — session list loading', () => {
 
     await workspaceState.load();
 
-    expect(state.unsupportedDaemonVersion).toBe('0.32.0');
+    expect(state.unsupportedDaemonVersion).toBe('0.39.0');
     expect(apiMock.listWorkspaces).not.toHaveBeenCalled();
     expect(apiMock.listSessions).not.toHaveBeenCalled();
   });
@@ -1628,14 +1628,14 @@ describe('useWorkspaceState — refreshServerMeta', () => {
   it('keeps the previous meta when /meta fails', async () => {
     apiMock.getMeta.mockRejectedValue(new Error('connection refused'));
     const state = createState();
-    state.serverVersion = '0.33.1';
+    state.serverVersion = '0.40.1';
     state.backend = 'v2';
     const ws = useWorkspaceState(state, createDeps());
 
     await ws.refreshServerMeta();
 
     expect(state.backend).toBe('v2');
-    expect(state.serverVersion).toBe('0.33.1');
+    expect(state.serverVersion).toBe('0.40.1');
   });
 
   it('does not treat an unverified cold-start daemon as supported', async () => {

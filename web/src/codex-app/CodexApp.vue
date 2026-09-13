@@ -1554,7 +1554,7 @@ function handleCommand(cmd: string, attachments?: PromptAttachment[]): void {
       else if (arg === 'cancel' || arg.startsWith('cancel ')) client.controlGoal('cancel');
       else if (arg.startsWith('replace ')) replaceGoal(arg.slice('replace '.length).trim());
       else if (arg === 'next' || arg.startsWith('next ')) {
-        toast('即将目标队列仍只存在于 TUI 会话 RPC，0.33 daemon REST 尚未开放；当前目标管理已可在顶部目标卡完成');
+        toast('目标队列仍只存在于 TUI 会话 RPC，daemon REST 尚未开放；当前目标管理已可在顶部目标卡完成');
       } else void client.createGoal(arg.replace(/^--\s+/, ''));
       break;
     case 'btw':
@@ -1620,7 +1620,7 @@ function handleCommand(cmd: string, attachments?: PromptAttachment[]): void {
     case 'reload':
       // SDK has reloadSession(), but the daemon's public REST API does not.
       // Restarting the whole daemon is intentionally not treated as equivalent.
-      toast('/reload 已识别，但 Kimi 0.33 的 daemon REST API 尚未开放会话重载接口；可新建会话应用最新配置');
+      toast('/reload 已识别，但 daemon REST API 尚未开放会话重载接口；可新建会话应用最新配置');
       break;
   }
 }

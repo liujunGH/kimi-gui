@@ -13,7 +13,7 @@
 
 - 栈:Tauri 2(Rust 壳)+ Vue 3 + Vite + TypeScript + 本地 daemon(REST + WebSocket)
 - 平台:Mac 优先,Windows 可选
-- 契约基线:Kimi Code CLI **0.33.0+**(只接 agent-core-v2,旧 daemon 进入升级拦截页)
+- 契约基线:Kimi Code CLI **0.40.0+**(2026-09-13 起从 0.33 上调;只接 agent-core-v2,旧 daemon 进入升级拦截页)
 
 ---
 

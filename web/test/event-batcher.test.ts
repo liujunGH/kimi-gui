@@ -681,7 +681,7 @@ describe('useKimiWebClient (resync integration)', () => {
       })),
       getHealth: vi.fn(async () => ({ status: 'ok', uptimeSec: 1 })),
       getMeta: vi.fn(async () => ({
-        serverVersion: '0.33.0',
+        serverVersion: '0.40.0',
         serverId: 'server-1',
         startedAt: '2026-01-01T00:00:00.000Z',
         capabilities: {},

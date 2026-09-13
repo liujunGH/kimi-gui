@@ -1,4 +1,4 @@
-export const MINIMUM_KIMI_CODE_VERSION = '0.33.0';
+export const MINIMUM_KIMI_CODE_VERSION = '0.40.0';
 
 function parts(version: string): [number, number, number] | null {
   const match = version.match(/(?:^|\s|v)(\d+)\.(\d+)\.(\d+)/);

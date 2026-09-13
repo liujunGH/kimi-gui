@@ -911,6 +911,43 @@ export class DaemonKimiWebApi implements KimiWebApi {
     return data;
   }
 
+  /** Kimi Code 0.41+: GET /sessions/{id}/file-history/changes?turn_id=N —
+   *  per-turn authoritative file change stats. */
+  async listSessionFileHistory(
+    sessionId: string,
+    turnId: number,
+  ): Promise<{ changes: Array<{ path: string; status: 'added' | 'modified' | 'deleted'; additions: number; deletions: number }>; recorded: boolean }> {
+    const data = await this.http.get<{ changes: Array<{ path: string; status: string; additions: number; deletions: number }>; recorded: boolean }>(
+      `/sessions/${encodeURIComponent(sessionId)}/file-history/changes`,
+      { turn_id: turnId },
+    );
+    return {
+      changes: data.changes.map((c) => ({
+        path: c.path,
+        status: (['added', 'modified', 'deleted'].includes(c.status) ? c.status : 'modified') as 'added' | 'modified' | 'deleted',
+        additions: c.additions,
+        deletions: c.deletions,
+      })),
+      recorded: data.recorded,
+    };
+  }
+
+  /** Kimi Code 0.41+: GET /sessions/{id}/file-history/content — file content at
+   *  a turn boundary (phase start|end, default end). */
+  async getSessionFileContent(
+    sessionId: string,
+    turnId: number,
+    path: string,
+    phase?: 'start' | 'end',
+  ): Promise<string> {
+    const query: Record<string, string | number | undefined> = { turn_id: turnId, path };
+    if (phase !== undefined) query['phase'] = phase;
+    return this.http.get<string>(
+      `/sessions/${encodeURIComponent(sessionId)}/file-history/content`,
+      query,
+    );
+  }
+
   /** Kimi Code 0.39+: move a running foreground task (Bash / subagent) to the
    *  background task store. `detached: true` only when the call converted a
    *  running foreground task; already-background or terminal tasks answer

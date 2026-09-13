@@ -961,6 +961,10 @@ export interface KimiWebApi {
   cancelTask(sessionId: string, taskId: string): Promise<{ cancelled: true }>;
   /** Kimi Code 0.39+: move a running foreground task to the background store. */
   detachTask(sessionId: string, taskId: string): Promise<{ detached: boolean; status: AppTaskStatus }>;
+  /** Kimi Code 0.41+: per-turn authoritative file change stats. */
+  listSessionFileHistory(sessionId: string, turnId: number): Promise<{ changes: Array<{ path: string; status: 'added' | 'modified' | 'deleted'; additions: number; deletions: number }>; recorded: boolean }>;
+  /** Kimi Code 0.41+: file content at a turn boundary (phase start|end). */
+  getSessionFileContent(sessionId: string, turnId: number, path: string, phase?: 'start' | 'end'): Promise<string>;
   listTerminals(sessionId: string): Promise<AppTerminal[]>;
   createTerminal(sessionId: string, input?: { cwd?: string; shell?: string; cols?: number; rows?: number }): Promise<AppTerminal>;
   getTerminal(sessionId: string, terminalId: string): Promise<AppTerminal>;

@@ -6,6 +6,7 @@
  * 替代原型期的本地 ref 占位。
  */
 import { computed, nextTick, reactive, ref, watch } from 'vue';
+import { compareKimiVersions } from '../../../lib/kimiVersion';
 import type { PermissionMode, WorkspaceView } from '../../../types';
 import type { AppSession, AppConfig, AppMcpServer, AppToolDescriptor } from '../../../api/types';
 import { getKimiWebApi } from '../../../api';
@@ -202,8 +203,18 @@ async function setExperiment(id: string, enabled: boolean): Promise<void> {
 // and is not runtime-reportable the same way.
 const ENGINE_ENV_EXPERIMENTS = [
   { id: 'tower', env: 'KIMI_CODE_EXPERIMENTAL_TOWER', label: 'Tower 多智能体编排', description: '实验性 tower 模式；开启并重启 Engine 后，在会话中用 /tower 命令进入（/tower on 开启、/tower <目标> 启动编排）。' },
-  { id: 'remote_control', env: 'KIMI_CODE_EXPERIMENTAL_REMOTE_CONTROL', label: '远程访问会话', description: 'Remote Control：通过浏览器远程访问本地会话（/remote-control，别名 /rc）。' },
+  // Kimi Code 0.42 turned Remote Control permanently on and removed the flag —
+  // the switch is only meaningful for older daemons.
+  { id: 'remote_control', env: 'KIMI_CODE_EXPERIMENTAL_REMOTE_CONTROL', label: '远程访问会话', description: 'Remote Control：通过浏览器远程访问本地会话（/remote-control，别名 /rc）。0.42 起已内置开启，无需此开关。', maxServerVersion: '0.41.99' },
 ] as const;
+/** Engine env experiments visible for the connected daemon version. */
+const engineEnvExperimentsForDaemon = computed(() => {
+  const version = client.serverVersion.value;
+  if (!version) return ENGINE_ENV_EXPERIMENTS;
+  return ENGINE_ENV_EXPERIMENTS.filter(
+    (feature) => !('maxServerVersion' in feature && feature.maxServerVersion !== undefined && (compareKimiVersions(version, feature.maxServerVersion) ?? 0) > 0),
+  );
+});
 const engineEnvEnabled = ref<string[]>([]);
 const engineEnvSaving = ref(false);
 const engineEnvDirty = ref(false);
@@ -211,7 +222,7 @@ const engineEnvDirty = ref(false);
  *  deciding whether the dirty banner still applies after a save. */
 const initialEngineEnv = ref<string[]>([]);
 const engineEnvExperiments = computed(() =>
-  ENGINE_ENV_EXPERIMENTS.map((feature) => ({ ...feature, enabled: engineEnvEnabled.value.includes(feature.id) })),
+  engineEnvExperimentsForDaemon.value.map((feature) => ({ ...feature, enabled: engineEnvEnabled.value.includes(feature.id) })),
 );
 async function loadEngineEnvExperiments(): Promise<void> {
   if (!nativeAvailable) return;

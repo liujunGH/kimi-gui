@@ -105,10 +105,9 @@ pub fn save_gui_experiments(enabled: Vec<String>) -> Result<(), String> {
 
 /// Inject the GUI-managed experiment env vars into a daemon-launch command.
 fn apply_daemon_env(command: &mut Command) {
-    // GUI exposes a secondary-model picker for subagents. The feature remains
-    // opt-in in the CLI, so enable only this documented experiment for daemon
-    // processes started by Kimi GUI — always on, not user-toggleable.
-    command.env("KIMI_CODE_EXPERIMENTAL_SECONDARY_MODEL", "1");
+    // Historical note: KIMI_CODE_EXPERIMENTAL_SECONDARY_MODEL=1 used to be
+    // injected here — Kimi Code 0.40 enabled the subagent model pool by
+    // default (0.42 removed the flag entirely), so the injection was dropped.
     let enabled = read_gui_experiments();
     for (key, env_name) in EXPERIMENT_ENV_KEYS {
         if enabled.iter().any(|item| item == key) {

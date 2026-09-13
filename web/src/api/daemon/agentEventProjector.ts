@@ -1313,6 +1313,10 @@ export function createAgentProjector(): AgentProjector {
       // Tasks (e.g. a detached Bash command). Real daemon shape:
       // payload.info = { taskId, description, status, startedAt(ms), endedAt,
       // kind:'process', command, pid, exitCode }.
+      // Kimi Code 0.40+ durable background-task lifecycle (same taskInfo
+      // payload as task.started, fanned out globally so panels converge
+      // without waiting for the poll) — identical handling.
+      case 'background.task.started':
       case 'task.started': {
         const info = (p?.info ?? {}) as Record<string, unknown>;
         const startedAt =
@@ -1393,6 +1397,9 @@ export function createAgentProjector(): AgentProjector {
         });
         break;
       }
+      // Kimi Code 0.40+: global background-task terminal fan-out — same
+      // handling as task.terminated (killed/timed_out/lost mapping included).
+      case 'background.task.terminated':
       case 'task.terminated': {
         const info = (p?.info ?? {}) as Record<string, unknown>;
         // Official 0.39.1 WS terminal vocabulary: completed | failed | killed
@@ -1517,6 +1524,8 @@ export function createAgentProjector(): AgentProjector {
 
       // -----------------------------------------------------------------------
       // Explicitly known but not projected
+      // Kimi Code 0.42+: cron job fired notice — no cron UI yet.
+      case 'cron.fired':
       case 'compaction.blocked':
       case 'hook.result':
       case 'mcp.server.status':
@@ -1598,6 +1607,12 @@ const KNOWN_AGENT_CORE_TYPES = new Set([
   'subagent.completed',
   'subagent.failed',
   'task.started',
+  'background.task.started',
+  'background.task.terminated',
+  'cron.fired',
+  'background.task.started',
+  'background.task.terminated',
+  'cron.fired',
   'task.terminated',
   'background.task.started',
   'background.task.terminated',
