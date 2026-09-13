@@ -447,7 +447,7 @@ pub async fn run_kimi_provider_command(
 ) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let kimi = find_kimi().ok_or("找不到 kimi CLI")?;
-        let mut command = Command::new(kimi);
+        let mut command = Command::new(&kimi);
         let json_output = action == "catalog-list";
         command.arg("provider");
         match action.as_str() {
@@ -535,6 +535,99 @@ pub async fn run_kimi_provider_command(
     })
     .await
     .map_err(|error| error.to_string())?
+}
+
+/// Target version from the official update cache (`~/.kimi-code/updates/latest.json`,
+/// written by the CLI's own update checks). None when the cache is absent/malformed.
+fn latest_cached_update_version(home: &std::path::Path) -> Option<String> {
+    let text = std::fs::read_to_string(home.join("updates").join("latest.json")).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&text).ok()?;
+    let latest = value.get("latest")?.as_str()?.trim().to_string();
+    if latest.is_empty() {
+        None
+    } else {
+        Some(latest)
+    }
+}
+
+/// Extract the install command from the CLI's manual-update message
+/// ("To update manually, run: npm install -g @moonshot-ai/kimi-code@1.2.3").
+fn manual_install_command(update_output: &str) -> Option<String> {
+    let line = update_output
+        .lines()
+        .find(|l| l.contains("To update manually, run:"))?;
+    let command = line.split("run:").nth(1)?.trim().to_string();
+    if command.is_empty() {
+        None
+    } else {
+        Some(command)
+    }
+}
+
+/// Run a shell install command captured (npm/pnpm/yarn/bun global installs).
+fn run_install_command(command: &str) -> Result<String, String> {
+    #[cfg(unix)]
+    let output = Command::new("sh").arg("-c").arg(command).output();
+    #[cfg(windows)]
+    let output = Command::new("cmd").args(["/C", command]).output();
+    let output = output.map_err(|e| format!("执行安装命令失败: {e}"))?;
+    let text = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout).trim(),
+        String::from_utf8_lossy(&output.stderr).trim()
+    );
+    if output.status.success() {
+        Ok(text.trim().to_string())
+    } else {
+        Err(if text.trim().is_empty() {
+            format!(
+                "安装命令失败(退出码 {})",
+                output.status.code().unwrap_or(-1)
+            )
+        } else {
+            text.trim().to_string()
+        })
+    }
+}
+
+/// Kimi Code 0.40+: `kimi update` without a TTY only prints a manual install
+/// command. Run the install ourselves — native staged self-update via the
+/// hidden `__update_download` sub-command (takes effect on next CLI start),
+/// or the printed npm/pnpm/yarn/bun global install command. homebrew and
+/// unsupported sources keep the manual hint.
+fn run_cli_update(kimi: &std::path::Path) -> Result<String, String> {
+    let home = kimi_home();
+    let mut probe = Command::new(kimi);
+    probe.arg("update").current_dir(&home);
+    let output = command_text(probe)?;
+    if !output.contains("To update manually, run:") {
+        return Ok(output);
+    }
+    if output.contains("native installer") {
+        if let Some(version) = latest_cached_update_version(&home) {
+            let mut downloader = Command::new(kimi);
+            downloader
+                .args(["__update_download", version.as_str()])
+                .current_dir(&home);
+            let download_log = command_text(downloader)?;
+            return Ok(format!(
+                "{output}\n自动下载新版本 v{version}(native staged 更新):\n{download_log}\n已下载并校验,重启 Engine 后生效。"
+            ));
+        }
+        return Ok(output);
+    }
+    if let Some(install) = manual_install_command(&output) {
+        let is_auto_installable = ["npm ", "pnpm ", "yarn ", "bun "]
+            .iter()
+            .any(|prefix| install.starts_with(prefix));
+        if is_auto_installable {
+            let install_log = run_install_command(&install)?;
+            return Ok(format!(
+                "{output}\n已自动执行更新命令({install}):\n{install_log}"
+            ));
+        }
+    }
+    Ok(output)
 }
 
 fn command_text(mut command: Command) -> Result<String, String> {
@@ -1925,7 +2018,7 @@ pub async fn run_kimi_maintenance(
 ) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let kimi = find_kimi().ok_or("找不到 kimi CLI")?;
-        let mut command = Command::new(kimi);
+        let mut command = Command::new(&kimi);
         match action.as_str() {
             "doctor-config" => {
                 command.args(["doctor", "config"]);
@@ -1937,7 +2030,7 @@ pub async fn run_kimi_maintenance(
                 command.arg("migrate");
             }
             "update" => {
-                command.arg("update");
+                // Handled by run_cli_update below (TTY-degradation workaround).
             }
             "visualizer" => {
                 command.arg("vis");
@@ -1946,6 +2039,9 @@ pub async fn run_kimi_maintenance(
                 }
             }
             _ => return Err("不支持的维护操作".to_string()),
+        }
+        if action == "update" {
+            return run_cli_update(&kimi);
         }
         command.current_dir(kimi_home());
         command_text(command)
@@ -2325,5 +2421,36 @@ mod tests {
         );
 
         fs::remove_dir_all(&home).expect("remove isolated test home");
+    }
+}
+
+#[cfg(test)]
+mod update_tests {
+    use super::{latest_cached_update_version, manual_install_command};
+
+    #[test]
+    fn extracts_manual_install_command() {
+        let output = "A newer version of @moonshot-ai/kimi-code is available (0.39.1 -> 0.40.0).\nDetected install source: npm-global\nTo update manually, run: npm install -g @moonshot-ai/kimi-code@0.40.0\n";
+        assert_eq!(
+            manual_install_command(output).as_deref(),
+            Some("npm install -g @moonshot-ai/kimi-code@0.40.0")
+        );
+        assert_eq!(manual_install_command("already up to date"), None);
+    }
+
+    #[test]
+    fn reads_cached_update_version() {
+        let dir = std::env::temp_dir().join(format!("kimi-gui-upd-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("updates")).unwrap();
+        std::fs::write(
+            dir.join("updates").join("latest.json"),
+            r#"{"source":"cdn","latest":"0.42.0"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            latest_cached_update_version(&dir).as_deref(),
+            Some("0.42.0")
+        );
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

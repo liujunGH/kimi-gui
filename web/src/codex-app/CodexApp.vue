@@ -180,7 +180,8 @@ async function upgradeContractRuntime(): Promise<void> {
       : null;
     if (relation === null || relation < 0) {
       contractUpgradeStatus.value = '正在更新 Kimi CLI…';
-      await kimiRuntime.runMaintenance('update');
+      const updateLog = await kimiRuntime.runMaintenance('update');
+      contractUpgradeStatus.value = `正在更新 Kimi CLI…\n${updateLog}`;
       engine = await kimiRuntime.engineStatus();
     }
     const updated = engine.version
