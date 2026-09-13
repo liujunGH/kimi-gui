@@ -16,6 +16,7 @@ import PromptDialog from '../layout/PromptDialog.vue';
 import TaskCenter from './TaskCenter.vue';
 import PerformanceSettings from './PerformanceSettings.vue';
 import CapabilitiesSettings from './CapabilitiesSettings.vue';
+import SettingsModelSelect from './SettingsModelSelect.vue';
 import { useTheme } from '../../../composables/codex/useTheme';
 import { useKimiClient } from '../../../composables/codex/useKimiClient';
 import { useUpdater } from '../../../composables/codex/useUpdater';
@@ -71,25 +72,29 @@ const NAV: Array<{ label: string; items: Array<{ id: SettingsSectionId; label: s
   { label: '智能能力', items: [
     { id: 'models-providers', label: '模型与 Provider', icon: 'bot' },
     { id: 'agents', label: 'Agents', icon: 'sparkle' },
-    { id: 'plugins-skills', label: '插件与 Skills', icon: 'apps' },
-    { id: 'capabilities', label: 'Capabilities', icon: 'sparkle' },
-    { id: 'mcp', label: 'MCP 服务', icon: 'terminal' },
+    { id: 'plugins-skills', label: '扩展', icon: 'apps' },
   ] },
   { label: '安全与控制', items: [
     { id: 'permissions', label: '权限与工具', icon: 'shield' },
     { id: 'hooks', label: 'Hooks', icon: 'git-branch' },
   ] },
   { label: '数据与系统', items: [
-    { id: 'tasks', label: '任务中心', icon: 'check-circle' },
+    { id: 'tasks', label: '任务与归档', icon: 'check-circle' },
     { id: 'directories', label: '工作区目录', icon: 'file' },
-    { id: 'archive', label: '归档与导入', icon: 'archive' },
-    { id: 'performance', label: '运行与性能', icon: 'sliders' },
     { id: 'engine', label: 'Kimi Engine', icon: 'terminal' },
     { id: 'about', label: '关于', icon: 'info' },
   ] },
 ];
 
-const active = ref<SettingsSectionId>(props.initialSection);
+/** 旧分区 id → 合并后的分区(外部跳转/命令映射仍可用旧 id,激活时归一化)。 */
+const SECTION_ALIASES: Partial<Record<SettingsSectionId, SettingsSectionId>> = {
+  capabilities: 'plugins-skills',
+  mcp: 'plugins-skills',
+  archive: 'tasks',
+  performance: 'engine',
+};
+
+const active = ref<SettingsSectionId>(SECTION_ALIASES[props.initialSection] ?? props.initialSection);
 /** TaskCenter is mounted eagerly with the page but only drains /sessions when
  *  its section becomes active (opening Settings must not drain the endpoint). */
 const taskCenterRef = ref<InstanceType<typeof TaskCenter> | null>(null);
@@ -178,14 +183,27 @@ const experimentRows = computed(() => {
   // 不再播种 micro_compaction：它是 v1 引擎遗留 flag，agent-core-v2 不存在，
   // 显示出来即误导。仅当旧 config/运行时真的报告它时才作为未知项出现。
   const ids = new Set(['tool-select', ...Object.keys(configured), ...Object.keys(runtime)]);
-  return [...ids].sort().map((id) => ({
-    id,
-    label: EXPERIMENT_COPY[id]?.label ?? id,
-    description: EXPERIMENT_COPY[id]?.description ?? '由当前 Kimi Engine 报告的实验能力。',
-    enabled: runtime[id] ?? configured[id] ?? false,
-    configured: configured[id],
-    locked: id !== 'tool-select',
-  }));
+  return [...ids]
+    .sort()
+    .map((id) => ({
+      id,
+      label: EXPERIMENT_COPY[id]?.label ?? id,
+      description: EXPERIMENT_COPY[id]?.description ?? '由当前 Kimi Engine 报告的实验能力。',
+      enabled: runtime[id] ?? configured[id] ?? false,
+      configured: configured[id],
+      locked: id !== 'tool-select',
+    }))
+    // 官方对齐:GUI 不可控、config 也未写的运行时 flag 不逐个成卡,收进只读摘要
+    // (lockedExperimentFlags)——否则实验区被 daemon 上报的一排死卡片淹没。
+    .filter((row) => !row.locked || row.configured !== undefined);
+});
+/** daemon 上报但 GUI 不可控、config 未写的运行时实验(只读摘要一行)。 */
+const lockedExperimentFlags = computed(() => {
+  const configured = (client.config.value as AppConfig | null)?.experimental ?? {};
+  const runtime = client.experimentalFlags.value;
+  return Object.keys(runtime)
+    .filter((id) => (runtime[id] ?? false) && configured[id] === undefined && id !== 'tool-select')
+    .sort();
 });
 async function setExperiment(id: string, enabled: boolean): Promise<void> {
   if (id === 'secondary-model') return;
@@ -337,6 +355,8 @@ function saveSecondaryEffort(): void {
 const secondaryPool = ref<Array<{ model: string; description: string }>>([]);
 const secondaryPoolDefault = ref('');
 const secondaryPoolSaving = ref(false);
+/** 模型池/强制路由编辑区默认折叠——主视图对齐官方「单下拉 + 强度」。 */
+const secondaryAdvancedOpen = ref(false);
 const secondaryForce = computed(
   () => (client.config.value as AppConfig | null)?.secondaryModel?.force === true,
 );
@@ -1291,7 +1311,7 @@ const capabilityInstallPercent = computed(() => {
   return percent !== undefined && percent >= 0 ? `${Math.round(percent)}%` : '';
 });
 
-watch(() => props.initialSection, (section) => { active.value = section; });
+watch(() => props.initialSection, (section) => { active.value = SECTION_ALIASES[section] ?? section; });
 
 
 </script>
@@ -1339,9 +1359,7 @@ watch(() => props.initialSection, (section) => { active.value = section; });
                 <div class="setting-label">默认模型</div>
               </div>
               <div class="setting-control">
-                <select v-model="defaultModelId" class="control" aria-label="默认模型">
-                  <option v-for="m in modelOptions" :key="m.id" :value="m.id">{{ m.name }}<template v-if="m.provider">（{{ m.provider }}）</template></option>
-                </select>
+                <SettingsModelSelect :model-value="defaultModelId" :options="modelOptions" aria-label="默认模型" @update:model-value="defaultModelId = $event" />
               </div>
             </div>
             <div class="setting-row">
@@ -1457,75 +1475,87 @@ watch(() => props.initialSection, (section) => { active.value = section; });
             </div>
             <div class="setting-row">
               <div class="setting-info">
-                <div class="setting-label">次级模型</div>
-                <div class="setting-desc">Agent / Swarm 子任务优先使用；未设置时继承主模型。只影响新创建的子任务。</div>
+                <div class="setting-label">子智能体</div>
+                <div class="setting-desc">Agent / Swarm 子任务优先使用的模型；未设置时继承主模型。只影响新创建的子任务。</div>
               </div>
               <div class="setting-control settings-inline-controls">
-                <!-- 池模式下本控件被禁用;显示「使用模型池」占位而非池默认模型,
-                     避免看起来像一个选不了的单模型下拉。 -->
-                <select
-                  :value="secondaryPoolConfigured ? '' : secondaryModelId"
-                  class="control"
-                  aria-label="次级模型"
+                <!-- 池模式下本控件被禁用;显示「使用模型池」占位而非池默认模型。
+                     官方形态:模型 · 思考强度 合并在同一选择器里。 -->
+                <SettingsModelSelect
+                  :model-value="secondaryPoolConfigured ? '' : secondaryModelId"
+                  :options="modelOptions"
+                  :empty-label="secondaryPoolConfigured ? '使用模型池（主 Agent 按路由描述挑选）' : '继承主模型'"
                   :disabled="!secondaryModelExperimentEnabled || secondaryPoolConfigured"
-                  @change="secondaryModelId = ($event.target as HTMLSelectElement).value"
-                >
-                  <option value="">{{ secondaryPoolConfigured ? '使用模型池（主 Agent 按路由描述挑选）' : '继承主模型' }}</option>
-                  <option v-for="m in modelOptions" :key="m.id" :value="m.id">{{ m.name }}<template v-if="m.provider">（{{ m.provider }}）</template></option>
-                </select>
-                <select v-model="secondaryEffort" class="control compact" aria-label="次级模型思考强度" :disabled="!secondaryModelExperimentEnabled || (!secondaryModelId && !secondaryPoolConfigured)" @change="onSecondaryEffortChange">
-                  <option value="">未设置（跟随模型默认）</option>
-                  <option v-for="opt in secondaryEffortSelectOptions" :key="opt" :value="opt">{{ secondaryEffortLabel(opt) }}</option>
-                </select>
+                  aria-label="子智能体模型"
+                  :effort="{
+                    value: secondaryEffort,
+                    options: secondaryEffortSelectOptions,
+                    label: secondaryEffortLabel,
+                    emptyLabel: '未设置（跟随模型默认）',
+                    disabled: !secondaryModelId && !secondaryPoolConfigured,
+                  }"
+                  @update:model-value="secondaryModelId = $event"
+                  @update:effort="(value: string) => { secondaryEffort = value; onSecondaryEffortChange(); }"
+                />
               </div>
             </div>
-            <div class="setting-row">
-              <div class="setting-info">
-                <div class="setting-label">强制路由</div>
-                <div class="setting-desc">所有子任务一律走次级模型，忽略各 Agent 配置里的主/次偏好（Kimi Code 0.36+）。<strong>与模型池互斥</strong>：池的意义是让主 Agent 自己挑，强制路由移除了这个选择。</div>
-              </div>
-              <div class="setting-control">
-                <input type="checkbox" :checked="secondaryForce" :disabled="!secondaryModelExperimentEnabled || secondaryPoolSaving || secondaryPoolConfigured" @change="setSecondaryForce(($event.target as HTMLInputElement).checked)" />
-              </div>
-            </div>
-            <div class="setting-row">
-              <div class="setting-info">
-                <div class="setting-label">当前路由</div>
-                <div class="setting-desc">{{ secondaryRoutingSummary }}</div>
-              </div>
-              <div class="setting-control"><span class="pill">{{ secondaryPoolConfigured ? '池模式' : secondaryForce ? '强制' : '单模型' }}</span></div>
-            </div>
+            <!-- 高级路由(模型池/强制路由)默认折叠:主视图对齐官方「单下拉 + 强度」,
+                 池与强制路由是进阶能力,收起时只留一行摘要。 -->
             <div class="setting-row top-aligned">
               <div class="setting-info">
-                <div class="setting-label">模型池</div>
-                <div class="setting-desc">Kimi Code 0.36+：每个成员 = <strong>模型 + 路由描述</strong>。描述会作为该模型的使用提示展示给主 Agent（派发子任务时据此挑选），如「快速模型，适合简单查询」；勾选一个成员作为默认（未指定时的兜底）。与强制路由互斥；清空保存即切回单模型模式。</div>
+                <div class="setting-label">高级路由<span v-if="secondaryPoolConfigured || secondaryForce" class="pill" style="margin-left:8px">{{ secondaryPoolConfigured ? '池模式' : '强制' }}</span></div>
+                <div class="setting-desc">{{ secondaryRoutingSummary }}</div>
               </div>
-              <div class="setting-control wide-control">
-                <div v-if="secondaryPool.length" class="rule-list">
-                  <div v-for="(entry, index) in secondaryPool" :key="index" class="rule-row">
-                    <input
-                      type="radio"
-                      name="secondary-pool-default"
-                      :checked="secondaryPoolDefault === entry.model"
-                      :disabled="!entry.model"
-                      title="设为默认模型（未指定时的兜底）"
-                      @change="secondaryPoolDefault = entry.model"
-                    />
-                    <select v-model="entry.model" class="control">
-                      <option value="">选择模型</option>
-                      <option v-for="m in modelOptions" :key="m.id" :value="m.id">{{ m.name }}<template v-if="m.provider">（{{ m.provider }}）</template></option>
-                    </select>
-                    <input v-model="entry.description" class="control rule-pattern" placeholder="路由描述（给主 Agent 的使用提示，可空）" />
-                    <button class="icon-btn" aria-label="删除池成员" @click="secondaryPool.splice(index, 1)"><CodexIcon name="trash" /></button>
-                  </div>
-                </div>
-                <div v-else class="archive-empty">未配置模型池</div>
-                <div class="settings-button-row">
-                  <button class="btn" :disabled="!secondaryModelExperimentEnabled || secondaryForce" @click="secondaryPool.push({ model: '', description: '' })"><CodexIcon name="plus" /> 添加池成员</button>
-                  <button class="btn primary" :disabled="!secondaryModelExperimentEnabled || secondaryPoolSaving" @click="saveSecondaryPool">{{ secondaryPoolSaving ? '保存中…' : '保存模型池' }}</button>
-                </div>
+              <div class="setting-control">
+                <button class="btn" @click="secondaryAdvancedOpen = !secondaryAdvancedOpen">{{ secondaryAdvancedOpen ? '收起' : '管理' }}</button>
               </div>
             </div>
+            <template v-if="secondaryAdvancedOpen">
+              <div class="setting-row">
+                <div class="setting-info">
+                  <div class="setting-label">强制路由</div>
+                  <div class="setting-desc">所有子任务一律走次级模型，忽略各 Agent 配置里的主/次偏好。<strong>与模型池互斥</strong>。</div>
+                </div>
+                <div class="setting-control">
+                  <input type="checkbox" :checked="secondaryForce" :disabled="!secondaryModelExperimentEnabled || secondaryPoolSaving || secondaryPoolConfigured" @change="setSecondaryForce(($event.target as HTMLInputElement).checked)" />
+                </div>
+              </div>
+              <div class="setting-row top-aligned">
+                <div class="setting-info">
+                  <div class="setting-label">模型池</div>
+                  <div class="setting-desc">每个成员 = <strong>模型 + 路由描述</strong>。描述会作为该模型的使用提示展示给主 Agent（派发子任务时据此挑选）；勾选一个成员作为默认兜底。清空保存即切回单模型模式。</div>
+                </div>
+                <div class="setting-control wide-control">
+                  <div v-if="secondaryPool.length" class="rule-list">
+                    <div v-for="(entry, index) in secondaryPool" :key="index" class="rule-row">
+                      <input
+                        type="radio"
+                        name="secondary-pool-default"
+                        :checked="secondaryPoolDefault === entry.model"
+                        :disabled="!entry.model"
+                        title="设为默认模型（未指定时的兜底）"
+                        @change="secondaryPoolDefault = entry.model"
+                      />
+                      <SettingsModelSelect
+                        :model-value="entry.model"
+                        :options="modelOptions"
+                        empty-label="选择模型"
+                        compact
+                        :aria-label="`池成员 ${index + 1} 模型`"
+                        @update:model-value="entry.model = $event"
+                      />
+                      <input v-model="entry.description" class="control rule-pattern" placeholder="路由描述（给主 Agent 的使用提示，可空）" />
+                      <button class="icon-btn" aria-label="删除池成员" @click="secondaryPool.splice(index, 1)"><CodexIcon name="trash" /></button>
+                    </div>
+                  </div>
+                  <div v-else class="archive-empty">未配置模型池</div>
+                  <div class="settings-button-row">
+                    <button class="btn" :disabled="!secondaryModelExperimentEnabled || secondaryForce" @click="secondaryPool.push({ model: '', description: '' })"><CodexIcon name="plus" /> 添加池成员</button>
+                    <button class="btn primary" :disabled="!secondaryModelExperimentEnabled || secondaryPoolSaving" @click="saveSecondaryPool">{{ secondaryPoolSaving ? '保存中…' : '保存模型池' }}</button>
+                  </div>
+                </div>
+              </div>
+            </template>
             <div v-if="!secondaryModelExperimentEnabled" class="settings-callout">
               当前 daemon 没有启用 <code>secondary-model</code> 实验，次级模型不会参与 Agent / Swarm 路由。
             </div>
@@ -1605,8 +1635,9 @@ watch(() => props.initialSection, (section) => { active.value = section; });
 
           <!-- 插件与 Skills -->
           <section class="settings-section" :class="{ active: active === 'plugins-skills' }" id="plugins-skills">
-            <h2>插件与 Skills</h2>
-            <div class="settings-callout subtle">这里展示 daemon 为当前会话实际加载的 Skills、MCP 与内置工具。当前 daemon REST 尚未提供插件管理接口；桌面版可在应用内运行官方插件管理器，所有变更仍由 Kimi CLI 执行。</div>
+            <h2>扩展</h2>
+            <div class="settings-group-title">插件与 Skills</div>
+            <div class="settings-callout subtle">当前会话实际加载的 Skills、MCP 与内置工具。</div>
             <div class="setting-row">
               <div class="setting-info">
                 <div class="setting-label">官方插件管理器</div>
@@ -1653,21 +1684,16 @@ watch(() => props.initialSection, (section) => { active.value = section; });
                 <span class="pill">{{ tool.source }}</span><strong>{{ tool.name }}</strong><span>{{ tool.description || '无描述' }}</span><em :class="{ ok: tool.active !== false }">{{ tool.active === false ? '未启用' : '可用' }}</em>
               </div>
             </div>
-          </section>
-
-          <section class="settings-section" :class="{ active: active === 'capabilities' }" id="capabilities">
-            <h2>Capabilities</h2>
+          
+                      <div class="settings-group-title">Capabilities</div>
             <div v-if="capabilityInstallRunning" class="settings-callout">
               正在安装能力 <code>{{ client.capabilityInstall?.value?.capabilityId }}</code>
               <template v-if="client.capabilityInstall?.value?.step"> · {{ client.capabilityInstall?.value?.step }}</template>
               <span v-if="capabilityInstallPercent" class="aph-bar" style="display:inline-block;width:120px;vertical-align:middle"><span class="aph-bar-fill" :style="{ width: capabilityInstallPercent }"></span></span>
             </div>
             <CapabilitiesSettings :runtime-version="client.serverVersion.value || undefined" @manage="emit('open-plugin-manager')" />
-          </section>
-
-          <!-- MCP -->
-          <section class="settings-section" :class="{ active: active === 'mcp' }" id="mcp">
-            <h2>MCP 服务</h2>
+          
+                      <div class="settings-group-title">MCP 服务</div>
             <div v-if="!nativeAvailable" class="settings-callout">浏览器模式可以查看 daemon 运行状态；编辑用户或项目 MCP 配置需要桌面应用。</div>
             <div class="setting-row">
               <div class="setting-info"><div class="setting-label">运行状态</div><div class="setting-desc">来自当前 Kimi Engine；配置变更对新会话最稳定。</div></div>
@@ -1712,7 +1738,13 @@ watch(() => props.initialSection, (section) => { active.value = section; });
                 </div>
               </div>
             </template>
-          </section>
+          
+        </section>
+
+          
+
+          <!-- MCP -->
+          
 
           <!-- 外观 -->
           <section
@@ -1827,7 +1859,7 @@ watch(() => props.initialSection, (section) => { active.value = section; });
           <!-- Hooks -->
           <section class="settings-section" :class="{ active: active === 'hooks' }" id="hooks">
             <h2>Hooks</h2>
-            <div class="settings-callout subtle">Hook 会在匹配事件发生时执行本机命令。已包含 Kimi Code 0.32 新增的 TurnStarted、UserPromptQueued、TaskStarted 和 SessionHeartbeat；保存前请确认命令来源。</div>
+            <div class="settings-callout subtle">Hook 在匹配事件发生时执行本机命令，只添加你信任的来源。</div>
             <datalist id="kimi-hook-events">
               <option v-for="eventName in HOOK_EVENT_TYPES" :key="eventName" :value="eventName"></option>
             </datalist>
@@ -1903,44 +1935,16 @@ watch(() => props.initialSection, (section) => { active.value = section; });
 
           <!-- 工作区目录 -->
           <section class="settings-section" :class="{ active: active === 'tasks' }" id="tasks">
-            <h2>任务中心</h2>
-            <div class="settings-callout subtle">集中搜索、筛选、归档、恢复、导出和永久删除任务。结果按批次渲染，不会扩展侧栏 DOM。</div>
-            <TaskCenter ref="taskCenterRef" @open-session="emit('open-session', $event)" />
-          </section>
-
-          <!-- 工作区目录 -->
-          <section class="settings-section" :class="{ active: active === 'directories' }" id="directories">
-            <h2>工作区目录</h2>
-            <div v-if="!activeWorkspaceRoot" class="settings-callout">先选择一个工作区，再为它配置附加目录。</div>
-            <div v-else-if="!nativeAvailable" class="settings-callout">附加目录写入项目 <code>.kimi-code/local.toml</code>，仅桌面应用可编辑。</div>
-            <template v-else>
-              <div class="setting-row">
-                <div class="setting-info"><div class="setting-label">当前工作区</div><div class="setting-desc">{{ activeWorkspaceRoot }}</div></div>
-                <div class="setting-control"><span class="pill">项目作用域</span></div>
-              </div>
-              <div class="settings-callout subtle">附加目录扩展 Agent 可访问的上下文边界，并不会把目录移动或复制进项目。请只添加你信任且确实需要的绝对路径。</div>
-              <div class="directory-list">
-                <div v-for="(_, index) in additionalDirs" :key="index" class="directory-row">
-                  <input v-model="additionalDirs[index]" class="control" placeholder="/absolute/path" />
-                  <button class="icon-btn" aria-label="移除目录" @click="additionalDirs.splice(index, 1)"><CodexIcon name="trash" /></button>
-                </div>
-                <div class="settings-button-row">
-                  <button class="btn" @click="additionalDirs.push('')"><CodexIcon name="plus" /> 添加目录</button>
-                  <button class="btn primary" @click="saveWorkspaceContext">保存工作区目录</button>
-                </div>
-              </div>
-              <div v-if="workspaceContext" class="setting-desc">配置文件：{{ workspaceContext.path }}</div>
-            </template>
-          </section>
-
-          <!-- 归档管理 -->
-          <section class="settings-section" :class="{ active: active === 'archive' }" id="archive">
-            <h2>归档、导出与迁移</h2>
+            <h2>任务与归档</h2>
+            <div class="settings-group-title">任务中心</div>
+                        <TaskCenter ref="taskCenterRef" @open-session="emit('open-session', $event)" />
+          
+                      <div class="settings-group-title">归档与导入</div>
             <div class="settings-subhead">
               <div><strong>迁移其他 CLI 数据</strong><span>在当前工作区启动 Kimi 内置导入向导，识别 Claude Code 与 Codex 数据。</span></div>
               <button class="btn" @click="emit('launch-command', '/import-from-cc-codex ')"><CodexIcon name="download" /> 从 Claude / Codex 导入</button>
             </div>
-            <div class="settings-callout subtle">导入命令会先返回主界面供你补充路径或选项；不会在打开设置页时自动迁移。</div>
+            <div class="settings-callout subtle">点击后回主界面补充路径与选项。</div>
 
             <div class="settings-subhead">
               <div><strong>设置备份与恢复</strong><span>包含 config、TUI、MCP、SYSTEM.md、自定义 Agents / Skills；不包含登录凭证和会话档案。</span></div>
@@ -2036,14 +2040,39 @@ watch(() => props.initialSection, (section) => { active.value = section; });
               <div v-if="!archiveFiltered.length" class="archive-empty">没有匹配的归档对话</div>
             </div>
             <div v-else-if="!archivedLoading" class="archive-empty">暂无归档对话</div>
+          
+        </section>
+
+          <!-- 工作区目录 -->
+          <section class="settings-section" :class="{ active: active === 'directories' }" id="directories">
+            <h2>工作区目录</h2>
+            <div v-if="!activeWorkspaceRoot" class="settings-callout">先选择一个工作区，再为它配置附加目录。</div>
+            <div v-else-if="!nativeAvailable" class="settings-callout">附加目录写入项目 <code>.kimi-code/local.toml</code>，仅桌面应用可编辑。</div>
+            <template v-else>
+              <div class="setting-row">
+                <div class="setting-info"><div class="setting-label">当前工作区</div><div class="setting-desc">{{ activeWorkspaceRoot }}</div></div>
+                <div class="setting-control"><span class="pill">项目作用域</span></div>
+              </div>
+              <div class="settings-callout subtle">只添加你信任且确实需要的绝对路径；目录不会被移动或复制。</div>
+              <div class="directory-list">
+                <div v-for="(_, index) in additionalDirs" :key="index" class="directory-row">
+                  <input v-model="additionalDirs[index]" class="control" placeholder="/absolute/path" />
+                  <button class="icon-btn" aria-label="移除目录" @click="additionalDirs.splice(index, 1)"><CodexIcon name="trash" /></button>
+                </div>
+                <div class="settings-button-row">
+                  <button class="btn" @click="additionalDirs.push('')"><CodexIcon name="plus" /> 添加目录</button>
+                  <button class="btn primary" @click="saveWorkspaceContext">保存工作区目录</button>
+                </div>
+              </div>
+              <div v-if="workspaceContext" class="setting-desc">配置文件：{{ workspaceContext.path }}</div>
+            </template>
           </section>
 
+          <!-- 归档管理 -->
+          
+
           <!-- Kimi Engine -->
-          <section class="settings-section" :class="{ active: active === 'performance' }" id="performance">
-            <h2>运行与性能</h2>
-            <div class="settings-callout subtle">配置 Agent 步数、后台并发、超时、上下文预算和图像读取。保存时保留 config.toml 中不相关的官方或自定义字段。</div>
-            <PerformanceSettings />
-          </section>
+          
 
           <!-- Kimi Engine -->
           <section class="settings-section" :class="{ active: active === 'engine' }" id="engine">
@@ -2102,7 +2131,8 @@ watch(() => props.initialSection, (section) => { active.value = section; });
                 </span>
               </label>
             </div>
-            <div class="settings-callout subtle">Kimi Code 0.42 起次级模型已内置开启（无需实验开关）；旧版 Engine 需在 config.toml [experimental] 中启用。此处显示 daemon 上报的运行时实际状态。</div>
+            <div v-if="lockedExperimentFlags.length" class="settings-callout subtle">运行中（Engine 内置，无需配置）：{{ lockedExperimentFlags.join('、') }}</div>
+            <div v-else class="settings-callout subtle">次级模型 0.42 起已内置开启；此处为 daemon 上报的运行时状态。</div>
 
             <div class="setting-row top-aligned">
               <div class="setting-info"><div class="setting-label">Engine 环境实验</div><div class="setting-desc">通过环境变量开启的实验能力（Kimi Code 0.39+）：环境变量优先级最高且仅 GUI 注入可控，config <code>[experimental]</code> 亦可开启但需重启 Engine。</div></div>
@@ -2122,7 +2152,12 @@ watch(() => props.initialSection, (section) => { active.value = section; });
               </label>
             </div>
             <div v-if="engineEnvDirty" class="settings-callout">环境实验已保存，重启 Engine 后生效：<button class="btn primary" :disabled="Boolean(maintenanceBusy) || !engine?.installed || (engineVersionRelation !== null && engineVersionRelation < 0)" @click="requestDaemonRestart('manual')">{{ maintenanceBusy === 'restart' ? '正在重启…' : '立即重启 Engine' }}</button></div>
-          </section>
+          
+                      <div class="settings-group-title">运行与性能</div>
+            <div class="settings-callout subtle">Agent 步数、后台并发、超时、上下文预算与图像读取。</div>
+            <PerformanceSettings />
+          
+        </section>
 
           <!-- 关于 -->
           <section class="settings-section" :class="{ active: active === 'about' }" id="about">

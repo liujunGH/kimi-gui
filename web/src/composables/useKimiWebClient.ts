@@ -1959,6 +1959,12 @@ const workspace = computed<Workspace>(() => {
   };
 });
 
+/** 活动会话的工作目录(AppSession 域;侧栏视图模型的 Session 类型没有 cwd)。
+ *  供终端抽屉的本地 PTY 后端决定起壳目录。 */
+const activeSessionCwd = computed(
+  () => rawState.sessions.find((s) => s.id === rawState.activeSessionId)?.cwd ?? '',
+);
+
 const sessions = computed<Session[]>(() => {
   void sessionTimeClock.value;
   return rawState.sessions
@@ -2821,6 +2827,7 @@ export function useKimiWebClient() {
     workspace,
     sessions,
     activeSessionId,
+    activeSessionCwd,
 
     // Workspace view props
     workspacesView,

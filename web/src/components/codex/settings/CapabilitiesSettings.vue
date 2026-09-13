@@ -28,7 +28,7 @@ const runtimeLabel = computed(() => props.runtimeVersion ? `Kimi Code ${props.ru
         <small>高影响操作仍受当前权限模式和审批规则控制。</small>
       </article>
     </div>
-    <div class="settings-callout subtle">当前 daemon 公共 REST 契约没有独立的 Capabilities 管理端点，因此这里不伪造“已安装”状态；点击管理会在 GUI 内打开官方 /plugins 交互，并直接操作真实配置。</div>
+    <div class="settings-callout subtle">点击管理会在 GUI 内打开官方 /plugins 交互，直接操作真实配置。</div>
   </div>
 </template>
 

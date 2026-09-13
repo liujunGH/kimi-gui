@@ -8,7 +8,7 @@ import { useIsDark } from '../composables/useIsDark';
 import { useTerminal } from '../composables/useTerminal';
 import Button from './ui/Button.vue';
 
-const props = defineProps<{ sessionId: string }>();
+const props = defineProps<{ sessionId: string; cwd?: string }>();
 const emit = defineEmits<{ dismiss: [] }>();
 
 // xterm's `fontFamily` is a literal font string — it does NOT resolve CSS
@@ -132,7 +132,7 @@ async function start(): Promise<void> {
   await nextTick();
   await initTerminal();
   fitAndResize();
-  await terminalClient.start({ cols: term?.cols, rows: term?.rows });
+  await terminalClient.start({ cols: term?.cols, rows: term?.rows, cwd: props.cwd });
   fitAndResize();
   term?.focus();
 }
@@ -140,7 +140,7 @@ async function start(): Promise<void> {
 function restart(): void {
   term?.reset();
   term?.focus();
-  terminalClient.restart();
+  terminalClient.restart({ cols: term?.cols, rows: term?.rows, cwd: props.cwd });
 }
 
 onMounted(() => {

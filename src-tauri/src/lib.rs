@@ -3,6 +3,7 @@
 mod daemon;
 mod dock_badge;
 mod plugin_tui;
+mod pty;
 mod runtime;
 mod shortcut;
 mod tray;
@@ -123,6 +124,10 @@ pub fn run() {
             plugin_tui::write_kimi_plugin_tui,
             plugin_tui::open_kimi_plugin_tui,
             plugin_tui::resize_kimi_plugin_tui,
+            pty::pty_create,
+            pty::pty_write,
+            pty::pty_resize,
+            pty::pty_kill,
             plugin_tui::stop_kimi_plugin_tui
         ])
         .setup(|app| {

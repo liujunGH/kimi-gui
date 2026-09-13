@@ -213,3 +213,17 @@ Kimi Code 0.33.0 已从公开仓库移除 `apps/kimi-web` 源码，官方脚本�
 **原因**:两项均为 2026-09-13 真实 daemon(0.42)端到端实测暴露;官方语义对齐,无自造契约。
 
 **冲突风险**:低。
+
+---
+
+### 终端抽屉本地 PTY 后端(2026-09-13 · ZCode · 原生 daemon 终端缺陷绕行)
+
+**背景**:daemon terminal 能力(agent-core-v2 hostTerminalService `import('node-pty')`)在原生安装形态下结构性不可用——`kimi` 二进制是 Node SEA 单文件(见 strings 证据 "single executable application"),不能从磁盘 require 原生模块,GUI 与官方 web 端走 `/sessions/{id}/terminals` 均报 `Failed to load native module: pty.node`。
+
+**改动**:
+- 新增 `src-tauri/src/pty.rs`(portable-pty,壳内既有依赖):pty_create/write/resize/kill 四命令 + `pty-output`/`pty-exit` 事件;登录 shell(用户 PATH)、TERM=xterm-256color、UTF-8 跨块 carry 解码(3 个单测)。
+- 新增 `web/src/composables/codex/useLocalPty.ts`(动态 import @tauri-apps/api,浏览器不加载);`useTerminal.ts` 双后端:桌面(kimiNativeAvailable)走本地 PTY,浏览器走 daemon 契约(不变);`Terminal.vue` 加 cwd prop;`useKimiWebClient.ts` 加 `activeSessionCwd` computed(AppSession 域 cwd,侧栏视图模型无此字段)——**锁层文件扩展,已在此登记**。
+
+**验证**:pnpm dev 真实 App 实测——zsh(oh-my-zsh)启动、cwd=会话工作区、命令输入/执行/回显、exit 退出标记全链路通过。
+
+**冲突风险**:低。若上游将来修复原生安装的 node-pty(如 SEA asset 提取),本地后端仍可保留(更快、不依赖 daemon 形态)。

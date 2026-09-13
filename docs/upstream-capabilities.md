@@ -92,7 +92,7 @@
 | cache-expiry 长闲置提示 | main client config | ✅ | 发送前保守提示压缩/新任务/继续/不再提醒；只匹配官方已知模型规则 |
 | 文件预览、打开、Reveal、外部应用 | Web / daemon | ✅ | 右侧详情面板 |
 | Git 状态、Diff、Review | Web / daemon | ✅ | 顶部 Review 与详情面板 |
-| 集成终端 | Web / daemon | ✅ | 顶部终端按钮打开底部抽屉；复用运行中终端、支持适配/结束/新建/收起 |
+| 集成终端 | Web / daemon / **壳内 PTY** | ✅ | 顶部终端按钮打开底部抽屉；适配/结束/新建/收起。桌面端走壳内本地 PTY（portable-pty，登录 shell、会话工作区目录）——daemon 的 node-pty 在原生安装（Node SEA）下无法加载原生模块，该路径结构性不可用；浏览器模式仍走 daemon terminals 契约 |
 | UTF-16 文件读取 | 0.34+ | ⬜ | 官方已发布；GUI 文件预览接入转码显示(见 ROADMAP P0) |
 
 ## 6. 后台任务与子智能体

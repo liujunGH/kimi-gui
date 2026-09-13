@@ -2528,7 +2528,7 @@ async function searchFiles(q: string) {
     />
 
     <div v-if="terminalOpen && sidebarCurrentSession" class="terminal-drawer">
-      <Terminal :session-id="sidebarCurrentSession" @dismiss="terminalOpen = false" />
+      <Terminal :session-id="sidebarCurrentSession" :cwd="client.activeSessionCwd.value" @dismiss="terminalOpen = false" />
     </div>
 
     <!-- Composer dock -->

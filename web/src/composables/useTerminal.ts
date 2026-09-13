@@ -1,6 +1,15 @@
 import { onUnmounted, ref, watch, type Ref } from 'vue';
 import { getKimiWebApi } from '../api';
 import type { AppTerminal, KimiEventConnection } from '../api/types';
+import { kimiNativeAvailable } from './useKimiRuntime';
+import { createLocalPty, type LocalPtyController } from './codex/useLocalPty';
+
+export interface TerminalStartOptions {
+  cols?: number;
+  rows?: number;
+  /** 本地 PTY 后端的起壳目录(会话工作区根)。daemon 后端忽略此参数。 */
+  cwd?: string;
+}
 
 export function useTerminal(sessionId: Ref<string>) {
   const terminal = ref<AppTerminal | null>(null);
@@ -13,6 +22,12 @@ export function useTerminal(sessionId: Ref<string>) {
   const outputHandlers = new Set<(data: string) => void>();
   const exitHandlers = new Set<(exitCode: number | null) => void>();
   let conn: KimiEventConnection | null = null;
+
+  // 双后端:桌面端用壳内本地 PTY(daemon 的 node-pty 在原生安装(Node SEA)
+  // 下无法加载,terminal 能力结构性不可用);浏览器/沙箱走 daemon 契约。
+  const localPty: LocalPtyController | null = kimiNativeAvailable() ? createLocalPty() : null;
+  let disposeLocalOutput: (() => void) | null = null;
+  let disposeLocalExit: (() => void) | null = null;
 
   function ensureConnection(): KimiEventConnection | null {
     if (conn !== null) return conn;
@@ -43,21 +58,56 @@ export function useTerminal(sessionId: Ref<string>) {
     return conn;
   }
 
-  async function start(size?: { cols?: number; rows?: number }): Promise<void> {
+  async function startLocal(size?: TerminalStartOptions): Promise<void> {
+    if (!localPty) return;
+    disposeLocalOutput?.();
+    disposeLocalExit?.();
+    disposeLocalOutput = localPty.onOutput((data) => {
+      for (const handler of outputHandlers) handler(data);
+    });
+    disposeLocalExit = localPty.onExit((exitCode) => {
+      readOnly.value = true;
+      connected.value = false;
+      terminal.value = terminal.value
+        ? { ...terminal.value, status: 'exited', exitCode }
+        : terminal.value;
+      for (const handler of exitHandlers) handler(exitCode);
+    });
+    const info = await localPty.start(size?.cwd ?? '', size?.cols ?? 80, size?.rows ?? 24);
+    terminal.value = {
+      id: `local-${info.id}`,
+      sessionId: sessionId.value,
+      cwd: info.cwd,
+      shell: info.shell,
+      cols: Math.max(1, size?.cols ?? 80),
+      rows: Math.max(1, size?.rows ?? 24),
+      status: 'running',
+      createdAt: new Date().toISOString(),
+    };
+    connected.value = true;
+  }
+
+  async function startDaemon(size?: TerminalStartOptions): Promise<void> {
     const sid = sessionId.value;
-    if (!sid || loading.value) return;
+    if (!sid) return;
+    const api = getKimiWebApi();
+    const existing = (await api.listTerminals(sid)).find((item) => item.status === 'running');
+    const next = existing ?? await api.createTerminal(sid, {
+      cols: size?.cols,
+      rows: size?.rows,
+    });
+    terminal.value = next;
+    readOnly.value = next.status === 'exited';
+    ensureConnection()?.terminalAttach(sid, next.id, lastSeq.value);
+  }
+
+  async function start(size?: TerminalStartOptions): Promise<void> {
+    if (loading.value) return;
     loading.value = true;
     error.value = null;
     try {
-      const api = getKimiWebApi();
-      const existing = (await api.listTerminals(sid)).find((item) => item.status === 'running');
-      const next = existing ?? await api.createTerminal(sid, {
-        cols: size?.cols,
-        rows: size?.rows,
-      });
-      terminal.value = next;
-      readOnly.value = next.status === 'exited';
-      ensureConnection()?.terminalAttach(sid, next.id, lastSeq.value);
+      if (localPty) await startLocal(size);
+      else await startDaemon(size);
     } catch (error_) {
       error.value = error_ instanceof Error ? error_.message : String(error_);
     } finally {
@@ -68,12 +118,20 @@ export function useTerminal(sessionId: Ref<string>) {
   function write(data: string): void {
     const current = terminal.value;
     if (!current || readOnly.value) return;
+    if (localPty) {
+      localPty.write(data);
+      return;
+    }
     ensureConnection()?.terminalInput(current.sessionId, current.id, data);
   }
 
   function resize(cols: number, rows: number): void {
     const current = terminal.value;
     if (!current || readOnly.value) return;
+    if (localPty) {
+      localPty.resize(cols, rows);
+      return;
+    }
     ensureConnection()?.terminalResize(current.sessionId, current.id, cols, rows);
   }
 
@@ -81,6 +139,12 @@ export function useTerminal(sessionId: Ref<string>) {
     const current = terminal.value;
     if (!current) return;
     readOnly.value = true;
+    if (localPty) {
+      localPty.kill();
+      connected.value = false;
+      terminal.value = { ...current, status: 'exited' };
+      return;
+    }
     try {
       ensureConnection()?.terminalClose(current.sessionId, current.id);
       await getKimiWebApi().closeTerminal(current.sessionId, current.id);
@@ -89,15 +153,15 @@ export function useTerminal(sessionId: Ref<string>) {
     }
   }
 
-  function restart(): void {
+  function restart(size?: TerminalStartOptions): void {
     const current = terminal.value;
-    if (current) {
+    if (current && !localPty) {
       conn?.terminalDetach(current.sessionId, current.id);
     }
     terminal.value = null;
     readOnly.value = false;
     lastSeq.value = 0;
-    void start();
+    void start(size);
   }
 
   function onOutput(handler: (data: string) => void): () => void {
@@ -112,7 +176,12 @@ export function useTerminal(sessionId: Ref<string>) {
 
   watch(sessionId, () => {
     const current = terminal.value;
-    if (current) conn?.terminalDetach(current.sessionId, current.id);
+    if (localPty) {
+      localPty.kill();
+      connected.value = false;
+    } else if (current) {
+      conn?.terminalDetach(current.sessionId, current.id);
+    }
     terminal.value = null;
     readOnly.value = false;
     lastSeq.value = 0;
@@ -120,7 +189,13 @@ export function useTerminal(sessionId: Ref<string>) {
 
   onUnmounted(() => {
     const current = terminal.value;
-    if (current) conn?.terminalDetach(current.sessionId, current.id);
+    if (localPty) {
+      disposeLocalOutput?.();
+      disposeLocalExit?.();
+      localPty.dispose();
+    } else if (current) {
+      conn?.terminalDetach(current.sessionId, current.id);
+    }
     conn?.close();
     conn = null;
   });
