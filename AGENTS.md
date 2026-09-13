@@ -90,8 +90,10 @@ git tag | sort -V | tail
 git diff --name-status <tag>^ <tag> -- '.changeset/*.md' | grep '^D'   # 列出该版消费的功能
 git show <tag>^:.changeset/<name>.md                                  # 读单个功能说明
 
-# 3. 契约变更(必看):GUI 协议层 fork 自这里
-git diff <旧tag> <新tag> -- packages/protocol/src --stat
+# 3. 契约变更(必看):GUI 对接的 REST/WS wire 契约
+#   ⚠️ 0.42 起 packages/protocol 包已删除(#3646)——wire 契约迁至 kap-server:
+git diff <旧tag> <新tag> -- packages/kap-server/src/protocol packages/kap-server/src/routes --stat
+#   引擎内部行为契约在 agent-core-v2 的按域 protocol 文件(如 sessionLegacy/sessionProtocol.ts)
 
 # 4. 命令基线:对比后更新 web/src/lib/upstreamSlashCommands.json + GUI 映射
 git diff <旧tag> <新tag> -- apps/kimi-code/src/tui/commands/registry.ts
@@ -99,6 +101,8 @@ git diff <旧tag> <新tag> -- apps/kimi-code/src/tui/commands/registry.ts
 
 **判断原则**:
 - 官方契约变更一直是 **optional 字段向后兼容**(diff 注释明确写 cross-version tolerance),不跟不会坏,只是吃不到新能力——按需挑
+- **消费官方字段前必须读官方消费方源码**(如 buildSubagentModelDescriptions/taskService),不要按 schema 字面猜语义——模型池「别名→模型」的误实现教训(2026-08-29):schema 的 record<string,string> 字面看不懂方向,语义在消费方
+- 官方 /config 是 **deepMerge 语义**(空对象不清键、空数组=清除、REST 无 replace)——凡"清空/删除配置"类 UI 不能走 REST,需 shell 直改 toml(先例:clear_secondary_model_pool)
 - 只接**发布版**契约;main 上未发布的(`/api/v2`、未合的管理 REST)不提前接
 - 破坏性大版本(通常伴随引擎大重构,如 agent-core-v2 迁移落地)提前 1-2 版会有苗头;GUI 的最低版本门槛(0.33+)会兜住不兼容 daemon,到时再决策
 - 契约有改动 → 同步进 `web/src/api/daemon/*`(协议层只读原则的**唯一例外**:跟随上游更新协议层,以官方 diff 为准,不自造)

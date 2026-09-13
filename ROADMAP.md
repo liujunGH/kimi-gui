@@ -53,6 +53,21 @@
 
 ⚠️ 上游 main 未发布变化(下版本跟):正在移除 perm/thinking 相关命令;MCP 管理 REST 仍在演进(readiness/cwd)。
 
+## P1:0.40 → 0.42 同步批次(2026-09-13 调研)
+
+**结构性变化**:`packages/protocol` 包已删除(#3646),wire 契约迁至 `packages/kap-server/src/protocol/`(REST/WS 层,GUI 对接面)与 agent-core-v2 按域 protocol 文件(引擎层)——例行同步的 diff 锚点已换,AGENTS 3.5 已更新。
+
+| 项 | 类别 | 说明 |
+|---|---|---|
+| 契约细对 0.39.1→0.42.0 | A 必做 | 以 kap-server/src/protocol + routes 为基准全量 diff |
+| `background.task.started/terminated` 事件 | A 必做 | 后台任务生命周期事件化(现靠 5s 轮询),订阅后实时性增强 |
+| fileHistory REST(`file-history/changes`·`content`) | A 协议层 | 0.41 turn 文件历史;方法先备,UI 后接 |
+| 实验转正清理 | C 必做 | secondary-model/remote-control 0.42 起永久开启(flag/env 已删):环境实验卡片按 daemon 版本过滤(remote-control 仅 <0.42 显示)、daemon.rs 的 SECONDARY_MODEL 硬编码 env 移除、设置页实验展示更新;新增 `[database]` 配置段 |
+| 多 skill 单消息激活 | D 功能 | 协议字段(skillActivations)已有,官方 0.40 web 支持——UI 消费 |
+| HEIC/BMP、UTF-16 lossy、skill 热重载、排队 prompt durable、子代理重启恢复、推荐默认档 | B 免费受益 | daemon 侧行为,GUI 无需改动(验收时确认) |
+| cron.fired 事件 | D 观察 | cron UI 在待整合清单,接 UI 时一并 |
+| 版本门槛 0.33+ → 0.40+ | E 决策 | 待拍板:官方转正潮使兼容矩阵膨胀,升门槛可大幅缩小测试面 |
+
 ## 契约完善(🟡 可用,待公开契约就绪后补全)
 
 | 能力 | 现状 | 目标 |
