@@ -503,7 +503,14 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
   async function loadConfig(): Promise<void> {
     try {
       const api = getKimiWebApi();
-      rawState.config = await api.getConfig();
+      const config = await api.getConfig();
+      rawState.config = config;
+      // Same pairing as updateConfig / configChanged: defaultModel is the
+      // send-time fallback for model-less sessions (submitPromptInternal) and
+      // the draft composer display. Missing it here left null until the user
+      // happened to change some setting — model-less sessions then submitted
+      // without a model and died on `model.not_configured`.
+      rawState.defaultModel = config.defaultModel ?? null;
     } catch {
       // Daemon may not have this endpoint yet; leave null
     }
@@ -2280,16 +2287,43 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
   }
 
   /** Kimi Code 0.39+ experimental tower orchestration toggle: persisted onto
-   *  the session profile (tower_mode); the daemon reports the live state via
-   *  GET /sessions/{id}/status (towerMode). No local optimistic map — the
-   *  status read is authoritative and refreshes on the next poll. */
-  function setTowerMode(on: boolean): void {
+   *  the session profile (tower_mode), then VERIFIED by reading the status
+   *  back — the engine may silently refuse entry (flag off, feature not
+   *  assembled until a restart, another session owning the workspace tower),
+   *  mirroring the official TUI /tower handler. Resolves to whether the mode
+   *  actually took. */
+  async function setTowerMode(on: boolean): Promise<boolean> {
     const sid = rawState.activeSessionId;
     if (!sid) {
       useToast().toast('Tower 模式需要先创建会话');
-      return;
+      return false;
     }
-    void persistSessionProfile({ towerMode: on });
+    if (!(await persistSessionProfile({ towerMode: on }))) return false;
+    await refreshSessionStatus(sid);
+    return (rawState.towerModeBySession[sid] ?? false) === on;
+  }
+
+  /** Official /tower lazy-create semantics (TUI requireSessionEnsured): with
+   *  no active session, materialize the draft session for the active
+   *  workspace first (createDraftSession applies the draft model + modes and
+   *  selects it, so subsequent setTowerMode/sendPrompt act on it). Resolves
+   *  the session id — the existing active one, a freshly created draft, or
+   *  null when no workspace is selected / creation raced or failed. */
+  async function ensureActiveSession(): Promise<string | null> {
+    const sid = rawState.activeSessionId;
+    if (sid) return sid;
+    const ws = rawState.activeWorkspaceId;
+    if (!ws) return null;
+    if (startingFirstPromptWorkspaces.has(ws)) return null;
+    startingFirstPromptWorkspaces.add(ws);
+    try {
+      return await createDraftSession(ws);
+    } catch (err) {
+      pushOperationFailure('ensureActiveSession', err);
+      return null;
+    } finally {
+      startingFirstPromptWorkspaces.delete(ws);
+    }
   }
 
   /** Flip swarm mode on/off. In manual permission mode, ask before enabling. */
@@ -3010,6 +3044,7 @@ export function useWorkspaceState(rawState: ExtendedState, deps: UseWorkspaceSta
     setSwarmMode,
     toggleSwarmMode,
     setTowerMode,
+    ensureActiveSession,
     setGoalMode,
     toggleGoalMode,
     createGoal,

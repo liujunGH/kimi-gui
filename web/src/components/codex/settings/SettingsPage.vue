@@ -147,9 +147,14 @@ watch(
 /** 仅用户显式改过 effort(select @change)才允许写点夹带 default_effort;
  *  表单同步 / 初始化不算 —— 未触碰时保持官方默认解析链,不把回显值写回 config。 */
 const effortTouched = ref(false);
-const secondaryModelExperimentEnabled = computed(
-  () => client.experimentalFlags.value['secondary-model'] === true,
-);
+// Kimi Code 0.42 turned secondary-model permanently on and removed the
+// experiment flag — those daemons no longer report it, so gating on the
+// flag alone would disable the whole section forever. Treat ≥0.42 as
+// always available; pre-0.42 daemons still gate on the runtime flag.
+const secondaryModelExperimentEnabled = computed(() => {
+  if ((compareKimiVersions(client.serverVersion.value, '0.42.0') ?? -1) >= 0) return true;
+  return client.experimentalFlags.value['secondary-model'] === true;
+});
 const enabledExperimentNames = computed(() =>
   Object.entries(client.experimentalFlags.value)
     .filter(([, enabled]) => enabled)
@@ -164,7 +169,7 @@ const EXPERIMENT_COPY: Record<string, { label: string; description: string }> = 
   },
   'secondary-model': {
     label: '次级模型路由',
-    description: '允许 Agent / Swarm 把子任务路由到次级模型；GUI 启动的 Engine 会自动启用。',
+    description: '允许 Agent / Swarm 把子任务路由到次级模型；0.42 起已内置开启，旧版 Engine 需在 config.toml [experimental] 中启用。',
   },
 };
 const experimentRows = computed(() => {
@@ -1456,7 +1461,15 @@ watch(() => props.initialSection, (section) => { active.value = section; });
                 <div class="setting-desc">Agent / Swarm 子任务优先使用；未设置时继承主模型。只影响新创建的子任务。</div>
               </div>
               <div class="setting-control settings-inline-controls">
-                <select v-model="secondaryModelId" class="control" aria-label="次级模型" :disabled="!secondaryModelExperimentEnabled || secondaryPoolConfigured">
+                <!-- 池模式下本控件被禁用;显示「使用模型池」占位而非池默认模型,
+                     避免看起来像一个选不了的单模型下拉。 -->
+                <select
+                  :value="secondaryPoolConfigured ? '' : secondaryModelId"
+                  class="control"
+                  aria-label="次级模型"
+                  :disabled="!secondaryModelExperimentEnabled || secondaryPoolConfigured"
+                  @change="secondaryModelId = ($event.target as HTMLSelectElement).value"
+                >
                   <option value="">{{ secondaryPoolConfigured ? '使用模型池（主 Agent 按路由描述挑选）' : '继承主模型' }}</option>
                   <option v-for="m in modelOptions" :key="m.id" :value="m.id">{{ m.name }}<template v-if="m.provider">（{{ m.provider }}）</template></option>
                 </select>
@@ -2089,7 +2102,7 @@ watch(() => props.initialSection, (section) => { active.value = section; });
                 </span>
               </label>
             </div>
-            <div class="settings-callout subtle">GUI 启动的 Kimi Engine 会启用次级模型实验；外部 daemon 的能力以这里显示的运行时开关为准。</div>
+            <div class="settings-callout subtle">Kimi Code 0.42 起次级模型已内置开启（无需实验开关）；旧版 Engine 需在 config.toml [experimental] 中启用。此处显示 daemon 上报的运行时实际状态。</div>
 
             <div class="setting-row top-aligned">
               <div class="setting-info"><div class="setting-label">Engine 环境实验</div><div class="setting-desc">通过环境变量开启的实验能力（Kimi Code 0.39+）：环境变量优先级最高且仅 GUI 注入可控，config <code>[experimental]</code> 亦可开启但需重启 Engine。</div></div>

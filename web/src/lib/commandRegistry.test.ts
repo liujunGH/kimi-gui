@@ -33,4 +33,16 @@ describe('GUI slash-command registry', () => {
     expect(reload?.mapping.surface).toBe('shared');
     expect(executableCommandMappings().some((item) => item.action === 'reload')).toBe(true);
   });
+
+  it('exposes tower as a GUI-executable command following official /tower semantics', () => {
+    const tower = resolveBuiltinCommand('/tower');
+    expect(tower?.mapping.kind).toBe('command');
+    expect(tower?.mapping.surface).toBe('shared');
+    // Official availability is 'always' — objectives steer into the running
+    // coordinator turn, so the idle-only guard must not block them.
+    expect(tower?.mapping.availability).toBe('always');
+    if (tower?.mapping.kind !== 'command') return;
+    expect(tower.mapping.acceptsInput).toBe(true);
+    expect(tower.mapping.menuNames).toContain('tower');
+  });
 });

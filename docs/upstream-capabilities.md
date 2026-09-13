@@ -72,7 +72,7 @@
 | 提示词排队、编辑、删除、插话 steer | TUI / daemon | ✅ | 输入框上方队列 |
 | BTW 侧聊 | TUI / daemon | ✅ | 侧边任务面板 |
 | Skills 与斜杠命令补全 | TUI / daemon | ✅ | 输入框补全与 `/help`；skill 激活支持附件(0.34+) |
-| 42 个 0.39 内置命令的分类映射 | TUI 源码 | ✅ | `docs/commands.md`；构建时完整性校验；tower/remote-control 实验命令归 TUI-only |
+| 42 个 0.39 内置命令的分类映射 | TUI 源码 | ✅ | `docs/commands.md`；构建时完整性校验；`/tower` 1.0.21 起为 GUI 可执行命令（on/off 走 setTowerMode+状态回读、status/teardown 发官方固定 prompt、无会话懒创建），remote-control 仍 TUI-only |
 | `/reload` 会话重载 | TUI / SDK 内部 RPC | 🟡 | GUI 显示契约限制；公开 REST 出现后直接接入 |
 | Goal 创建、暂停、恢复、取消 | TUI / daemon | ✅ | 对话目标条与 `/goal` |
 | Goal 后续队列 | TUI / SDK 内部 RPC | 🟡 | 不维护影子队列；等待公开契约 |

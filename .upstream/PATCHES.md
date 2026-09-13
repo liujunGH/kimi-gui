@@ -191,3 +191,25 @@ Kimi Code 0.33.0 已从公开仓库移除 `apps/kimi-web` 源码，官方脚本�
 **原因**:0.39 `session_media` 是会话自有持久媒体副本,`/files` 只查临时上传存储且无回退——不带会话域标记的历史媒体最终会破图。均为可选字段向后兼容,不改变官方语义。towerMode 为 0.39 tower 实验的会话状态透出。
 
 **冲突风险**:低(可选字段;上游若加同名官方字段可直接切换)。
+
+---
+
+### `commandRegistry.ts` + `i18n/locales/*/commands.ts` + `useWorkspaceState.setTowerMode`(2026-09-13 · ZCode · /tower GUI 执行器)
+
+**改动**:`/tower` 从 tuiOnly 升级为 GUI 可执行命令(2026-08-29 条目所述"commandRegistry 保持 tuiOnly"到此作废)。按官方 `apps/kimi-code/src/tui/commands/tower.ts`(0.42)语义实现:on/off → `setTowerMode`(升级为 async:persist profile 后 `refreshSessionStatus` 回读验证,引擎可能静默拒绝——实验刚开未重启/他 会话占用 workspace tower);空参/status、teardown → 发送官方固定 prompt(`TOWER_STATUS_PROMPT`/`TOWER_TEARDOWN_PROMPT`,逐字取自 `tui/constant/kimi-tui.ts`);其余参数 = 目标(先验证开启 tower 再发普通 prompt)。availability=always(官方:目标可注入运行中的协调轮);运行时按 `experimentalFlags['tower']` 守卫并 toast 引导。i18n zh/en 加 `commands.tower.desc`。Composer 的 Tower 模式按钮同走验证路径。
+
+**原因**:设置页 Tower 实验文案引导用户用 `/tower` 命令,但 GUI 无此命令(用户实测反馈);官方语义全部映射到既有 daemon 契约(session profile tower_mode + status 回读),无需新协议面。
+
+**冲突风险**:低。官方若调整 /tower 子命令语义,以官方 diff 为准同步。
+
+---
+
+### `useWorkspaceState`:`loadConfig` 补设 defaultModel + `ensureActiveSession`(2026-09-13 · ZCode · 真实 daemon 实测第二波)
+
+**改动**:
+- `loadConfig()`(初始 GET /config)除 `rawState.config` 外同步写 `rawState.defaultModel`——此前只有 `updateConfig`/`configChanged` 事件写,冷启动后 defaultModel 恒为 null,发送链路的模型兜底(submitPromptInternal/skill 路径)与草稿模型显示全部失效。真实复现:REST 创建的无模型会话发 `/tower status` 以 `model.not_configured` 失败;修复后自动落 daemon default_model 跑通。
+- 新增 `ensureActiveSession()`:官方 TUI `requireSessionEnsured` 的懒创建等价物——无活动会话时按当前工作区 `createDraftSession`(带模型/草稿模式并选中),供 `/tower` 全部子命令与 Composer Tower 按钮复用;受 `startingFirstPromptWorkspaces` 重入护栏保护。
+
+**原因**:两项均为 2026-09-13 真实 daemon(0.42)端到端实测暴露;官方语义对齐,无自造契约。
+
+**冲突风险**:低。

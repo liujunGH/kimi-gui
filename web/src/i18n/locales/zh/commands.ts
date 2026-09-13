@@ -5,6 +5,7 @@ export default {
   settings: { desc: '打开设置' },
   plan: { desc: '切换计划模式 开/关' },
   swarm: { desc: '切换 swarm 模式；/swarm <任务> 直接在 swarm 下执行' },
+  tower: { desc: 'Tower 多智能体编排：/tower on|off 开关、/tower status|teardown 状态与拆除、/tower <目标> 启动编排（实验）' },
   goal: { desc: '创建/控制目标：/goal <目标>、/goal pause|resume|cancel' },
   btw: { desc: '侧边聊天：/btw <问题> 向 fork 的侧边会话提问' },
   help: { desc: '打开完整命令与 GUI 能力索引' },

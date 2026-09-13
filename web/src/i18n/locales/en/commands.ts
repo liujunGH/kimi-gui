@@ -5,6 +5,7 @@ export default {
   settings: { desc: 'Open settings' },
   plan: { desc: 'Toggle plan mode on/off' },
   swarm: { desc: 'Toggle swarm mode; /swarm <task> runs a task in swarm' },
+  tower: { desc: 'Tower multi-agent orchestration: /tower on|off, /tower status|teardown, /tower <objective> (experimental)' },
   goal: { desc: 'Create/control a goal: /goal <objective>, /goal pause|resume|cancel' },
   btw: { desc: 'Side chat: /btw <question> asks a forked side session' },
   help: { desc: 'Open the complete command and GUI capability index' },

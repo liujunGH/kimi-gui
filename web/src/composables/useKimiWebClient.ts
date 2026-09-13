@@ -2973,6 +2973,7 @@ export function useKimiWebClient() {
     setSwarmMode: workspaceState.setSwarmMode,
     toggleSwarmMode: workspaceState.toggleSwarmMode,
     setTowerMode: workspaceState.setTowerMode,
+    ensureActiveSession: workspaceState.ensureActiveSession,
     setGoalMode: workspaceState.setGoalMode,
     toggleGoalMode: workspaceState.toggleGoalMode,
     createGoal: workspaceState.createGoal,

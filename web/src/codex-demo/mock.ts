@@ -90,6 +90,7 @@ export const builtin: BuiltinCommand[] = [
   { name: 'login', desc: '登录账号' },
   { name: 'plan', desc: '进入计划模式' },
   { name: 'swarm', desc: '多智能体并行执行', acceptsInput: true },
+  { name: 'tower', desc: 'Tower 多智能体编排(实验)', acceptsInput: true },
   { name: 'goal', desc: '进入目标模式(长期任务)', acceptsInput: true },
   { name: 'btw', desc: '把话题开到侧边任务', acceptsInput: true },
   { name: 'auto', desc: '自动模式:审批自动通过' },

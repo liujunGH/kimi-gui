@@ -31,6 +31,7 @@ export type GuiCommandAction =
   | 'swarm'
   | 'thinking'
   | 'title'
+  | 'tower'
   | 'undo'
   | 'exportMarkdown'
   | 'yolo';
@@ -85,9 +86,14 @@ export const GUI_COMMAND_MAPPINGS: Readonly<Record<string, CommandMapping>> = {
   settings: command('gui', 'always', 'settings', ['settings'], 'commands.settings.desc'),
   plan: command('shared', 'contextual', 'plan', ['plan'], 'commands.plan.desc'),
   swarm: command('shared', 'idle-only', 'swarm', ['swarm'], 'commands.swarm.desc', true),
-  // Kimi Code 0.39+: experimental tower mode (`/tower on|<objective>`) gated by
-  // KIMI_CODE_EXPERIMENTAL_TOWER — no GUI surface yet, keep it TUI-only.
-  tower: tuiOnly('always'),
+  // Kimi Code 0.39+: experimental tower orchestration, gated by
+  // KIMI_CODE_EXPERIMENTAL_TOWER. Official semantics (TUI commands/tower.ts):
+  // on/off toggles session tower_mode (verified via status read-back),
+  // status/teardown send fixed prompts, any other argument is an objective
+  // that enables tower first then rides on it. Available while busy —
+  // objectives steer into the running coordinator turn. The dispatcher
+  // guards on the daemon-reported experiment flag at runtime.
+  tower: command('shared', 'always', 'tower', ['tower'], 'commands.tower.desc', true),
   model: nativeUi('gui', 'always', 'commands.locations.model'),
   'secondary-model': nativeUi('gui', 'always', 'commands.locations.secondaryModel'),
   effort: command('shared', 'always', 'thinking', ['thinking'], 'commands.thinking.desc'),

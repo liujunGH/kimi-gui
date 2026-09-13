@@ -4,6 +4,20 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [未发布]
+
+## [1.0.21] - 2026-09-13
+
+### 新增
+
+- **`/tower` 命令 GUI 落地**：设置页 Tower 实验文案引导用 `/tower`，但 GUI 此前无此命令（标为 TUI-only）。现按官方 `commands/tower.ts`（0.42）语义实现：`/tower on|off` 开关（写入 session profile 后回读 status 验证——引擎可能静默拒绝：实验刚开未重启、其他会话占用 workspace tower，均会明确提示）；`/tower status|teardown` 发送官方固定 prompt；`/tower <目标>` 先验证开启 tower 再发送目标；实验未开启时提示引导去设置开启。无会话（新建任务草稿）时自动创建会话再执行（官方 `requireSessionEnsured` 语义），Composer 的 Tower 模式按钮同走验证路径，失败不再静默。以上均已在真实 0.42 daemon 端到端实测（含 TowerStatus 工具调用与审批流）
+
+### 修复
+
+- **次级模型设置区在 0.42+ daemon 下整区禁用**：0.42 起 secondary-model 实验永久开启且 daemon 不再上报该 flag，设置页仍按 flag 门控导致「子模型无法选择」并误报「没有启用 secondary-model 实验」过期警告——现按 daemon 版本判定（≥0.42 视为可用，旧版仍看运行时 flag）；池模式下被禁用的单模型下拉改为显示「使用模型池」占位而非池默认模型，不再像选不了的单模型框
+- **启动后 `defaultModel` 一直为空**：初始 `loadConfig` 只写 `rawState.config`、漏写 `rawState.defaultModel`（只有 `updateConfig`/`configChanged` 事件写）——新启动的 App 里默认模型兜底全程失效：草稿与无模型会话的模型指示显示「—」、无模型会话（外部/REST 创建）发送任何消息都会以 `model.not_configured` 失败。实测修复：无模型会话发 `/tower status` 自动落默认模型并正常跑完 TowerStatus 工具调用
+- **实验区过期文案修正**：Kimi Engine 设置页残留的「GUI 启动的 Engine 会启用次级模型实验」提示已更新为 0.42 现状（次级模型内置开启，无需实验开关）
+
 ## [1.0.20] - 2026-09-13
 
 ### 新增

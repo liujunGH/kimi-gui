@@ -1446,6 +1446,57 @@ function showGoalStatus(): void {
   toast(`${goal.status} · ${goal.turnsUsed} 轮 · ${goal.objective}`);
 }
 
+// Official TUI tower command prompts (apps/kimi-code/src/tui/constant/kimi-tui.ts,
+// 0.42): fixed engine-recognized phrasings for /tower status|teardown.
+const TOWER_STATUS_PROMPT =
+  'Report the current tower status: call TowerStatus and give a compact summary.';
+const TOWER_TEARDOWN_PROMPT =
+  'Tear down the tower: call TowerTeardown and report what it did. It refuses to destroy dirty worktrees unless forced.';
+const TOWER_REFUSED_MESSAGE =
+  'Tower 模式未能开启：可能实验刚开启还需重启 Engine，或另一会话正占用此工作区的 Tower。';
+
+/** Official requireSessionEnsured semantics: every /tower form works from the
+ *  new-task draft — lazily materialize the session for the active workspace
+ *  (createDraftSession applies the draft model + modes and selects it) before
+ *  toggling or sending. */
+async function ensureTowerSession(): Promise<boolean> {
+  if (client.activeSessionId.value) return true;
+  const sid = await client.ensureActiveSession();
+  if (!sid) {
+    toast('请先选择工作区后再使用 /tower');
+    return false;
+  }
+  return true;
+}
+
+/** /tower on|off — persist + verify via status read-back (official semantics:
+ *  the engine may silently refuse; a stale success would let the next ordinary
+ *  prompt ride on a tower that never engaged). */
+async function applyTowerMode(on: boolean): Promise<void> {
+  if (!(await ensureTowerSession())) return;
+  const ok = await client.setTowerMode(on);
+  if (ok) toast(on ? 'Tower 模式：已开启' : 'Tower 模式：已关闭');
+  else if (on) toast(TOWER_REFUSED_MESSAGE);
+}
+
+/** /tower <objective> — enable tower first (verified), then send the
+ *  objective as a normal prompt so it steers into tower orchestration. */
+async function startTowerObjective(objective: string): Promise<void> {
+  if (!(await ensureTowerSession())) return;
+  if (!(await client.setTowerMode(true))) {
+    toast(TOWER_REFUSED_MESSAGE);
+    return;
+  }
+  await client.sendPrompt(objective);
+}
+
+/** /tower [status]|teardown — send the official fixed prompt on the (lazily
+ *  created) session. */
+async function sendTowerPrompt(prompt: string): Promise<void> {
+  if (!(await ensureTowerSession())) return;
+  await client.sendPrompt(prompt);
+}
+
 function replaceGoal(objective: string): void {
   const sid = client.activeSessionId.value;
   if (!sid) {
@@ -1546,6 +1597,22 @@ function handleCommand(cmd: string, attachments?: PromptAttachment[]): void {
       else if (arg) { client.setSwarmMode(true); void client.sendPrompt(arg); }
       else void client.toggleSwarmMode();
       break;
+    case 'tower': {
+      // 官方语义(commands/tower.ts):on/off 走 setTowerMode+状态回读;
+      // 空/status、teardown 发固定 prompt;其余参数=目标(先开模式再发)。
+      // 与官方一致 availability=always —— 目标可注入运行中的协调轮;
+      // 无会话时懒创建(官方 requireSessionEnsured)。
+      if (!towerAvailable.value) {
+        toast('Tower 实验未开启：设置 → Kimi Engine 勾选「Tower 多智能体编排」并重启 Engine 后可用');
+        break;
+      }
+      const sub = arg.trim().toLowerCase();
+      if (sub === 'on' || sub === 'off') void applyTowerMode(sub === 'on');
+      else if (sub === '' || sub === 'status') void sendTowerPrompt(TOWER_STATUS_PROMPT);
+      else if (sub === 'teardown') void sendTowerPrompt(TOWER_TEARDOWN_PROMPT);
+      else void startTowerObjective(arg.trim());
+      break;
+    }
     case 'goal':
       if (!arg || arg === 'status') showGoalStatus();
       // 子命令按「精确或带参前缀」匹配(同 next 写法):`/goal pause now`
@@ -2502,7 +2569,7 @@ async function searchFiles(q: string) {
             if (m === 'plan') client.togglePlanMode();
             else if (m === 'swarm') client.toggleSwarmMode();
             else if (m === 'goal') client.toggleGoalMode();
-            else if (m === 'tower') client.setTowerMode(!composerModes.tower);
+            else if (m === 'tower') void applyTowerMode(!composerModes.tower);
           }"
           @set-permission="(p: PermissionMode) => client.setPermission(p)"
           @set-model="onSetModel"
