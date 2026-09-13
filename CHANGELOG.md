@@ -4,6 +4,21 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.20] - 2026-09-13
+
+### 新增
+
+- **CLI 更新真正自动执行**：官方 `kimi update` 在无终端环境（GUI 的调用方式）只会打印手动安装命令——GUI 现在接管安装：native 安装器走隐藏的 `__update_download`（staged 自更新，重启 Engine 后生效），npm/pnpm/yarn/bun 全局源直接执行官方安装命令；homebrew 等不可自动源保留手动提示；升级流程实时显示更新输出，新增解析逻辑单测
+- **Kimi Code 0.40 → 0.42 契约同步**：订阅 `background.task.started/terminated` 全局事件（后台任务生命周期实时收敛，不再只依赖 5 秒轮询）；`cron.fired` 事件已知不投影；新增 file-history REST 方法（`listSessionFileHistory`/`getSessionFileContent`，0.41 turn 级权威文件变更，UI 后续）；命令基线 42 条无变化
+- **实验转正适配**：secondary-model 模型池与 Remote Control 在官方 0.42 起永久开启（flag/env 已删）——GUI 移除 daemon 启动的 secondary 硬编码 env 注入；环境实验开关按 daemon 版本过滤（Remote Control 开关仅 0.42 以下显示并标注已转正）
+- **最低版本门槛 0.33+ → 0.40+**：官方转正潮使兼容矩阵膨胀，上调门槛缩小测试面（旧 daemon 走既有升级拦截页）；测试基线同步 0.40
+- **例行流程适配**：官方已删除 `packages/protocol` 包（wire 契约迁至 `kap-server/src/protocol`），AGENTS 3.5 同步流程更新 diff 锚点，并沉淀三条判断原则（消费官方字段前必读消费方源码、/config deepMerge 清空语义、清空类配置走 shell 直改 toml）
+
+### 说明
+
+- HEIC/BMP 图片、UTF-16 损坏文件 lossy 解码、user skill 根目录热重载、排队 prompt 重开不死、子代理重启恢复、推荐默认思考档为官方 daemon 侧行为，GUI 免费受益，无需改动
+- 多 skill 单消息激活（0.40 官方 web）语义无法核实（官方 web 源码已删），暂不实现，待 SDK 层线索
+
 ## [1.0.19] - 2026-08-29
 
 ### 修复

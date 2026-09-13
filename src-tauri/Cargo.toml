@@ -1,6 +1,6 @@
 [package]
 name = "kimi-gui"
-version = "1.0.19"
+version = "1.0.20"
 description = "Kimi Code native desktop client"
 authors = ["kimi-gui"]
 edition = "2021"

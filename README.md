@@ -5,7 +5,7 @@ Tauri 2(Rust 壳)+ Vue 3(codex UI,fork 自官方 kimi-web)+ 本地 daemon(REST +
 
 **前置条件**:安装 **Kimi Code CLI 0.40.0+** 并 `kimi login`——本应用只使用 agent-core-v2 契约，不再连接旧版或 legacy backend。检测到旧 daemon 时会停止加载聊天，并提供“更新 CLI → 迁移 0.33 配置 → 重启 daemon”的桌面升级入口。
 
-当前版本:**1.0.19**
+当前版本:**1.0.20**
 
 ## 主要能力
 
