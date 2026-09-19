@@ -1,15 +1,15 @@
 {
-  "version": "1.0.22",
-  "notes": "\n### 改进\n\n- **设置体验对齐官方原版**（对比官方 web 设置实测后收敛呈现，不砍能力）：次级模型主视图对齐官方「一个下拉 + 思考强度」，模型池/强制路由折叠为「高级路由」一行（摘要 + 管理/收起，展开才是完整编辑）；实验区不再逐张展示 daemon 上报的不可控 flag 卡（tower/wait_for 等收敛为一行只读摘要「运行中（Engine 内置）」）；8 条暴露实现细节的警告横幅精简为一行或删除（REST 契约说明、DOM 渲染细节、保存策略注解等），浏览器模式限制类提示仍仅在浏览器模式显示\n- **设置导航收敛（17 → 12 项，官方对齐）**：插件与 Skills + Capabilities + MCP 服务合并为「扩展」；任务中心 + 归档与导入合并为「任务与归档」；运行与性能并入「Kimi Engine」——旧分区 id 全部保留为别名（`/mcp`、`/plugins`、`/tasks` 等命令跳转和外部导航不断链），合并区用分组标题区隔\n- **统一模型选择器**：新增官方同款分组弹层组件（供应商分组头 + 勾选态 + 点外/Esc 关闭），替换设置页全部原生模型下拉（默认模型、子智能体、池成员行）；子智能体按官方形态把「模型 · 思考强度」合并进同一选择器（弹层底部强度分段），不再两个下拉并列\n\n### 修复\n\n- **集成终端在原生安装 daemon 下不可用**：daemon 的终端功能依赖 node-pty，而原生安装的 daemon 是 Node SEA 单文件（无法从磁盘加载原生模块，报 `Failed to load native module: pty.node` / `ERR_UNKNOWN_BUILTIN_MODULE`），官方 web 端连同一 daemon 也一样——桌面端终端抽屉改为壳内本地 PTY（登录 shell + 会话工作区目录 + xterm-256color，UTF-8 跨块安全解码），不再依赖 daemon；浏览器模式保留 daemon terminals 路径。真实 App 实测：zsh（含 oh-my-zsh 主题）启动、命令输入执行、输出回显、`exit` 退出标记全链路正常\n\n",
-  "pub_date": "2026-09-13T13:50:28Z",
+  "version": "1.0.23",
+  "notes": "\n### 停止维护（最终版本）\n\n- **Kimi Studio 到此为止，后续不再发版、不再跟进上游契约**。感谢使用！\n- **请迁移到官方 Kimi Code**（CLI / 官方客户端）：[kimi.com/code](https://www.kimi.com/code/) · [GitHub](https://github.com/MoonshotAI/kimi-code)。本地配置、凭据与会话（`~/.kimi-code`）与官方客户端完全通用——直接安装官方客户端即可继续使用，无需任何迁移\n- 应用启动后会显示一次性迁移引导横幅（可关闭），指向官方入口；README 已挂停止维护公告，发版流水线随本版本一并停用\n- 本版本自身无功能变更，仅承载迁移引导\n\n",
+  "pub_date": "2026-09-19T10:00:08Z",
   "platforms": {
     "darwin-aarch64": {
       "url": "https://raw.githubusercontent.com/liujunGH/kimi-gui/main/updates/Kimi.Studio_aarch64.app.tar.gz",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxamY0UkJ1d1k5dWpVemJpYWNyQUVZUDF3MDNzWDlDSDlNUCtKMC8yeEFBdTVFWFA1ZGNkUUVNR091TDFlZk1OQU1LbG1wanltM082RGFPalZNaFE2OHdnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5MzA3NDI4CWZpbGU6S2ltaS5TdHVkaW9fYWFyY2g2NC5hcHAudGFyLmd6Cms5VExZVVBRRGhOQ0VoRmxCVE1tUEd0d05EaUd0ZE02Q2xOamh1NjBRRHdTZ3E1dmZ0eElMcnNXQnBSMndBNXIzTW4rNGI5QSs2aVBEOG5IU24zbEF3PT0K"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxalRmMEJZNE41bWhyOU1VM3lOdnhHeGNVUnJCTEc5c2w0OTIrSWRoNzZvNVNpRHBPcktXK0tGVDIyM2MrVzJxbjlKVWQ1aW95K0NTa1YwcnFGR2xrRkFRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5ODEyMDA4CWZpbGU6S2ltaS5TdHVkaW9fYWFyY2g2NC5hcHAudGFyLmd6Ci9veFBOd2VYZU9iOXZ1UTczc1hodjI3UTZPN2luVFUrL1hlWGRYMGRzbVRKM3Y4cUNUNjB2dHBPbkFERHRtTzNnLy9FSHhRWXpGN1hDQ0hmL1lZckNnPT0K"
     },
     "windows-x86_64": {
       "url": "https://raw.githubusercontent.com/liujunGH/kimi-gui/main/updates/Kimi.Studio_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxalRaRXZXUWhlTmRML29rYVRJb2JhL3dHVGNPK1hXUHNTTmhicVdjQllYQXVRLy9UNnJKN2VmTXlpbFVRY0dRM01VT2JJY2ZWZjhreFkwbU8yUEdPNFFvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5MzA3NDI4CWZpbGU6S2ltaS5TdHVkaW9fMS4wLjIyX3g2NC1zZXR1cC5leGUKaFc4ejMyVHRXa2NIeW9rN0JUeTZZK0FLQkhtUDRhRTZsQjBETjdNMWNyOFRoZTVzSlZLRFlLSCtpa0RTQU43VEw5RXVEanhlZGNJbmlqYnFydzNhQmc9PQo="
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbSt0Sk9VbjJxaldid0FUbTd4Y3g5R2hqeGNtZjRybWdDMGZPTVFlVWhmaGhLYzhsOVBDL1htaGQ5d3N2T2kwU0t5NkZKS0srejdmdjUyRERmd1dJMXZRVWUvakI5OHc4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5ODEyMDA4CWZpbGU6S2ltaS5TdHVkaW9fMS4wLjIzX3g2NC1zZXR1cC5leGUKejdkVkpRMGR5b0liTlFzQ0M5dGd1M0ROQldhcTZDSnlCSU9QUHlQRmE1aDNJeS9pYnYydTNoeGJHbSs1eGR3Q0NYRXRKYVFvTmdKSm84b0FrUUV6Qnc9PQo="
     }
   }
 }
