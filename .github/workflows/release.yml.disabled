@@ -258,3 +258,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release edit "v${{ needs.prepare.outputs.version }}" --notes-file release-notes.md
+
+# ⚠️ 已停用(2026-09-13,最终版 v1.0.23):本项目停止维护,引导迁移官方 Kimi Code。
+# 改回 .yml 后缀即可恢复发版能力。
