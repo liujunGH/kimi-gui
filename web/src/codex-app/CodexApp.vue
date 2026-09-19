@@ -645,6 +645,19 @@ const unreadCount = computed(() => {
 });
 // 压缩分隔线(对话流中显示"上下文已压缩")
 const hasCompaction = computed(() => compactionInfo.value !== null);
+
+// ---- 停止维护引导(最终版 1.0.23)----
+const OFFICIAL_KIMI_CODE_URL = 'https://www.kimi.com/code/';
+const DEPRECATION_DISMISS_KEY = 'kimi-studio.deprecation-dismissed';
+const deprecationDismissed = ref(
+  typeof localStorage !== 'undefined' && localStorage.getItem(DEPRECATION_DISMISS_KEY) === '1',
+);
+function dismissDeprecation(): void {
+  deprecationDismissed.value = true;
+  try {
+    localStorage.setItem(DEPRECATION_DISMISS_KEY, '1');
+  } catch { /* 私密模式等场景忽略 */ }
+}
 /** transcript 压缩分隔线点击 → 右栏展示该 turn 的摘要文本(turn.text 即 LLM 摘要) */
 function onViewCompaction(turn: ChatTurn) {
   const meta = turn.compaction;
@@ -2509,6 +2522,18 @@ async function searchFiles(q: string) {
         :goal="activeGoal"
         @control-goal="(a: 'pause' | 'resume' | 'cancel') => client.controlGoal(a)"
       />
+    </div>
+
+    <!-- 停止维护引导(最终版):存量用户经自动更新看到,指向官方客户端 -->
+    <div v-if="!deprecationDismissed" class="codex-deprecation">
+      <span class="cd-text">
+        <strong>Kimi Studio 已停止维护(此为最终版本)。</strong>
+        建议迁移到官方 Kimi Code——本地配置与会话(<code>~/.kimi-code</code>)与官方客户端完全通用,直接安装官方客户端即可继续使用,无需任何迁移。
+      </span>
+      <span class="cd-actions">
+        <button class="btn" @click="void openExternalUrl(OFFICIAL_KIMI_CODE_URL)">了解官方客户端</button>
+        <button class="icon-btn" aria-label="不再显示" @click="dismissDeprecation"><CodexIcon name="x" /></button>
+      </span>
     </div>
 
     <!-- 压缩进行中指示(client.compaction 仅运行时存在;完成后 transcript 留有分隔线) -->

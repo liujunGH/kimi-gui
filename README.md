@@ -1,3 +1,9 @@
+> ⚠️ **本项目已停止维护（2026-09-13，最终版本 v1.0.23）**
+>
+> 请迁移到**官方 Kimi Code**（CLI / 官方客户端）：[kimi.com/code](https://www.kimi.com/code/) · [GitHub](https://github.com/MoonshotAI/kimi-code)。
+> 本地配置、凭据与会话（`~/.kimi-code`）与官方客户端完全通用——直接安装官方客户端即可继续使用，无需任何迁移。
+> 仓库与历史 Release 保留可查；发版流水线已停用，不再有新版本。
+
 # Kimi Studio(kimi-gui)
 
 Kimi Studio —— Kimi Code CLI 的原生桌面客户端,把 CLI 的全部能力装进一个 Codex 形态的原生桌面壳。
@@ -5,7 +11,7 @@ Tauri 2(Rust 壳)+ Vue 3(codex UI,fork 自官方 kimi-web)+ 本地 daemon(REST +
 
 **前置条件**:安装 **Kimi Code CLI 0.40.0+** 并 `kimi login`——本应用只使用 agent-core-v2 契约，不再连接旧版或 legacy backend。检测到旧 daemon 时会停止加载聊天，并提供“更新 CLI → 迁移 0.33 配置 → 重启 daemon”的桌面升级入口。
 
-当前版本:**1.0.20**
+当前版本:**1.0.23(最终版,已停止维护)**
 
 ## 主要能力
 
